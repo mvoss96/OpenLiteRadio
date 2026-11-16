@@ -1,0 +1,6 @@
+board:
+  name: openliteradio
+  full_name: OpenLiteRadio STM32-compatible feasibility target
+  vendor: others
+  socs:
+    - name: stm32f103xb
