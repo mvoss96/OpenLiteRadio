@@ -168,11 +168,32 @@ as TIM3 channel 4 and PB3 as TIM2 channel 2 with the TIM2 partial remap
 (function at 0x0800c49c), and drives the battery LEDs through shift register
 mask 0x0f.
 
+Battery operation, observed with a test that stores samples in RAM while USB
+is unplugged:
+
+- PC15 is the power latch. Started with the power button and no USB supply,
+  the test set PC15 high and the radio stayed on for 18 s after the button
+  was released, until USB was plugged in again. In a second run the test
+  set PC15 low after the power button had been held for 2 s, and the radio
+  switched off once the button was released.
+- PA15 reads low without USB supply and high with it.
+- ADC channel 8 (PB0) read 4067 on battery, 4072 on USB with shift register
+  output 0x10 low and 4078 with 0x10 high. PC13 and the outputs 0x20 and 0x80
+  did not change the reading.
+
+The stock firmware reads the same ADC input every 15 s (routines at
+0x08012174 and 0x080121bc); with USB supply it first pulls output 0x10 low
+for 100 ms and sets it high again afterwards. It compares the raw value with
+3552, 3391, 3298 and 3232 to light four, three, two or one battery LED, and
+also with 3800.
+
+Hypotheses: PB0 is the battery voltage through a divider, and the battery
+was nearly full during the test, which is why the reading sits near full
+scale. Output 0x10 enables charging; the stock code pauses it to measure.
+The volts per count are not known.
+
 Other observations from the scanner:
 
-- ADC channel 8 (PB0) reads about 4072 and channel 9 (PB1) reads 0 on USB
-  power. The stock code averages the seventh ADC input, PB0, in a routine
-  that also tests PA15. Hypothesis: battery voltage.
 - The bootloader's pin setup at application start, as CRL/CRH values:
   port A 0x44440000 / 0x88844494 (after Zephyr's own pin setup), port B
   0x4448b444 / 0x83334444, port C CRH 0x38344444.
@@ -200,9 +221,8 @@ Hypotheses from these tests:
 
 ## Unverified in this implementation
 
-Operation from battery and the power latch, option-byte watchdog setting,
-battery voltage input, the function of PC13 and of the shift register
-outputs 0x10, 0x20 and 0x80, stick readings against the saved
+Option-byte watchdog setting, volts per count of the battery input, the
+function of PC13 and of the shift register outputs 0x20 and 0x80, stick readings against the saved
 calibration, calibrated voltage monitoring, CRSF output and timing, USB HID
 reports, and STM32 drivers other than clock, GPIO, ADC and USB device.
 No settings writes are enabled during feasibility work. The largest image

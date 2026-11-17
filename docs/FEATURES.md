@@ -78,8 +78,8 @@ analysis kept outside this repository.
 | Prio | Feature | Stock | Status |
 |---|---|---|---|
 | M | No output while the throttle is not at its lower end at power-on | manual | missing |
-| M | Power on/off: short press, then long press | manual; latch on PC15 from bootloader code | missing |
-| M | Battery voltage measurement and low-battery warning | manual; input unknown | missing |
+| M | Power on/off: short press, then long press | manual; latch on PC15, measured | latch set and released by the test build, hw |
+| M | Battery voltage measurement and low-battery warning | manual; PB0 with the stock thresholds in raw counts, code | raw value read, hw; not checked on a discharged battery |
 | S | Battery level on the four-LED indicator on a short power press | manual; LEDs on shift register 0x0f, measured | LEDs switched by the test build, hw |
 | S | Charging and charge-complete indication | manual | missing |
 | C | Inactivity alarm and automatic power-off | no | missing |
@@ -125,7 +125,7 @@ analysis kept outside this repository.
 
 These block features above and can be found with test images:
 
-- Battery voltage input. Hypothesis: PB0 (ADC channel 8).
-- Meaning of the shift register outputs 0x10, 0x20 and 0x80.
-- Power latch behaviour on battery.
+- Battery input PB0 on a partly discharged battery, and its volts per count.
+- Meaning of PC13 and of the shift register outputs 0x20 and 0x80; whether
+  output 0x10 enables charging.
 - How the stock firmware enters the module's WiFi mode.

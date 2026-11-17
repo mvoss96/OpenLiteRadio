@@ -6,11 +6,14 @@
 #include <soc.h>
 
 /*
- * Hardware test: output probe for the status LED. Each press of button SE
- * (PA5) switches to the next step; a host can step with 'n' on the console.
- * The status LED is driven as a WS2812-type LED on PB3, the pin the stock
- * firmware uses as TIM2 channel 2. No CRSF frames are sent and no flash is
- * written.
+ * Hardware test: battery operation. On battery the power latch PC15 is set
+ * at start and released after 60 s or after a 2 s press of the power button.
+ * ADC channel 8 (PB0) is sampled twice per second, with shift register
+ * output 0x10 high and low, and kept in RAM together with the USB supply,
+ * power button and PB2 levels. The character 'd' on the console prints the
+ * stored samples. No CRSF frames are sent and no flash is written.
+ *
+ * Status LED: green on battery, blue on USB power, red before power-off.
  */
 
 /* Shift register for board control lines, as used by the vendor bootloader. */
@@ -18,14 +21,23 @@
 #define SHIFT_LATCH_PIN 13
 #define SHIFT_DATA_PIN  14
 
-/*
- * While this output is high the CH9102 bridge is absent from the USB
- * connector and the connector reaches this MCU instead.
- */
+/* High: the USB connector reaches this MCU instead of the CH9102 bridge. */
 #define SHIFT_USB_TO_MCU 0x40
+/*
+ * The stock firmware keeps this output high and pulls it low for 50 ms
+ * before it measures PB0 while USB power is present.
+ */
+#define SHIFT_MEASURE 0x10
 
-/* GPIO configuration values for the CRL/CRH registers. */
-#define BUTTON_SE BIT(5) /* port A, low while pressed */
+#define USB_SUPPLY   BIT(15) /* port A, high while USB power is present */
+#define POWER_BUTTON BIT(14) /* port C, low while pressed */
+#define POWER_LATCH  BIT(15) /* port C, high keeps the radio on */
+#define PB2_INPUT    BIT(2)  /* port B, purpose unknown; stock uses a pull-down */
+#define STATUS_LED_PIN BIT(3) /* port B */
+
+#define BATTERY_ADC_CHANNEL 8 /* PB0 */
+#define AUTO_OFF_SAMPLES    120 /* 60 s on battery */
+#define POWER_OFF_SAMPLES   4   /* power button held for 2 s */
 
 static const struct device *const gpiob = DEVICE_DT_GET(DT_NODELABEL(gpiob));
 
@@ -61,13 +73,11 @@ static void configure_pin(GPIO_TypeDef *port, int pin, uint32_t nibble)
     *reg = (*reg & ~(0xFu << shift)) | (nibble << shift);
 }
 
-#define STATUS_LED_PIN BIT(3) /* port B */
-
 /* Busy-wait for a fixed number of CPU cycles (13.9 ns each at 72 MHz). */
 #define DELAY_CYCLES(count) __asm__ volatile(".rept " #count "\n nop\n .endr")
 
 /*
- * Send one colour to a WS2812-type LED: 24 bits, green first, most
+ * Send one colour to the WS2812-type status LED: 24 bits, green first, most
  * significant bit first. A 1 is about 0.7 us high, a 0 about 0.3 us high,
  * each bit lasts about 1.25 us. Interrupts are masked for the 30 us burst.
  */
@@ -93,60 +103,55 @@ static void status_led_write(uint8_t red, uint8_t green, uint8_t blue)
     k_busy_wait(300); /* latch time between two colours */
 }
 
-struct probe_step {
-    const char *name;
-    uint8_t red;
-    uint8_t green;
-    uint8_t blue;
-    uint8_t shift_bits; /* shift register outputs in addition to SHIFT_USB_TO_MCU */
-};
-
-static const probe_step steps[] = {
-    { "all off", 0, 0, 0, 0x00 },
-    { "status red", 0x30, 0, 0, 0x00 },
-    { "status green", 0, 0x30, 0, 0x00 },
-    { "status blue", 0, 0, 0x30, 0x00 },
-    { "status white", 0x20, 0x20, 0x20, 0x00 },
-    { "battery LEDs 1 to 4", 0, 0, 0, 0x0f },
-};
-
-/* Apply one step. */
-static void apply_step(const probe_step &step)
-{
-    shift_write(SHIFT_USB_TO_MCU | step.shift_bits);
-    status_led_write(step.red, step.green, step.blue);
-}
-
-/* Read one ADC channel; return the sample or a negative errno. */
-static int adc_read_channel(const struct device *adc, uint8_t channel)
+/* Read the battery ADC channel; return the sample or a negative errno. */
+static int battery_read(const struct device *adc)
 {
     int16_t sample = 0;
-    struct adc_channel_cfg config = {
-        .gain = ADC_GAIN_1,
-        .reference = ADC_REF_INTERNAL,
-        .acquisition_time = ADC_ACQ_TIME_DEFAULT,
-        .channel_id = channel,
-    };
     struct adc_sequence sequence = {
-        .channels = BIT(channel),
+        .channels = BIT(BATTERY_ADC_CHANNEL),
         .buffer = &sample,
         .buffer_size = sizeof(sample),
         .resolution = 12,
     };
-    int error = adc_channel_setup(adc, &config);
+    int error = adc_read(adc, &sequence);
 
-    if (error == 0) {
-        error = adc_read(adc, &sequence);
-    }
     return (error < 0) ? error : sample;
+}
+
+struct battery_sample {
+    uint16_t number;
+    int16_t measure_high; /* ADC value with SHIFT_MEASURE high */
+    int16_t measure_low;  /* ADC value 50 ms after SHIFT_MEASURE went low */
+    uint8_t usb_supply;
+    uint8_t power_pressed;
+    uint8_t pb2;
+    uint8_t latch;
+};
+
+static battery_sample history[120];
+
+static void print_sample(const battery_sample &sample)
+{
+    printk("n %u high %d low %d usb %u power %u pb2 %u latch %u\n", sample.number,
+           sample.measure_high, sample.measure_low, sample.usb_supply,
+           sample.power_pressed, sample.pb2, sample.latch);
 }
 
 int main(void)
 {
     const struct device *adc = DEVICE_DT_GET(DT_NODELABEL(adc1));
-    size_t step = 0;
-    bool was_pressed = false;
-    uint32_t loops = 0;
+    const struct device *console = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
+    uint16_t samples = 0;
+    uint16_t battery_samples = 0;
+    uint16_t pressed_samples = 0;
+    uint8_t extra_shift = 0;
+
+    /* Keep the radio on when it was started from battery with the power button. */
+    bool started_on_battery = (GPIOA->IDR & USB_SUPPLY) == 0u;
+
+    if (started_on_battery) {
+        GPIOC->BSRR = POWER_LATCH;
+    }
 
 #ifdef CONFIG_USBD_HID_SUPPORT
     usb_probe_init();
@@ -155,47 +160,88 @@ int main(void)
     gpio_pin_configure(gpiob, SHIFT_CLOCK_PIN, GPIO_OUTPUT_HIGH);
     gpio_pin_configure(gpiob, SHIFT_LATCH_PIN, GPIO_OUTPUT_HIGH);
     gpio_pin_configure(gpiob, SHIFT_DATA_PIN, GPIO_OUTPUT_LOW);
+    shift_write(SHIFT_USB_TO_MCU | SHIFT_MEASURE);
 
     /* PB3 is a JTAG pin after reset; keep SWD and release the JTAG pins as GPIO. */
     RCC->APB2ENR |= RCC_APB2ENR_AFIOEN;
     AFIO->MAPR = (AFIO->MAPR & ~AFIO_MAPR_SWJ_CFG) | AFIO_MAPR_SWJ_CFG_JTAGDISABLE;
+    GPIOB->BRR = STATUS_LED_PIN | PB2_INPUT; /* PB2: ODR bit 0 selects the pull-down */
+    configure_pin(GPIOB, 3, 0x3u);           /* PB3 push-pull output, 50 MHz */
+    configure_pin(GPIOB, 2, 0x8u);           /* PB2 input with pull-down */
+    configure_pin(GPIOB, 0, 0x0u);           /* PB0 analog */
 
-    configure_pin(GPIOB, 0, 0x0u); /* PB0 analog */
-    GPIOB->BRR = STATUS_LED_PIN;
-    configure_pin(GPIOB, 3, 0x3u); /* PB3 push-pull output, 50 MHz */
-    GPIOA->BSRR = BUTTON_SE;       /* ODR bit 1 selects the pull-up */
-    configure_pin(GPIOA, 5, 0x8u); /* PA5 input with pull-up */
-    k_msleep(10);
-    apply_step(steps[step]);
+    struct adc_channel_cfg channel = {
+        .gain = ADC_GAIN_1,
+        .reference = ADC_REF_INTERNAL,
+        .acquisition_time = ADC_ACQ_TIME_DEFAULT,
+        .channel_id = BATTERY_ADC_CHANNEL,
+    };
+    int adc_status = adc_channel_setup(adc, &channel);
+
+    printk("battery test, started on %s, adc setup %d\n",
+           started_on_battery ? "battery" : "USB", adc_status);
 
     while (true) {
-        bool pressed = (GPIOA->IDR & BUTTON_SE) == 0u;
+        battery_sample &sample = history[samples % ARRAY_SIZE(history)];
+
+        sample.number = samples;
+        sample.measure_high = battery_read(adc);
+        shift_write(SHIFT_USB_TO_MCU | extra_shift);
+        k_msleep(50);
+        sample.measure_low = battery_read(adc);
+        shift_write(SHIFT_USB_TO_MCU | SHIFT_MEASURE | extra_shift);
+        sample.usb_supply = (GPIOA->IDR & USB_SUPPLY) != 0u;
+        sample.power_pressed = (GPIOC->IDR & POWER_BUTTON) == 0u;
+        sample.pb2 = (GPIOB->IDR & PB2_INPUT) != 0u;
+        sample.latch = (GPIOC->ODR & POWER_LATCH) != 0u;
+        print_sample(sample);
+        samples++;
+
+        battery_samples = sample.usb_supply ? 0 : battery_samples + 1;
+        pressed_samples = sample.power_pressed ? pressed_samples + 1 : 0;
+        if (battery_samples >= AUTO_OFF_SAMPLES || pressed_samples >= POWER_OFF_SAMPLES) {
+            status_led_write(0x30, 0, 0);
+            k_msleep(1000);
+            GPIOC->BRR = POWER_LATCH;
+            /* On USB power the radio keeps running; start counting again. */
+            battery_samples = 0;
+            pressed_samples = 0;
+        } else if (sample.usb_supply) {
+            status_led_write(0, 0, 0x30);
+        } else {
+            status_led_write(0, 0x30, 0);
+        }
+
         unsigned char command = 0;
 
-        /* A host can step with the character 'n' on the console as well. */
-        uart_poll_in(DEVICE_DT_GET(DT_CHOSEN(zephyr_console)), &command);
-        if ((pressed && !was_pressed) || command == 'n') {
-            step = (step + 1) % ARRAY_SIZE(steps);
-            apply_step(steps[step]);
-            printk("step %u: %s\n", (unsigned int)step, steps[step].name);
+        uart_poll_in(console, &command);
+        /* Experiment keys: toggle PC13, or one extra shift register output. */
+        if (command == 'c') {
+            GPIOC->ODR ^= BIT(13);
+        } else if (command == '2') {
+            extra_shift ^= 0x20;
+        } else if (command == '8') {
+            extra_shift ^= 0x80;
         }
-        was_pressed = pressed;
-
-        if (loops % 25 == 0) {
-            printk("at %u: %s, adc8 %d, A %04x B %04x C %04x\n", (unsigned int)step,
-                   steps[step].name, adc_read_channel(adc, 8), (unsigned int)GPIOA->IDR,
-                   (unsigned int)GPIOB->IDR, (unsigned int)GPIOC->IDR);
+        if (command == 'c' || command == '2' || command == '8') {
+            shift_write(SHIFT_USB_TO_MCU | SHIFT_MEASURE | extra_shift);
+            printk("pc13 %u extra shift %02x\n", (unsigned int)((GPIOC->ODR >> 13) & 1u),
+                   extra_shift);
         }
-        loops++;
+        if (command == 'd') {
+            for (const battery_sample &stored : history) {
+                print_sample(stored);
+            }
+            printk("end of history\n");
+        }
 #ifdef CONFIG_UPDATER_ENTRY
         uint32_t baud = 0;
 
-        uart_line_ctrl_get(DEVICE_DT_GET(DT_CHOSEN(zephyr_console)),
-                           UART_LINE_CTRL_BAUD_RATE, &baud);
+        uart_line_ctrl_get(console, UART_LINE_CTRL_BAUD_RATE, &baud);
         if (baud == UPDATER_REQUEST_BAUD) {
             updater_enter();
         }
 #endif
-        k_msleep(20);
+        k_msleep(450);
     }
 }
