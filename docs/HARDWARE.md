@@ -116,6 +116,67 @@ Update mode entered from the application (`src/updater_entry.c`), observed:
   so it cannot serve as a sign of activity.
 - A complete cycle with a 48 KiB image takes about 14 s.
 
+Controls, observed with a pin scanner and matching the stock firmware's code
+(switch function at 0x0800a1c4, key read at 0x080120e4):
+
+| Control | Pin | Levels |
+|---------|-----|--------|
+| SA (toggle) | PB6 | one signal, changes with the switch |
+| SB (three positions) | PB4, PB5 | both high in the centre, one low at each end |
+| SC (three positions) | PB7, PB9 | both high in the centre, one low at each end |
+| SD (toggle) | PB8 | one signal, changes with the switch |
+| SE (button) | PA5 | low while pressed, needs the internal pull-up |
+| SF (button) | PA4 | low while pressed, needs the internal pull-up |
+| BIND | PA8 | low while pressed, needs the internal pull-up |
+| SETUP | PB15 | low while pressed, needs the internal pull-up |
+| Power | PC14 | low while pressed, pulled up externally |
+
+PA8, PB10, PB11 and PB15 follow the internal pulls when idle. PB2 reads low,
+PA15 high on USB power. The scanner read PA4, PA5, PB4 to PB9 and PC14 as
+high 300 us after switching from pull-up to pull-down, which does not show
+an external pull-up: PA5 as a plain floating input stayed low after one
+press, and as an analog input it took tens of seconds to drift back up.
+Configure all switch and button inputs with the internal pull-up.
+
+The two five-way trim buttons are read from a key device on a two-wire bus
+driven by software: PA6 clock, PA7 data, I2C framing, device address 0x1d, the
+only address that answers. A read without a register address returns two
+bytes, 0x05 0x00 when idle. Taken as a little-endian word, the low four bits
+are always 5 and one bit is set per pressed direction:
+
+| Trim button | up | down | left | right | centre |
+|-------------|----|------|------|-------|--------|
+| left        | 6  | 7    | 4    | 5     | 8 (code only) |
+| right       | 11 | 12   | 9    | 10    | 13 (code only) |
+
+The centre bits come from the stock code; no centre press was recorded. The
+type of the key device is not known.
+
+Outputs, observed with an output probe:
+
+| Output | Effect |
+|--------|--------|
+| Shift register 0x08, 0x04, 0x02, 0x01 | white battery LEDs 1, 2, 3, 4 from the left, lit while high |
+| PB1, square wave of 2.7 kHz | buzzer sounds |
+| PB3, WS2812 bit stream | status LED shows the colour; byte order green, red, blue |
+| PB3, PB10 or PB11 held high | nothing visible |
+| Shift register 0x80, 0x20, 0x10 | nothing visible |
+
+The status LED accepted bit-banged data with about 0.3 us high for a 0,
+0.7 us high for a 1 and 1.25 us per bit. The stock firmware configures PB1
+as TIM3 channel 4 and PB3 as TIM2 channel 2 with the TIM2 partial remap
+(function at 0x0800c49c), and drives the battery LEDs through shift register
+mask 0x0f.
+
+Other observations from the scanner:
+
+- ADC channel 8 (PB0) reads about 4072 and channel 9 (PB1) reads 0 on USB
+  power. The stock code averages the seventh ADC input, PB0, in a routine
+  that also tests PA15. Hypothesis: battery voltage.
+- The bootloader's pin setup at application start, as CRL/CRH values:
+  port A 0x44440000 / 0x88844494 (after Zephyr's own pin setup), port B
+  0x4448b444 / 0x83334444, port C CRH 0x38344444.
+
 Hypotheses from these tests:
 
 - Output 0x40 selects between the CH9102 bridge and the controller's own USB
@@ -140,8 +201,8 @@ Hypotheses from these tests:
 ## Unverified in this implementation
 
 Operation from battery and the power latch, option-byte watchdog setting,
-switch and button pins, LEDs and buzzer, the function of PC13 and of the
-shift register outputs other than 0x40, stick readings against the saved
+battery voltage input, the function of PC13 and of the shift register
+outputs 0x10, 0x20 and 0x80, stick readings against the saved
 calibration, calibrated voltage monitoring, CRSF output and timing, USB HID
 reports, and STM32 drivers other than clock, GPIO, ADC and USB device.
 No settings writes are enabled during feasibility work. The largest image
