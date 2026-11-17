@@ -1,0 +1,194 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1770" height="972" viewBox="0 0 1770 972" font-family="Segoe UI, Arial, sans-serif">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<rect x="560" y="80" width="260" height="822" rx="8" fill="#fff8e6" stroke="#444444" stroke-width="2"/>
+<rect x="40" y="110" width="400" height="130" rx="6" fill="#f4f7fb" stroke="#444444" stroke-width="1.5"/>
+<text x="50" y="128" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">Sticks (4 analog axes)</text>
+<text x="54" y="150" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">left stick up/down (throttle)</text>
+<line x1="440" y1="146" x2="560" y2="146" stroke="#333333" stroke-width="1.5"/>
+<text x="568" y="150" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">PA0</text>
+<text x="552" y="142" font-size="11" text-anchor="end" font-weight="normal" fill="#555555">ADC 0</text>
+<text x="54" y="174" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">left stick left/right</text>
+<line x1="440" y1="170" x2="560" y2="170" stroke="#333333" stroke-width="1.5"/>
+<text x="568" y="174" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">PA1</text>
+<text x="552" y="166" font-size="11" text-anchor="end" font-weight="normal" fill="#555555">ADC 1</text>
+<text x="54" y="198" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">right stick up/down</text>
+<line x1="440" y1="194" x2="560" y2="194" stroke="#333333" stroke-width="1.5"/>
+<text x="568" y="198" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">PA2</text>
+<text x="552" y="190" font-size="11" text-anchor="end" font-weight="normal" fill="#555555">ADC 2</text>
+<text x="54" y="222" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">right stick left/right</text>
+<line x1="440" y1="218" x2="560" y2="218" stroke="#333333" stroke-width="1.5"/>
+<text x="568" y="222" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">PA3</text>
+<text x="552" y="214" font-size="11" text-anchor="end" font-weight="normal" fill="#555555">ADC 3</text>
+<rect x="40" y="254" width="400" height="178" rx="6" fill="#f4f7fb" stroke="#444444" stroke-width="1.5"/>
+<text x="50" y="272" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">Switches (to ground, internal pull-up)</text>
+<text x="54" y="294" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">SA, toggle</text>
+<line x1="440" y1="290" x2="560" y2="290" stroke="#333333" stroke-width="1.5"/>
+<text x="568" y="294" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">PB6</text>
+<text x="552" y="286" font-size="11" text-anchor="end" font-weight="normal" fill="#555555">input</text>
+<text x="54" y="318" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">SB, three positions, end 1</text>
+<line x1="440" y1="314" x2="560" y2="314" stroke="#333333" stroke-width="1.5"/>
+<text x="568" y="318" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">PB4</text>
+<text x="552" y="310" font-size="11" text-anchor="end" font-weight="normal" fill="#555555">input</text>
+<text x="54" y="342" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">SB, three positions, end 2</text>
+<line x1="440" y1="338" x2="560" y2="338" stroke="#333333" stroke-width="1.5"/>
+<text x="568" y="342" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">PB5</text>
+<text x="552" y="334" font-size="11" text-anchor="end" font-weight="normal" fill="#555555">input</text>
+<text x="54" y="366" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">SC, three positions, end 1</text>
+<line x1="440" y1="362" x2="560" y2="362" stroke="#333333" stroke-width="1.5"/>
+<text x="568" y="366" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">PB7</text>
+<text x="552" y="358" font-size="11" text-anchor="end" font-weight="normal" fill="#555555">input</text>
+<text x="54" y="390" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">SC, three positions, end 2</text>
+<line x1="440" y1="386" x2="560" y2="386" stroke="#333333" stroke-width="1.5"/>
+<text x="568" y="390" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">PB9</text>
+<text x="552" y="382" font-size="11" text-anchor="end" font-weight="normal" fill="#555555">input</text>
+<text x="54" y="414" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">SD, toggle</text>
+<line x1="440" y1="410" x2="560" y2="410" stroke="#333333" stroke-width="1.5"/>
+<text x="568" y="414" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">PB8</text>
+<text x="552" y="406" font-size="11" text-anchor="end" font-weight="normal" fill="#555555">input</text>
+<rect x="40" y="446" width="400" height="154" rx="6" fill="#f4f7fb" stroke="#444444" stroke-width="1.5"/>
+<text x="50" y="464" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">Buttons (to ground, internal pull-up)</text>
+<text x="54" y="486" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">SE</text>
+<line x1="440" y1="482" x2="560" y2="482" stroke="#333333" stroke-width="1.5"/>
+<text x="568" y="486" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">PA5</text>
+<text x="552" y="478" font-size="11" text-anchor="end" font-weight="normal" fill="#555555">input</text>
+<text x="54" y="510" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">SF</text>
+<line x1="440" y1="506" x2="560" y2="506" stroke="#333333" stroke-width="1.5"/>
+<text x="568" y="510" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">PA4</text>
+<text x="552" y="502" font-size="11" text-anchor="end" font-weight="normal" fill="#555555">input</text>
+<text x="54" y="534" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">BIND</text>
+<line x1="440" y1="530" x2="560" y2="530" stroke="#333333" stroke-width="1.5"/>
+<text x="568" y="534" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">PA8</text>
+<text x="552" y="526" font-size="11" text-anchor="end" font-weight="normal" fill="#555555">input</text>
+<text x="54" y="558" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">SETUP</text>
+<line x1="440" y1="554" x2="560" y2="554" stroke="#333333" stroke-width="1.5"/>
+<text x="568" y="558" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">PB15</text>
+<text x="552" y="550" font-size="11" text-anchor="end" font-weight="normal" fill="#555555">input</text>
+<text x="54" y="582" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">power button</text>
+<line x1="440" y1="578" x2="560" y2="578" stroke="#333333" stroke-width="1.5"/>
+<text x="568" y="582" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">PC14</text>
+<text x="552" y="574" font-size="11" text-anchor="end" font-weight="normal" fill="#555555">input</text>
+<rect x="40" y="614" width="400" height="82" rx="6" fill="#f4f7fb" stroke="#444444" stroke-width="1.5"/>
+<text x="50" y="632" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">Key device, bus address 0x1D</text>
+<text x="54" y="654" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">two five-way trim buttons</text>
+<line x1="440" y1="650" x2="560" y2="650" stroke="#333333" stroke-width="1.5"/>
+<text x="568" y="654" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">PA6</text>
+<text x="552" y="646" font-size="11" text-anchor="end" font-weight="normal" fill="#555555">clock, open drain</text>
+<text x="54" y="678" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">(software I2C, 2 bytes per read)</text>
+<line x1="440" y1="674" x2="560" y2="674" stroke="#333333" stroke-width="1.5"/>
+<text x="568" y="678" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">PA7</text>
+<text x="552" y="670" font-size="11" text-anchor="end" font-weight="normal" fill="#555555">data, open drain</text>
+<rect x="40" y="710" width="400" height="82" rx="6" fill="#f4f7fb" stroke="#444444" stroke-width="1.5"/>
+<text x="50" y="728" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">Supply sensing</text>
+<text x="54" y="750" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">USB supply present (high)</text>
+<line x1="440" y1="746" x2="560" y2="746" stroke="#333333" stroke-width="1.5"/>
+<text x="568" y="750" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">PA15</text>
+<text x="552" y="742" font-size="11" text-anchor="end" font-weight="normal" fill="#555555">input</text>
+<text x="54" y="774" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">battery voltage through a divider</text>
+<line x1="440" y1="770" x2="560" y2="770" stroke="#333333" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text x="568" y="774" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">PB0</text>
+<text x="552" y="766" font-size="11" text-anchor="end" font-weight="normal" fill="#555555">ADC 8</text>
+<rect x="40" y="806" width="400" height="82" rx="6" fill="#f4f7fb" stroke="#444444" stroke-width="1.5"/>
+<text x="50" y="824" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">Debug pads</text>
+<text x="54" y="846" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">pad DIO</text>
+<line x1="440" y1="842" x2="560" y2="842" stroke="#333333" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text x="568" y="846" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">PA13</text>
+<text x="552" y="838" font-size="11" text-anchor="end" font-weight="normal" fill="#555555">SWDIO</text>
+<text x="54" y="870" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">pad CLK</text>
+<line x1="440" y1="866" x2="560" y2="866" stroke="#333333" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text x="568" y="870" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">PA14</text>
+<text x="552" y="862" font-size="11" text-anchor="end" font-weight="normal" fill="#555555">SWCLK</text>
+<rect x="940" y="110" width="400" height="106" rx="6" fill="#f4f7fb" stroke="#444444" stroke-width="1.5"/>
+<text x="950" y="128" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">74HC595 shift register</text>
+<text x="954" y="150" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">SRCLK</text>
+<line x1="940" y1="146" x2="820" y2="146" stroke="#333333" stroke-width="1.5"/>
+<text x="812" y="150" font-size="13" text-anchor="end" font-weight="bold" fill="#1a1a1a">PB12</text>
+<text x="828" y="142" font-size="11" text-anchor="start" font-weight="normal" fill="#555555">shift clock</text>
+<text x="954" y="174" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">RCLK</text>
+<line x1="940" y1="170" x2="820" y2="170" stroke="#333333" stroke-width="1.5"/>
+<text x="812" y="174" font-size="13" text-anchor="end" font-weight="bold" fill="#1a1a1a">PB13</text>
+<text x="828" y="166" font-size="11" text-anchor="start" font-weight="normal" fill="#555555">latch</text>
+<text x="954" y="198" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">SER</text>
+<line x1="940" y1="194" x2="820" y2="194" stroke="#333333" stroke-width="1.5"/>
+<text x="812" y="198" font-size="13" text-anchor="end" font-weight="bold" fill="#1a1a1a">PB14</text>
+<text x="828" y="190" font-size="11" text-anchor="start" font-weight="normal" fill="#555555">data, MSB first</text>
+<rect x="940" y="230" width="400" height="82" rx="6" fill="#f4f7fb" stroke="#444444" stroke-width="1.5"/>
+<text x="950" y="248" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">Indicators</text>
+<text x="954" y="270" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">status LED, WS2812 type, colour order G R B</text>
+<line x1="940" y1="266" x2="820" y2="266" stroke="#333333" stroke-width="1.5"/>
+<text x="812" y="270" font-size="13" text-anchor="end" font-weight="bold" fill="#1a1a1a">PB3</text>
+<text x="828" y="262" font-size="11" text-anchor="start" font-weight="normal" fill="#555555">TIM2 CH2</text>
+<text x="954" y="294" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">buzzer, driven with a square wave</text>
+<line x1="940" y1="290" x2="820" y2="290" stroke="#333333" stroke-width="1.5"/>
+<text x="812" y="294" font-size="13" text-anchor="end" font-weight="bold" fill="#1a1a1a">PB1</text>
+<text x="828" y="286" font-size="11" text-anchor="start" font-weight="normal" fill="#555555">TIM3 CH4</text>
+<rect x="940" y="326" width="400" height="58" rx="6" fill="#f4f7fb" stroke="#444444" stroke-width="1.5"/>
+<text x="950" y="344" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">Power</text>
+<text x="954" y="366" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">power latch: high keeps the radio on</text>
+<line x1="940" y1="362" x2="820" y2="362" stroke="#333333" stroke-width="1.5"/>
+<text x="812" y="366" font-size="13" text-anchor="end" font-weight="bold" fill="#1a1a1a">PC15</text>
+<text x="828" y="358" font-size="11" text-anchor="start" font-weight="normal" fill="#555555">output</text>
+<rect x="940" y="398" width="400" height="106" rx="6" fill="#f4f7fb" stroke="#444444" stroke-width="1.5"/>
+<text x="950" y="416" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">ELRS module (ESP32, on the RF board)</text>
+<text x="954" y="438" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">module enable: low = running</text>
+<line x1="940" y1="434" x2="820" y2="434" stroke="#333333" stroke-width="1.5"/>
+<text x="812" y="438" font-size="13" text-anchor="end" font-weight="bold" fill="#1a1a1a">PC13</text>
+<text x="828" y="430" font-size="11" text-anchor="start" font-weight="normal" fill="#555555">output</text>
+<text x="954" y="462" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">ESP32 GPIO3, CRSF at 400000 baud</text>
+<line x1="940" y1="458" x2="820" y2="458" stroke="#333333" stroke-width="1.5"/>
+<text x="812" y="462" font-size="13" text-anchor="end" font-weight="bold" fill="#1a1a1a">PA9</text>
+<text x="828" y="454" font-size="11" text-anchor="start" font-weight="normal" fill="#555555">USART1 TX</text>
+<text x="954" y="486" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">ESP32 GPIO1, CRSF answers</text>
+<line x1="940" y1="482" x2="820" y2="482" stroke="#333333" stroke-width="1.5"/>
+<text x="812" y="486" font-size="13" text-anchor="end" font-weight="bold" fill="#1a1a1a">PA10</text>
+<text x="828" y="478" font-size="11" text-anchor="start" font-weight="normal" fill="#555555">USART1 RX</text>
+<rect x="940" y="518" width="400" height="82" rx="6" fill="#f4f7fb" stroke="#444444" stroke-width="1.5"/>
+<text x="950" y="536" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">USB</text>
+<text x="954" y="558" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">USB switch</text>
+<line x1="940" y1="554" x2="820" y2="554" stroke="#333333" stroke-width="1.5"/>
+<text x="812" y="558" font-size="13" text-anchor="end" font-weight="bold" fill="#1a1a1a">PA11</text>
+<text x="828" y="550" font-size="11" text-anchor="start" font-weight="normal" fill="#555555">USB D-</text>
+<text x="954" y="582" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">USB switch</text>
+<line x1="940" y1="578" x2="820" y2="578" stroke="#333333" stroke-width="1.5"/>
+<text x="812" y="582" font-size="13" text-anchor="end" font-weight="bold" fill="#1a1a1a">PA12</text>
+<text x="828" y="574" font-size="11" text-anchor="start" font-weight="normal" fill="#555555">USB D+</text>
+<rect x="940" y="614" width="400" height="58" rx="6" fill="#f4f7fb" stroke="#444444" stroke-width="1.5"/>
+<text x="950" y="632" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">Clock</text>
+<text x="954" y="654" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">8 MHz crystal</text>
+<line x1="940" y1="650" x2="820" y2="650" stroke="#333333" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text x="812" y="654" font-size="13" text-anchor="end" font-weight="bold" fill="#1a1a1a">PD0/PD1</text>
+<text x="828" y="646" font-size="11" text-anchor="start" font-weight="normal" fill="#555555">HSE</text>
+<text x="690.0" y="102" font-size="15" text-anchor="middle" font-weight="bold" fill="#1a1a1a">Geehy APM32F103CBT6</text>
+<rect x="1400" y="110" width="330" height="226" rx="6" fill="#f4f7fb" stroke="#444444" stroke-width="1.5"/>
+<text x="1410" y="128" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">74HC595 outputs</text>
+<text x="1414" y="150" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">0x01  battery LED 4 (right)</text>
+<text x="1414" y="174" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">0x02  battery LED 3</text>
+<text x="1414" y="198" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">0x04  battery LED 2</text>
+<text x="1414" y="222" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">0x08  battery LED 1 (left)</text>
+<text x="1414" y="246" font-size="13" text-anchor="start" font-weight="normal" fill="#777777">0x10  unknown; stock: low while measuring PB0</text>
+<text x="1414" y="270" font-size="13" text-anchor="start" font-weight="normal" fill="#777777">0x20  unknown</text>
+<text x="1414" y="294" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">0x40  USB switch: high = controller on USB-C</text>
+<text x="1414" y="318" font-size="13" text-anchor="start" font-weight="normal" fill="#777777">0x80  unknown</text>
+<line x1="1340" y1="150" x2="1400" y2="150" stroke="#333333" stroke-width="1.5"/>
+<rect x="1400" y="366" width="330" height="154" rx="6" fill="#f4f7fb" stroke="#444444" stroke-width="1.5"/>
+<text x="1410" y="384" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">RF board</text>
+<text x="1414" y="406" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">ESP32 with SPI flash</text>
+<text x="1414" y="430" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">SX128x-type radio on SPI</text>
+<text x="1414" y="454" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">AT2401C front end, antenna</text>
+<text x="1414" y="478" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">RGB LED on GPIO16</text>
+<text x="1414" y="502" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">UART0 also wired to the CH9102X</text>
+<line x1="1340" y1="438" x2="1400" y2="406" stroke="#333333" stroke-width="1.5"/>
+<rect x="1400" y="550" width="330" height="154" rx="6" fill="#f4f7fb" stroke="#444444" stroke-width="1.5"/>
+<text x="1410" y="568" font-size="13" text-anchor="start" font-weight="bold" fill="#1a1a1a">USB-C connector</text>
+<text x="1414" y="590" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">data lines through a USB switch,</text>
+<text x="1414" y="614" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">selected by 74HC595 output 0x40:</text>
+<text x="1414" y="638" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">  high: controller (PA11, PA12)</text>
+<text x="1414" y="662" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">  low: CH9102X bridge to ESP32 UART0</text>
+<text x="1414" y="686" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">5 V: IP2312 charger, 1S battery</text>
+<line x1="1340" y1="558" x2="1400" y2="590" stroke="#333333" stroke-width="1.5"/>
+<text x="40" y="40" font-size="20" text-anchor="start" font-weight="bold" fill="#1a1a1a">LiteRadio 4 controller wiring</text>
+<text x="40" y="64" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">Solid lines and black text: measured on the radio on 2026-11-17. Dashed lines and grey text: from code, photos or inference only.</text>
+<line x1="40" y1="944" x2="100" y2="944" stroke="#333333" stroke-width="1.5"/>
+<text x="108" y="948" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">measured</text>
+<line x1="200" y1="944" x2="260" y2="944" stroke="#333333" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text x="268" y="948" font-size="13" text-anchor="start" font-weight="normal" fill="#1a1a1a">not measured</text>
+</svg>

@@ -206,10 +206,26 @@ CRSF link to the ELRS module, observed with a test that sends a device ping
 - Shift register outputs 0x10, 0x20 and 0x80 did not affect the answers in
   either state.
 
-Hypotheses: PC13 high removes power from the module or holds it in reset, and
-the 1370 bytes are its boot messages. The 0x3A frame is the module's timing
-request; 0x9C40 is 40000 units of 0.1 us, the 4 ms interval of the 250 Hz
-packet rate. Whether the module transmits RF while it only receives pings
+Listening on the CH9102 bridge at 115200 baud while the test changed the
+control lines showed:
+
+- Each change of PC13 to low is followed by the ESP32 boot message
+  `rst:0x1 (POWERON_RESET), boot:0x13 (SPI_FAST_FLASH_BOOT)`. With PC13 high
+  the bridge receives nothing.
+- The boot message is the same with shift register outputs 0x10, 0x20 and
+  0x80 in any state before the start, and those outputs cause no restart
+  while the module runs. The pattern the bootloader plays on its second
+  SETUP press (0x80 high, 0x10 low, 0x20 low, 0x10 high, 0x20 high) produced
+  no output with the module off and no restart with it on.
+- The host does not notice a change of the USB switch while the controller's
+  USB device stays active; the console port then fails until the next
+  enumeration. Powering the USB peripheral down and holding PA11 and PA12
+  low for 700 ms before switching makes the host enumerate the bridge.
+
+Hypotheses: PC13 high removes power from the module or holds it in reset.
+The 1370 bytes are the boot messages seen on the bridge. The 0x3A frame is
+the module's timing request; 0x9C40 is 40000 units of 0.1 us, the 4 ms
+interval of the 250 Hz packet rate. Whether the module transmits RF while it only receives pings
 was not checked.
 
 Other observations from the scanner:

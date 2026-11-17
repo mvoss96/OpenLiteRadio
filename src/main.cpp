@@ -139,6 +139,95 @@ static void send_ping(const struct device *uart)
     }
 }
 
+/*
+ * Bytes received on USART1 during each phase of the bridge sequence. Kept at
+ * a fixed address above the RAM Zephyr and the bootloader use, because the
+ * sequence ends with a reset.
+ */
+#define bridge_phase_bytes ((volatile uint32_t *)0x20004400u)
+#define BRIDGE_PHASES      10
+
+/*
+ * Make the host see a disconnect: power the USB peripheral down and hold both
+ * data lines low, as the vendor bootloader does before it starts the
+ * application. The USB stack is not usable afterwards; a reset follows.
+ */
+static void usb_force_disconnect(void)
+{
+    USB->CNTR = USB_CNTR_PDWN | USB_CNTR_FRES;
+    GPIOA->BRR = BIT(11) | BIT(12);
+    configure_pin(GPIOA, 11, 0x2u);
+    configure_pin(GPIOA, 12, 0x2u);
+    k_msleep(700);
+}
+
+/*
+ * Give the USB connector to the CH9102 bridge and change one control line
+ * every four seconds, so that a host listening on the bridge can see what
+ * each line does to the module. The first phase lasts six seconds to let the
+ * host find the bridge. Afterwards the connector returns to this MCU and the
+ * MCU resets, so that the host enumerates it again.
+ */
+static void bridge_sequence(const struct device *uart)
+{
+    ARG_UNUSED(uart);
+    usb_force_disconnect();
+
+    /* 0 to 6 s: module off, bridge on the connector. */
+    GPIOC->BSRR = BIT(13);
+    shift_write(0x30);
+    k_msleep(6000);
+
+    /*
+     * 6 to 11 s: what the bootloader does when SETUP is pressed a second time
+     * in update mode: output 0x80 high, PC13 high, then 0x10 and 0x20 low and
+     * high again in turn.
+     */
+    shift_write(0xb0);
+    k_msleep(100);
+    GPIOC->BSRR = BIT(13);
+    shift_write(0xa0);
+    k_msleep(40);
+    shift_write(0x80);
+    k_msleep(40);
+    shift_write(0x90);
+    k_msleep(70);
+    shift_write(0xb0);
+    k_msleep(4750);
+
+    /* 11 to 14 s: module off, then a normal start with PC13 low. */
+    shift_write(0x30);
+    k_msleep(500);
+    GPIOC->BRR = BIT(13);
+    k_msleep(2500);
+
+    /* 14 to 18 s: the same turn of 0x10 and 0x20 while the module runs, 0x80 low. */
+    shift_write(0x20);
+    k_msleep(40);
+    shift_write(0x00);
+    k_msleep(40);
+    shift_write(0x10);
+    k_msleep(70);
+    shift_write(0x30);
+    k_msleep(3850);
+
+    /* 18 to 22 s: the same turn with 0x80 high while the module runs. */
+    shift_write(0xa0);
+    k_msleep(40);
+    shift_write(0x80);
+    k_msleep(40);
+    shift_write(0x90);
+    k_msleep(70);
+    shift_write(0xb0);
+    k_msleep(3850);
+    GPIOC->BSRR = BIT(13);
+
+    /* Both data lines are still held low, which disconnects the bridge. */
+    shift_write(SHIFT_USB_TO_MCU | 0x30);
+    k_msleep(700);
+    NVIC_SystemReset();
+}
+
 int main(void)
 {
     const struct device *uart = DEVICE_DT_GET(DT_NODELABEL(usart1));
@@ -169,7 +258,16 @@ int main(void)
         unsigned char command = 0;
 
         uart_poll_in(console, &command);
-        if (command == 'p') {
+        if (command == 'b') {
+            bridge_sequence(uart);
+            extra_shift = 0x30;
+        } else if (command == 's') {
+            printk("bridge phases:");
+            for (int i = 0; i < BRIDGE_PHASES; i++) {
+                printk(" %u", (unsigned int)bridge_phase_bytes[i]);
+            }
+            printk("\n");
+        } else if (command == 'p') {
             ping = !ping;
         } else if (command == 'c') {
             GPIOC->ODR ^= BIT(13);
