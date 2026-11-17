@@ -65,7 +65,7 @@ analysis kept outside this repository.
 |---|---|---|---|
 | M | CRSF channel frames on USART1, 400000 baud, 16 channels | code | missing |
 | M | Frame period follows the module's packet rate (50 to 1000 Hz) | code | missing |
-| M | Receive link statistics, device info and parameter entries | code | missing |
+| M | Receive link statistics, device info and parameter entries | code | device info received by the test build, hw |
 | M | Parameter access by name: Bind, BLE, packet rate, power, telemetry ratio, WiFi | code | missing |
 | M | Binding | manual: BIND long, up to 8 s | missing |
 | S | Bluetooth gamepad through the module | manual: BIND held at power-on | missing |
@@ -126,6 +126,8 @@ analysis kept outside this repository.
 These block features above and can be found with test images:
 
 - Battery input PB0 on a partly discharged battery, and its volts per count.
-- Meaning of PC13 and of the shift register outputs 0x20 and 0x80; whether
-  output 0x10 enables charging.
+- Meaning of the shift register outputs 0x20 and 0x80; whether output 0x10
+  enables charging.
+- Whether PC13 switches the module's supply or its reset, and whether the
+  module transmits before it receives channel frames.
 - How the stock firmware enters the module's WiFi mode.

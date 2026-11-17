@@ -53,7 +53,8 @@ that code unless the hardware test section below confirms them.
   pointer is 0x20001f48.
 - PC15 is set on a button power-on and cleared when PA15 is high.
   Interpretation: PC15 is the power latch that keeps the radio on from battery.
-- PC13 is set high during initialisation. Its function is not established.
+- PC13 is set high during initialisation. See the CRSF test below: the
+  module only answers while PC13 is low.
 - An 8-bit shift register is written on PB12 (clock), PB13 (latch) and PB14
   (data), most significant bit first. The bootloader uses the output bits
   0x10, 0x20, 0x40 and 0x80. It toggles 0x10 and 0x20 in a 40/70 ms sequence
@@ -192,6 +193,25 @@ was nearly full during the test, which is why the reading sits near full
 scale. Output 0x10 enables charging; the stock code pauses it to measure.
 The volts per count are not known.
 
+CRSF link to the ELRS module, observed with a test that sends a device ping
+(`EE 04 28 00 EA` plus CRC) on USART1 at 400000 baud twice per second:
+
+- With PC13 high, as the bootloader leaves it, nothing is received.
+- With PC13 low the module answers every ping with a 37-byte DEVICE_INFO
+  frame (type 0x29, addressed to 0xEA from 0xEE): name `BETAFPV LiteRadi`,
+  serial `ELRS`, software version bytes 00 03 06 04, 0x15 parameters.
+- Each change of PC13 from high to low is followed by about 1370 other
+  bytes before the first answer, and once by the frame
+  `EA 0D 3A EA EE 10 00 00 9C 40 FF FF FC 18 EC`.
+- Shift register outputs 0x10, 0x20 and 0x80 did not affect the answers in
+  either state.
+
+Hypotheses: PC13 high removes power from the module or holds it in reset, and
+the 1370 bytes are its boot messages. The 0x3A frame is the module's timing
+request; 0x9C40 is 40000 units of 0.1 us, the 4 ms interval of the 250 Hz
+packet rate. Whether the module transmits RF while it only receives pings
+was not checked.
+
 Other observations from the scanner:
 
 - The bootloader's pin setup at application start, as CRL/CRH values:
@@ -222,7 +242,7 @@ Hypotheses from these tests:
 ## Unverified in this implementation
 
 Option-byte watchdog setting, volts per count of the battery input, the
-function of PC13 and of the shift register outputs 0x20 and 0x80, stick readings against the saved
+function of the shift register outputs 0x20 and 0x80, stick readings against the saved
 calibration, calibrated voltage monitoring, CRSF output and timing, USB HID
 reports, and STM32 drivers other than clock, GPIO, ADC and USB device.
 No settings writes are enabled during feasibility work. The largest image
