@@ -37,7 +37,7 @@ analysis kept outside this repository.
 
 | Prio | Feature | Stock | Status |
 |---|---|---|---|
-| M | Four stick axes with averaging | code: 5 samples | raw readings, hw |
+| M | Four stick axes with averaging | code: 5 samples | raw readings in the board layer, hw |
 | M | Stick calibration (upper end, centre, lower end), output 988..2012 | code; factory values read | missing |
 | M | Read the factory calibration at 0x08007800 as default | - | missing |
 | M | Centre dead zone 1 %, not on throttle | manual, code | missing |
@@ -96,13 +96,13 @@ analysis kept outside this repository.
 
 | Prio | Feature | Stock | Status |
 |---|---|---|---|
-| M | Update without buttons and without unplugging | no | hw (hardware test build) |
+| M | Update without buttons and without unplugging | no | hw |
 | M | USB connector switching between controller and bridge | measured | hw |
 | S | Gamepad as HID (DirectInput) | measured | classes build, no reports |
 | S | Gamepad as XInput | manual: stick position while plugging in; class found in the image | missing |
 | S | Serial configuration interface with own protocol | stock uses the Configurator protocol | missing |
-| S | Live stream of stick and switch values for the configuration tool | measured: 10 values at about 500 Hz | missing |
-| C | USB functions while the radio is switched on | no: stock has USB only when off | console in the test build, hw |
+| S | Live stream of stick and switch values for the configuration tool | measured: 10 values at about 500 Hz | state lines 25 times per second, shown by web/live.html, hw |
+| S | USB serial port for configuration and update whenever a cable is plugged in | no: stock has USB only when off | hw |
 | - | Update with SETUP + power | measured; bootloader | kept |
 | - | Flashing the ELRS module through the USB bridge | bootloader code | kept |
 

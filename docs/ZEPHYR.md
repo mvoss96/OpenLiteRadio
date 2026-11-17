@@ -1,6 +1,6 @@
-# Zephyr feasibility
+# Zephyr workspace and feasibility
 
-The probe builds against pinned upstream Zephyr with STM32F103 drivers. Zephyr
+The firmware builds against pinned upstream Zephyr with STM32F103 drivers. Zephyr
 has no Geehy APM32 support of its own. A hardware test on 2026-11-17 showed the
 kernel, the USB device stack and the ADC working on the APM32F103CBT6; see
 "Hardware test" below and docs/HARDWARE.md.
@@ -125,16 +125,17 @@ $env:ZEPHYR_BASE = "$PWD/.deps/zephyr"
 
 ```powershell
 ./build.ps1
-./build.ps1 -Usb
-./build.ps1 -HwTest
 ```
 
 build.ps1 puts `.venv/Scripts` on the process PATH, invokes west with sysbuild
-disabled and runs tools/check_image.py. It does not install software or invoke
-a flash command. `-Usb` adds usb.conf and usb.overlay and builds into
-`build-usb/`; `-HwTest` adds hwtest.conf and hwtest.overlay and builds into
-`build-hwtest/`. The CRSF UART is never used as a logging console; only the
-hardware test has a console, on USB CDC ACM.
+disabled, builds into `build/` and runs tools/check_image.py. It does not
+install software or invoke a flash command. The CRSF UART is never used as a
+logging console; the console is the USB serial port.
+
+Until 2026-11-17 there were three build variants (a basic probe, a USB HID/CDC
+probe selected with `-Usb`, and a hardware test selected with `-HwTest`). The
+size figures and the hardware test section in this document refer to them.
+They were replaced by the single firmware build.
 
 ## Hardware test, 2026-11-17
 
@@ -161,7 +162,7 @@ output, USB HID reports.
 ## Loading an image
 
 ```powershell
-.venv/Scripts/python tools/flash.py build-hwtest/zephyr/zephyr.bin
+.venv/Scripts/python tools/flash.py build/zephyr/zephyr.bin
 ```
 
 tools/flash.py speaks the vendor updater's protocol; pyserial is already in
@@ -177,10 +178,10 @@ the Python environment. It needs one of two starting states:
   start the application.
 
 `CONFIG_UPDATER_ENTRY` is defined in the application's Kconfig file and set in
-hwtest.conf. It adds src/updater_entry.c:
+prj.conf. It adds src/updater_entry.c:
 
-- `updater_enter()` stores a marker in RAM and resets. The hardware test calls
-  it when the console's baud rate is 1200.
+- `updater_enter()` stores a marker in RAM and resets. The firmware calls it
+  when the serial port's baud rate is 1200.
 - `soc_early_reset_hook()`, the first code Zephyr runs after reset, finds the
   marker and continues in the bootloader's update branch. Zephyr provides this
   hook through `CONFIG_SOC_EARLY_RESET_HOOK`.

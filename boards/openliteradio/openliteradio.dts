@@ -3,11 +3,12 @@
 #include <st/f1/stm32f103r(8-b)tx-pinctrl.dtsi>
 
 / {
-    model = "OpenLiteRadio compatibility probe";
-    compatible = "openliteradio,lr4-probe";
+    model = "BETAFPV LiteRadio 4 controller";
+    compatible = "openliteradio,lr4";
     chosen {
         zephyr,sram = &sram0;
         zephyr,flash = &flash0;
+        zephyr,console = &cdc_console;
     };
 };
 
@@ -54,4 +55,14 @@
     pinctrl-0 = <&adc1_in0_pa0 &adc1_in1_pa1 &adc1_in2_pa2 &adc1_in3_pa3>;
     pinctrl-names = "default";
     status = "okay";
+};
+
+/* USB device with one serial port for the console and the host protocol. */
+zephyr_udc0: &usb {
+    pinctrl-0 = <&usb_dm_pa11 &usb_dp_pa12>;
+    pinctrl-names = "default";
+    status = "okay";
+    cdc_console: cdc-console {
+        compatible = "zephyr,cdc-acm-uart";
+    };
 };
