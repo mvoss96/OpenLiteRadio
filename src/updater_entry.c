@@ -53,12 +53,18 @@ __asm__(".pushsection .text.updater_handler, \"ax\"\n"
         "    mov   r0, #0x40000000\n" /* TIM2 */
         "    movs  r1, #0\n"
         "    strh  r1, [r0, #0x10]\n" /* clear the update flag in SR */
+        "    ldr   r2, =0x200049f8\n" /* IDLE_TICKS */
         "    ldr   r0, =0x2000002c\n" /* BOOT_DOWNLOAD_SIZE */
         "    ldr   r1, [r0]\n"
         "    cmp   r1, #0\n"
-        "    bgt   2f\n"
-        "    ldr   r2, =0x200049f8\n" /* IDLE_TICKS */
-        "    ldr   r0, =0x08008000\n" /* first word of the application */
+        "    ble   4f\n"
+        "    ldr   r1, [r2]\n"        /* download complete: reset 0.4 s later, */
+        "    cmp   r1, #296\n"        /* so that the last reply reaches the host */
+        "    bge   3f\n"
+        "    movw  r1, #296\n"
+        "    str   r1, [r2]\n"
+        "    b     3f\n"
+        "4:  ldr   r0, =0x08008000\n" /* first word of the application */
         "    ldr   r1, [r0]\n"
         "    adds  r1, #1\n"          /* zero if that word is erased */
         "    bne   3f\n"
@@ -69,7 +75,7 @@ __asm__(".pushsection .text.updater_handler, \"ax\"\n"
         "    str   r1, [r2]\n"
         "    cmp   r1, #300\n"
         "    ble   1f\n"
-        "2:  ldr   r0, =0xE000ED0C\n" /* SCB AIRCR */
+        "    ldr   r0, =0xE000ED0C\n" /* SCB AIRCR */
         "    ldr   r1, =0x05FA0004\n" /* SYSRESETREQ */
         "    str   r1, [r0]\n"
         "1:  bx    lr\n"

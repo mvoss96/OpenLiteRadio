@@ -162,6 +162,8 @@ def main():
         request_update_mode(console)
         updater = wait_port(UPDATER_ID, 15)
         if updater is None:
+            if find_port(CONSOLE_ID):
+                sys.exit("the updater did not appear; is another program using the console port?")
             sys.exit("the updater did not appear")
         time.sleep(1.0)
 
