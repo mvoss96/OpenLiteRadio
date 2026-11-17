@@ -145,5 +145,5 @@ shift register outputs other than 0x40, stick readings against the saved
 calibration, calibrated voltage monitoring, CRSF output and timing, USB HID
 reports, and STM32 drivers other than clock, GPIO, ADC and USB device.
 No settings writes are enabled during feasibility work. The largest image
-loaded through the stock USB updater and seen running is 48468 bytes; the
+loaded through the stock USB updater and seen running is 48516 bytes; the
 stock application is 58672 bytes. Larger images are untested.

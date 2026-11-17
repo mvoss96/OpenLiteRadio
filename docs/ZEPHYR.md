@@ -64,20 +64,26 @@ from a standalone Zephyr SDK.
 
 Results of 2026-11-17, all passing tools/check_image.py:
 
-- ADC/GPIO/UART probe: 15108 bytes flash, 3288 bytes statically reserved RAM.
+- ADC/GPIO/UART probe: 15132 bytes flash, 3288 bytes statically reserved RAM.
   Binary SHA-256:
-  aad001d41d5672b2ba292252caf840fbf8c6ee42ab57cbf98c3cf88e77aac7f2.
+  3cf00d77e6461a2562c83a313d38db0ead1f4b4cf39b9010e713d4e40243d9b9.
   Initial SP 0x20000cd8, reset vector 0x08008919.
-- Probe plus USB HID/CDC: 46008 bytes flash, 13096 bytes statically reserved
+- Probe plus USB HID/CDC: 46088 bytes flash, 13208 bytes statically reserved
   RAM. Binary SHA-256:
-  7234211c5d035c08308feb98da558559fbaee9174db87a78d95246eca1070316.
-  Initial SP 0x20002718, reset vector 0x080089c5.
-- Hardware test with USB CDC console and updater entry: 48440 bytes flash,
-  13896 bytes statically reserved RAM. Binary SHA-256:
-  4526d36aa1fc7c2de021ed60c01f6e3e0043d0f3f1f5a960f11aec894739c671.
+  ca2069554fcc49f1323c071a8618a1f8c60b57ff51752d1d1fcec9648b4f3042.
+  Initial SP 0x20002788, reset vector 0x080089c5.
+- Hardware test with USB CDC console and updater entry: 48516 bytes flash,
+  14008 bytes statically reserved RAM. Binary SHA-256:
+  e5f8f62e2777a14eff4e571ba7f8e557f17aff59943590184abe7e32421954f1.
 
-The USB HID/CDC variant leaves 7384 bytes of RAM and 52296 bytes of flash.
+The USB HID/CDC variant leaves 7272 bytes of RAM and 52216 bytes of flash.
 Only the hardware test image has been flashed.
+
+The application's main source is C++20 (`CONFIG_CPP`, `CONFIG_STD_CPP20`).
+Zephyr compiles it without exceptions and RTTI and links no C++ standard
+library. Compared with the same source built as C, flash grew by 24 bytes in
+the basic probe and by about 80 bytes in the two USB builds; reserved RAM is
+unchanged in the basic probe and 112 bytes larger in the USB builds.
 
 Zephyr 4.5 moved the STM32 ADC instances below a common-block node. The board
 devicetree therefore enables `&adc12_common` in addition to `&adc1`; without it
@@ -199,7 +205,7 @@ combination.
    72 MHz clock. Open: HID reports and a release USB identity. The IDs
    0xffff:0xffff of the `-Usb` build are placeholders.
 5. Verify restored stock operation through the preserved USB updater after
-   these tests. The largest image loaded and seen running is 48468 bytes;
+   these tests. The largest image loaded and seen running is 48516 bytes;
    the stock application is 58672 bytes.
 
 No vendor settings are written by any of the builds. Do not infer a working

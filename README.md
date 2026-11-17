@@ -26,9 +26,9 @@ device stack enumerates, and ADC channels 0 to 3 (PA0 to PA3) follow the four
 stick axes. Battery operation, CRSF output, switches, LEDs and USB HID reports
 are untested. See `docs/HARDWARE.md` for the observations.
 
-Build result with pinned upstream Zephyr v4.5.0: 15108 bytes flash / 3288 bytes
-RAM for the basic probe; 46008 bytes flash / 13096 bytes RAM with USB HID and
-CDC class initialization; 48440 bytes flash / 13896 bytes RAM for the hardware
+Build result with pinned upstream Zephyr v4.5.0: 15132 bytes flash / 3288 bytes
+RAM for the basic probe; 46088 bytes flash / 13208 bytes RAM with USB HID and
+CDC class initialization; 48516 bytes flash / 14008 bytes RAM for the hardware
 test with a USB console.
 All fit. See `docs/ZEPHYR.md` for exact versions, commands, hashes, and limits.
 The optional USB probe has placeholder IDs and sends no joystick reports.
@@ -51,8 +51,10 @@ as described under Setup in `docs/ZEPHYR.md`, then:
 a console on USB.
 
 Devicetree (`boards/`) describes the hardware; Kconfig (`prj.conf`) selects
-compiled features. Application logic is C. Do not run `west flash`: the board
-intentionally provides no flashing runner. Keep the vendor USB bootloader.
+compiled features. Application logic is C++20, built without exceptions and
+RTTI; code tied to the bootloader or to C-only Zephyr macros stays C. Do not
+run `west flash`: the board intentionally provides no flashing runner. Keep
+the vendor USB bootloader.
 
 ## Loading an image
 

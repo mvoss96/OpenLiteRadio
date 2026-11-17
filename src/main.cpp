@@ -30,12 +30,13 @@
 
 static const struct device *const gpiob = DEVICE_DT_GET(DT_NODELABEL(gpiob));
 
-#ifdef CONFIG_USBD_HID_SUPPORT
+/* Functions from the C sources. */
+extern "C" {
 int usb_probe_init(void);
-#endif
+void updater_enter(void);
+}
 
 #ifdef CONFIG_UPDATER_ENTRY
-void updater_enter(void);
 
 /* Baud rate a host sets on the console port to request update mode. */
 #define UPDATER_REQUEST_BAUD 1200
