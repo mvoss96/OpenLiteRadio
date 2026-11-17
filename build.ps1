@@ -1,25 +1,27 @@
 param(
-    [Parameter(Mandatory=$true)][string]$ZephyrBase,
-    [Parameter(Mandatory=$true)][string]$ToolchainRoot,
-    [switch]$Usb
+    [switch]$Usb,
+    [switch]$HwTest
 )
 $ErrorActionPreference = 'Stop'
 $repoRoot = $PSScriptRoot.Replace('\', '/')
-$env:ZEPHYR_BASE = $ZephyrBase
-$env:ZEPHYR_SDK_INSTALL_DIR = "$ToolchainRoot/opt/zephyr-sdk"
-$env:ZEPHYR_TOOLCHAIN_VARIANT = 'zephyr/gnu'
-$env:PATH = "$ToolchainRoot/opt/bin;$ToolchainRoot/opt/bin/Scripts;$ToolchainRoot/bin;$ToolchainRoot/mingw64/bin;$env:PATH"
-$buildDir = if ($Usb) { "$repoRoot/build-usb" } else { "$repoRoot/build" }
-$cmakeArgs = @("-DBOARD_ROOT=$repoRoot", "-DZEPHYR_BASE=$ZephyrBase")
-$halPath = "$repoRoot/.deps/hal_stm32"
-if (Test-Path "$halPath/zephyr/module.yml") {
-    $cmakeArgs += "-DZEPHYR_EXTRA_MODULES=$halPath"
+$python = "$repoRoot/.venv/Scripts/python.exe"
+if (-not (Test-Path $python) -or -not (Test-Path "$repoRoot/.deps/zephyr/VERSION")) {
+    throw "Workspace is not set up. Follow the setup steps in docs/ZEPHYR.md first."
 }
+# CMake and Ninja are installed in the venv.
+$env:PATH = "$repoRoot/.venv/Scripts;$env:PATH"
+$env:ZEPHYR_BASE = "$repoRoot/.deps/zephyr"
+$buildDir = if ($Usb) { "$repoRoot/build-usb" } elseif ($HwTest) { "$repoRoot/build-hwtest" } else { "$repoRoot/build" }
+$cmakeArgs = @("-DBOARD_ROOT=$repoRoot")
 if ($Usb) {
     $cmakeArgs += "-DEXTRA_CONF_FILE=$repoRoot/usb.conf"
     $cmakeArgs += "-DEXTRA_DTC_OVERLAY_FILE=$repoRoot/usb.overlay"
 }
-& "$ToolchainRoot/opt/bin/python.exe" -m west build --no-sysbuild -b openliteradio -d $buildDir $repoRoot -- @cmakeArgs
+if ($HwTest) {
+    $cmakeArgs += "-DEXTRA_CONF_FILE=$repoRoot/hwtest.conf"
+    $cmakeArgs += "-DEXTRA_DTC_OVERLAY_FILE=$repoRoot/hwtest.overlay"
+}
+& $python -m west build --no-sysbuild -b openliteradio -d $buildDir $repoRoot -- @cmakeArgs
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-& "$ToolchainRoot/opt/bin/python.exe" "$repoRoot/tools/check_image.py" "$buildDir/zephyr/zephyr.bin" --elf "$buildDir/zephyr/zephyr.elf"
+& $python "$repoRoot/tools/check_image.py" "$buildDir/zephyr/zephyr.bin" --elf "$buildDir/zephyr/zephyr.elf"
 exit $LASTEXITCODE

@@ -1,0 +1,16 @@
+# West manifest: pins upstream Zephyr and the modules this board needs.
+# Everything is checked out below .deps/, which Git ignores.
+manifest:
+  projects:
+    - name: zephyr
+      url: https://github.com/zephyrproject-rtos/zephyr
+      revision: v4.5.0
+      path: zephyr
+      import:
+        path-prefix: .deps
+        name-allowlist:
+          - cmsis
+          - cmsis_6
+          - hal_stm32
+  self:
+    path: west

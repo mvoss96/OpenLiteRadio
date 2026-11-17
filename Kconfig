@@ -1,0 +1,9 @@
+config UPDATER_ENTRY
+	bool "Enter the vendor USB updater from the application"
+	select SOC_EARLY_RESET_HOOK
+	help
+	  Provide updater_enter(), which restarts into the vendor bootloader's
+	  USB update mode without the button combination, and reset out of
+	  update mode after a completed download.
+
+source "Kconfig.zephyr"

@@ -11,12 +11,23 @@
     };
 };
 
-/* HSI avoids assuming an external oscillator frequency. USB needs another clock setup. */
-&rcc {
-    clocks = <&clk_hsi>;
+/* 8 MHz crystal, PLL x9, 72 MHz: the configuration the vendor bootloader uses. */
+&clk_hse {
     clock-frequency = <DT_FREQ_M(8)>;
+    status = "okay";
+};
+
+&pll {
+    mul = <9>;
+    clocks = <&clk_hse>;
+    status = "okay";
+};
+
+&rcc {
+    clocks = <&pll>;
+    clock-frequency = <DT_FREQ_M(72)>;
     ahb-prescaler = <1>;
-    apb1-prescaler = <1>;
+    apb1-prescaler = <2>;
     apb2-prescaler = <1>;
 };
 
@@ -27,7 +38,19 @@
     status = "okay";
 };
 
+/* Common block of ADC1 and ADC2; must be enabled for adc1 to work. */
+&adc12_common {
+    status = "okay";
+};
+
 &adc1 {
+    /*
+     * ADC prescaler 6: PCLK2 / 6 = 12 MHz, below the 14 MHz ADC limit.
+     * The F1 bindings have no PCLK2 source id; SYSCLK equals PCLK2 here.
+     */
+    clocks = <&rcc STM32_CLOCK(APB2, 9)>,
+             <&rcc STM32_SRC_SYSCLK ADC_PRE(ADC_PRE_DIV_6)>;
+    clock-names = "adcx", "adc_pre";
     pinctrl-0 = <&adc1_in0_pa0 &adc1_in1_pa1 &adc1_in2_pa2 &adc1_in3_pa3>;
     pinctrl-names = "default";
     status = "okay";
