@@ -45,7 +45,8 @@
  *   set KEY VALUE     change a setting; it applies at once and is lost at power-off
  *   save              store all settings
  *   revert            return to the stored settings
- *   defaults          set all settings to their defaults, without storing them
+ *   defaults          set all settings except the stick calibration (cal.N.*) to their
+ *                     defaults, without storing them
  *   calibrate start|end|cancel   stick calibration run, as SETUP does; cancel keeps the old values
  *   profiles          report "profile N NAME" for each used slot, then "active N" (0: none)
  *   profile load N    put profile N into the ch.N.* settings and store them
@@ -61,7 +62,10 @@
  */
 
 extern "C" void updater_enter(void);
+/* Sends joystick::REPORT_SIZE bytes, see src/usb_device.c. */
 extern "C" void usb_joystick_send(const uint8_t *report);
+static_assert(joystick::REPORT_SIZE == DT_PROP(DT_NODELABEL(joystick_hid), in_report_size),
+              "src/core/joystick.h, src/usb_device.c and the devicetree must agree on the report size");
 
 /* Baud rate a host sets on the serial port to request the vendor USB updater. */
 constexpr uint32_t UPDATER_REQUEST_BAUD = 1200;
@@ -263,16 +267,22 @@ static void control_thread(void *, void *, void *)
         joystick::fill_report(channels, report);
         usb_joystick_send(report);
 
-        /* Every start of the module and every changed setting needs the unlock gesture again. */
+        /*
+         * Every start of the module, every changed setting and every hold
+         * needs the unlock gesture again. A hold also stops the frames by
+         * itself: with the throttle already at its lower end the lock opens
+         * again at once.
+         */
         bool module_is_on = atomic_get(&module_on) != 0;
+        bool held = atomic_get(&hold_output) != 0;
 
-        if (!module_is_on || atomic_get(&hold_output) != 0 || atomic_set(&relock, 0) != 0) {
+        if (!module_is_on || held || atomic_set(&relock, 0) != 0) {
             lock.lock();
         }
 
         bool locked = lock.update(
             core::source_value(core::SOURCE_THROTTLE, controls, settings::values),
-            settings::values[settings::UNLOCK_MODE]);
+            settings::values[settings::UNLOCK_MODE]) || held;
 
         if (module_is_on && !locked) {
             uint16_t values[crsf::CHANNELS];
@@ -312,8 +322,9 @@ static void settings_load()
 static bool settings_save()
 {
     bool stored = true;
+    /* A calibration run may already hold the output; it keeps holding it afterwards. */
+    atomic_val_t held = atomic_set(&hold_output, 1);
 
-    atomic_set(&hold_output, 1);
     for (int index = 0; index < settings::COUNT; index++) {
         settings::Info info = settings::info(index);
         int16_t value = settings::values[index];
@@ -324,7 +335,7 @@ static bool settings_save()
             stored = board::storage_write(info.id, &value, sizeof(value)) && stored;
         }
     }
-    atomic_set(&hold_output, 0);
+    atomic_set(&hold_output, held);
     return stored;
 }
 
@@ -357,9 +368,10 @@ static bool profile_read(int slot, profiles::Profile &profile)
 
 static bool profile_write(int slot, const profiles::Profile &profile)
 {
-    atomic_set(&hold_output, 1);
+    atomic_val_t held = atomic_set(&hold_output, 1);
     bool stored = board::storage_write(profiles::FIRST_ID + slot - 1, &profile, sizeof(profile));
-    atomic_set(&hold_output, 0);
+
+    atomic_set(&hold_output, held);
     return stored;
 }
 
@@ -434,10 +446,17 @@ static void handle_profile(char *text)
     } else if (strcmp(action, "load") == 0) {
         if (!profile_read((int)slot, profile)) {
             printk("error unknown profile\n");
-        } else if (!profiles::apply(profile)) {
+            return;
+        }
+        /* The output locks first, and the control thread never sees half of the change. */
+        atomic_set(&relock, 1);
+        k_sched_lock();
+        bool applied = profiles::apply(profile);
+        k_sched_unlock();
+
+        if (!applied) {
             printk("error invalid profile\n");
         } else {
-            atomic_set(&relock, 1);
             bool stored = active_profile_store((uint8_t)slot) && settings_save();
             reply_profile(stored, "load", slot);
         }
@@ -810,12 +829,18 @@ static void handle_command(char *line)
     } else if (strcmp(command, "save") == 0) {
         printk(settings_save() ? "ok save\n" : "error storage\n");
     } else if (strcmp(command, "revert") == 0 || strcmp(command, "defaults") == 0) {
+        /* The output locks first, and the control thread never sees half of the change. */
+        atomic_set(&relock, 1);
+        k_sched_lock();
         if (command[0] == 'r') {
             settings_load();
         } else {
-            settings::set_defaults();
+            /* The stick calibration stays: without it the radio is not usable. */
+            for (int index = 0; index < settings::CALIBRATION_FIRST; index++) {
+                settings::values[index] = settings::info(index).default_value;
+            }
         }
-        atomic_set(&relock, 1);
+        k_sched_unlock();
         printk("ok %s\n", command);
     } else if (strcmp(command, "calibrate") == 0 && arguments[0] != nullptr) {
         if (strcmp(arguments[0], "start") == 0) {

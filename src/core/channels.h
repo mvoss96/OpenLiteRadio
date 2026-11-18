@@ -23,7 +23,10 @@ enum Axis {
     AXIS_COUNT = 4,
 };
 
-/* What a channel can follow; the value of the setting ch.N.source. */
+/*
+ * What a channel can follow; the value of the setting ch.N.source. web/app.js
+ * uses the same numbers (CONTROLS), so they must not change.
+ */
 enum Source {
     SOURCE_NONE = 0,     /* the channel stays at the centre */
     SOURCE_AILERON = 1,  /* right stick, right gives 2012 */

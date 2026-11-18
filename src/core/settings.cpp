@@ -71,7 +71,10 @@ Info info(int index)
     const Field &field = position.group->fields[position.field];
     int16_t default_value = field.default_value;
 
-    /* Channels 1 to 10 take sources 1 to 10: AETR, then SA to SF. */
+    /*
+     * Channels 1 to 10 take sources 1 to 10: AETR, then SA to SF. The same
+     * assignment is the AETR template in web/app.js.
+     */
     if (index >= CHANNEL_FIRST && index < CALIBRATION_FIRST && position.field == CHANNEL_SOURCE &&
         position.instance < 10) {
         default_value = (int16_t)(position.instance + 1);

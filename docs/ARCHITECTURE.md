@@ -165,7 +165,7 @@ To the radio:
 | `set KEY VALUE` | change a setting; answers `ok KEY VALUE`. It applies at once, locks the output and is lost at power-off unless stored |
 | `save` | store all settings |
 | `revert` | return to the stored settings |
-| `defaults` | set all settings to their defaults without storing them |
+| `defaults` | set all settings except the stick calibration (`cal.N.*`) to their defaults without storing them |
 | `calibrate start` / `calibrate end` | stick calibration run, as SETUP on the radio |
 | `calibrate cancel` | end the run and keep the previous calibration |
 | `profiles` | report `profile N NAME` for each used slot, then `active N` (0: none) |

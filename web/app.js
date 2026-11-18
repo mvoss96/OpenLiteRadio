@@ -38,7 +38,8 @@ const CONTROLS = [
 const STATE_KEY = { 5: "sa", 6: "sb", 7: "sc", 8: "sd", 9: "se", 10: "sf" };
 const LIST_ORDER = [3, 4, 2, 1, 5, 6, 7, 8, 9, 10];   // list that replaces the labels in a narrow window
 
-// Templates are written with "set"; the radio does not store them.
+// Templates are written with "set"; the radio does not store them. AETR is
+// also the firmware's default assignment (src/core/settings.cpp).
 const TEMPLATES = [
   { name: "Betaflight-Standard (AETR)", sources: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0] },
   { name: "TAER", sources: [3, 1, 2, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0] },

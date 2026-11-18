@@ -19,7 +19,10 @@
 
 #define USB_VID 0x2fe3
 #define USB_PID 0x0005
+/* Also joystick::REPORT_SIZE in src/core/joystick.h; main.cpp checks that they agree. */
 #define REPORT_SIZE 17
+BUILD_ASSERT(REPORT_SIZE == DT_PROP(DT_NODELABEL(joystick_hid), in_report_size),
+	     "in-report-size of joystick_hid in the devicetree must be the report size");
 
 USBD_DEVICE_DEFINE(radio_usbd, DEVICE_DT_GET(DT_NODELABEL(zephyr_udc0)), USB_VID, USB_PID);
 USBD_DESC_LANG_DEFINE(radio_lang);
