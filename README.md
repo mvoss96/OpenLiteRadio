@@ -81,6 +81,23 @@ Every change is stored on the radio at once, in the active own profile if
 there is one. The page needs no installation; the browser reaches the
 radio's USB serial port through the Web Serial API.
 
+## USB joystick
+
+Plugged in, the radio is also a game controller: channels 1 to 8 are its
+axes, channels 9 to 16 its buttons, so a simulator sees the same assignment
+as the receiver. It works as soon as USB is connected, without switching the
+radio on and without the throttle lock.
+
+```powershell
+.venv/Scripts/python tools/joystick_test.py
+```
+
+shows the axes and buttons as Windows reads them. That interface shows six
+of the eight axes (channels 1, 2, 3, 4, 6, 7); simulators see all eight.
+`tools/joystick_check.py` checks the joystick without touching the radio:
+it sets stick and switch readings over the serial port and compares the
+joystick with the channel outputs.
+
 ## Limits
 
 A successful build does not establish that something works on the radio; what

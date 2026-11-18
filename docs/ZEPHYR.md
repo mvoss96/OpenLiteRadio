@@ -169,7 +169,7 @@ tools/flash.py speaks the vendor updater's protocol; pyserial is already in
 the Python environment. It needs one of two starting states:
 
 - Firmware built with `CONFIG_UPDATER_ENTRY` is running and shows its USB
-  console (2FE3:0004). The tool opens the console at 1200 baud, the firmware
+  console (2FE3:0005 from 0.7.0 on, 2FE3:0004 before). The tool opens the console at 1200 baud, the firmware
   restarts into the updater, the image is written, and the controller restarts
   into it. Nothing on the radio has to be touched.
 - The updater (0483:5740) is already present after the button combination:

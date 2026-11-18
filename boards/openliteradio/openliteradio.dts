@@ -10,6 +10,15 @@
         zephyr,flash = &flash0;
         zephyr,console = &cdc_console;
     };
+
+    /* USB joystick: channels 1 to 8 as axes, 9 to 16 as buttons; see src/core/joystick.h. */
+    joystick_hid: joystick-hid {
+        compatible = "zephyr,hid-device";
+        label = "LiteRadio 4 Joystick";
+        protocol-code = "none";
+        in-report-size = <17>;
+        in-polling-period-us = <4000>;
+    };
 };
 
 /* 8 MHz crystal, PLL x9, 72 MHz: the configuration the vendor bootloader uses. */
@@ -74,7 +83,7 @@
     status = "okay";
 };
 
-/* USB device with one serial port for the console and the host protocol. */
+/* USB device: a serial port for the console and the host protocol, and the joystick. */
 zephyr_udc0: &usb {
     pinctrl-0 = <&usb_dm_pa11 &usb_dp_pa12>;
     pinctrl-names = "default";

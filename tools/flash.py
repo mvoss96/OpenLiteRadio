@@ -31,8 +31,9 @@ from pathlib import Path
 import serial
 from serial.tools import list_ports
 
-UPDATER_ID = (0x0483, 0x5740)
-CONSOLE_ID = (0x2FE3, 0x0004)
+UPDATER_IDS = ((0x0483, 0x5740),)
+# Firmware from 0.7.0 on is a serial port plus joystick (PID 0x0005); older ones were 0x0004.
+CONSOLE_IDS = ((0x2FE3, 0x0005), (0x2FE3, 0x0004))
 UPDATE_REQUEST_BAUD = 1200
 
 READY = 0x43
@@ -67,18 +68,18 @@ def build_block(number, payload):
     return bytes([0x02, number & 0xFF, ~number & 0xFF]) + data + crc16_xmodem(data).to_bytes(2, "big")
 
 
-def find_port(usb_id):
-    """Return the serial port name of the device with this (VID, PID), or None."""
+def find_port(usb_ids):
+    """Return the serial port name of a device with one of these (VID, PID) pairs, or None."""
     for port in list_ports.comports():
-        if (port.vid, port.pid) == usb_id:
+        if (port.vid, port.pid) in usb_ids:
             return port.device
     return None
 
 
-def wait_port(usb_id, timeout):
+def wait_port(usb_ids, timeout):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        device = find_port(usb_id)
+        device = find_port(usb_ids)
         if device:
             return device
         time.sleep(0.2)
@@ -153,16 +154,16 @@ def main():
         sys.exit("image must fit into the 96 KiB application area")
     print(f"{args.image}: {len(image)} bytes, SHA-256 {hashlib.sha256(image).hexdigest()}")
 
-    updater = find_port(UPDATER_ID)
+    updater = find_port(UPDATER_IDS)
     if updater is None:
-        console = find_port(CONSOLE_ID)
+        console = find_port(CONSOLE_IDS)
         if console is None:
             sys.exit("no controller found; unplug USB, hold SETUP and power until "
                      "the double beep, then plug USB in")
         request_update_mode(console)
-        updater = wait_port(UPDATER_ID, 15)
+        updater = wait_port(UPDATER_IDS, 15)
         if updater is None:
-            if find_port(CONSOLE_ID):
+            if find_port(CONSOLE_IDS):
                 sys.exit("the updater did not appear; is another program using the console port?")
             sys.exit("the updater did not appear")
         time.sleep(1.0)
@@ -173,7 +174,7 @@ def main():
         sys.exit(error)
     print("image written and verified")
 
-    if wait_port(CONSOLE_ID, 10):
+    if wait_port(CONSOLE_IDS, 10):
         print("the controller restarted into the new firmware")
     else:
         print("no USB console appeared; if the updater was entered with the buttons, "

@@ -68,7 +68,7 @@ Each further thread would cost about 1 KiB of stack.
 | 1 | board layer, power on/off, LED, buzzer, host protocol with live view | built, see below |
 | 2 | flying: factory calibration, channels, CRSF at the module's rate, throttle lock, binding | in progress, see below |
 | 3 | settings storage, trim, calibration on the radio | storage and calibration built, trim open |
-| 4 | USB joystick, then Xbox mode | open |
+| 4 | USB joystick, then Xbox mode | joystick built (DirectInput, beside the serial port), Xbox open |
 | 5 | configuration protocol for the web tool | settings commands and the configurator's views built; ELRS parameters, buttons, USB modes, update and backup open |
 | 6 | Bluetooth, WiFi, battery display, remaining features | open |
 
@@ -174,6 +174,7 @@ To the radio:
 | `profile name N NAME` | rename profile N |
 | `profile delete N` | remove profile N |
 | `profile none` | make no profile the active one, e.g. after the configurator wrote a template |
+| `inject KEY=VALUE ...` | test inputs: replace the readings of `sticks` (four raw values, comma-separated) and `sa` to `sf`, with the keys of the state line. Keys add up over several lines; the replacement ends 10 s after the last `inject` line, with `inject off`, or when the ELRS module starts. Refused with `error module on` while the module is on |
 
 Profiles (`src/core/profiles.cpp`) are saved channel assignments: a name of 1
 to 15 bytes of UTF-8 and source, weight and reverse of all 16 channels, one

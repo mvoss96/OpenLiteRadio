@@ -9,13 +9,14 @@
 #include "board/board.h"
 #include "core/channels.h"
 #include "core/crsf.h"
+#include "core/joystick.h"
 #include "core/profiles.h"
 #include "core/settings.h"
 
 /*
  * OpenLiteRadio firmware, stage 2: power handling, controls and indicators,
- * channel frames to the ELRS module, and a line protocol on the USB serial
- * port for the live view in web/.
+ * channel frames to the ELRS module, a line protocol on the USB serial
+ * port for the configurator in web/, and a USB joystick.
  *
  * Two threads: the control thread reads sticks and switches and sends one
  * channel frame per frame period of the module; the main thread does
@@ -52,11 +53,15 @@
  *   profile name N NAME   rename profile N
  *   profile delete N  remove profile N
  *   profile none      make no profile the active one
+ *   inject KEY=VALUE ...   test inputs: replace sticks (a,b,c,d), sa..sf for 10 s
+ *                     after the last inject line, only while the module is off;
+ *                     "inject off" ends it
  *
  * Every change of a setting locks the channel output again.
  */
 
 extern "C" void updater_enter(void);
+extern "C" void usb_joystick_send(const uint8_t *report);
 
 /* Baud rate a host sets on the serial port to request the vendor USB updater. */
 constexpr uint32_t UPDATER_REQUEST_BAUD = 1200;
@@ -118,6 +123,106 @@ static void beep(uint32_t frequency, int milliseconds)
     beep_loops = milliseconds / LOOP_MS;
 }
 
+/*
+ * Test inputs from the host ("inject"): replace the readings of the sticks and
+ * switches named in a command, so that channels and joystick can be checked
+ * without touching the radio. Only while the ELRS module is off, and for at
+ * most INJECT_MS. Written by the main thread with the scheduler locked.
+ */
+constexpr int64_t INJECT_MS = 10000;
+
+static struct {
+    uint32_t fields; /* bit n: INJECT_NAMES[n] is replaced */
+    board::Inputs values;
+    int64_t until;
+} inject;
+
+static const char *const INJECT_NAMES[] = { "sticks", "sa", "sb", "sc", "sd", "se", "sf" };
+
+static void apply_injection(board::Inputs &inputs)
+{
+    if (inject.fields == 0) {
+        return;
+    }
+    if (atomic_get(&module_on) != 0 || k_uptime_get() > inject.until) {
+        inject.fields = 0;
+        return;
+    }
+    const board::Inputs &v = inject.values;
+
+    if (inject.fields & BIT(0)) {
+        memcpy(inputs.sticks, v.sticks, sizeof(inputs.sticks));
+    }
+    inputs.sa = (inject.fields & BIT(1)) ? v.sa : inputs.sa;
+    inputs.sb = (inject.fields & BIT(2)) ? v.sb : inputs.sb;
+    inputs.sc = (inject.fields & BIT(3)) ? v.sc : inputs.sc;
+    inputs.sd = (inject.fields & BIT(4)) ? v.sd : inputs.sd;
+    inputs.se = (inject.fields & BIT(5)) ? v.se : inputs.se;
+    inputs.sf = (inject.fields & BIT(6)) ? v.sf : inputs.sf;
+}
+
+/* Run "inject off" or "inject KEY=VALUE ...", with the keys of the state line. */
+static void handle_inject(char *text)
+{
+    /* Keys add to the ones still active, so a test can span several short lines. */
+    board::Inputs values = inject.values;
+    uint32_t fields = inject.fields;
+
+    for (char *word = strtok(text, " "); word != nullptr; word = strtok(nullptr, " ")) {
+        char *value = strchr(word, '=');
+
+        if (strcmp(word, "off") == 0) {
+            fields = 0;
+            continue;
+        }
+        if (value == nullptr) {
+            printk("error unknown key\n");
+            return;
+        }
+        *value++ = '\0';
+
+        int field = -1;
+
+        for (int i = 0; i < (int)ARRAY_SIZE(INJECT_NAMES); i++) {
+            if (strcmp(word, INJECT_NAMES[i]) == 0) {
+                field = i;
+            }
+        }
+        long number = strtol(value, &value, 0);
+
+        if (field == 0) {
+            values.sticks[0] = (uint16_t)number;
+            for (int axis = 1; axis < 4 && *value == ','; axis++) {
+                values.sticks[axis] = (uint16_t)strtol(value + 1, &value, 0);
+            }
+        } else if (field > 0) {
+            uint8_t *switches[] = { &values.sa, &values.sb, &values.sc, &values.sd };
+
+            if (field <= 4) {
+                *switches[field - 1] = (uint8_t)number;
+            } else if (field == 5) {
+                values.se = number != 0;
+            } else {
+                values.sf = number != 0;
+            }
+        } else {
+            printk("error unknown key\n");
+            return;
+        }
+        fields |= BIT(field);
+    }
+    if (fields != 0 && atomic_get(&module_on) != 0) {
+        printk("error module on\n");
+        return;
+    }
+    k_sched_lock();
+    inject.values = values;
+    inject.fields = fields;
+    inject.until = k_uptime_get() + INJECT_MS;
+    k_sched_unlock();
+    printk("ok inject\n");
+}
+
 /* Read the controls, compute the channels and send them once per frame period. */
 static void control_thread(void *, void *, void *)
 {
@@ -138,6 +243,7 @@ static void control_thread(void *, void *, void *)
         uint16_t channels[core::CHANNEL_COUNT];
 
         board::read_controls(inputs);
+        apply_injection(inputs);
 
         core::Controls controls = {
             .sticks = { inputs.sticks[0], inputs.sticks[1], inputs.sticks[2], inputs.sticks[3] },
@@ -150,6 +256,12 @@ static void control_thread(void *, void *, void *)
         };
 
         core::compute_channels(controls, settings::values, channels);
+
+        /* The USB joystick follows the channels always, without the throttle lock. */
+        uint8_t report[joystick::REPORT_SIZE];
+
+        joystick::fill_report(channels, report);
+        usb_joystick_send(report);
 
         /* Every start of the module and every changed setting needs the unlock gesture again. */
         bool module_is_on = atomic_get(&module_on) != 0;
@@ -639,6 +751,10 @@ static void handle_command(char *line)
 {
     if (strncmp(line, "profile ", 8) == 0) {
         handle_profile(line + 8);
+        return;
+    }
+    if (strncmp(line, "inject ", 7) == 0) {
+        handle_inject(line + 7);
         return;
     }
 

@@ -5,6 +5,7 @@
 
 #include "core/channels.h"
 #include "core/crsf.h"
+#include "core/joystick.h"
 #include "core/profiles.h"
 #include "core/settings.h"
 
@@ -428,6 +429,24 @@ static void test_profiles()
     settings::set_defaults();
 }
 
+static void test_joystick()
+{
+    uint16_t channels[16] = { 988, 1500, 2012, 900, 2100, 1000, 1500, 1500,
+                              2012, 988, 1501, 1500, 988, 988, 988, 2012 };
+    uint8_t report[joystick::REPORT_SIZE];
+
+    joystick::fill_report(channels, report);
+    /* Buttons: channels 9, 11 and 16 above 1500. */
+    CHECK(report[0] == 0x85);
+    auto axis = [&](int i) { return report[1 + 2 * i] | (report[2 + 2 * i] << 8); };
+    CHECK(axis(0) == 0);
+    CHECK(axis(1) == 1023);
+    CHECK(axis(2) == 2047);
+    CHECK(axis(3) == 0);
+    CHECK(axis(4) == 2047);
+    CHECK(axis(5) == 23);
+}
+
 int main()
 {
     test_crc();
@@ -443,6 +462,7 @@ int main()
     test_channels();
     test_throttle_lock();
     test_profiles();
+    test_joystick();
 
     if (failures != 0) {
         std::printf("%d check(s) failed\n", failures);

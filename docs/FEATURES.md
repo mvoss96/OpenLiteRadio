@@ -106,11 +106,12 @@ analysis kept outside this repository.
 |---|---|---|---|
 | M | Update without buttons and without unplugging | no | hw |
 | M | USB connector switching between controller and bridge | measured | hw |
-| S | Gamepad as HID (DirectInput) | measured | classes build, no reports |
+| S | Gamepad as HID (DirectInput) | measured | channels 1 to 8 as axes, 9 to 16 as buttons, beside the serial port; checked against the channels with injected inputs (0.7.1), not yet tried in a simulator |
 | S | Gamepad as XInput | manual: stick position while plugging in; class found in the image | missing |
 | S | Serial configuration interface with own protocol | stock uses the Configurator protocol | list, get, set, save, revert, defaults, hw |
 | S | Live stream of stick and switch values for the configuration tool | measured: 10 values at about 500 Hz | state lines 25 times per second, shown by web/index.html, hw |
 | S | USB serial port for configuration and update whenever a cable is plugged in | no: stock has USB only when off | hw |
+| C | PC control: a program on the PC moves virtual sticks and switches over the serial port, sent to the model through the ELRS module (keyboard control, ground station, test stand). Safeguards: only while an enable switch on the radio is set, any switch-back returns to the sticks at once; the sticks take over again when no update arrives for about 200 ms; the throttle lock stays; own LED colour and a tone on every change | no | planned; the `inject` test command (module off only) is the starting point |
 | - | Update with SETUP + power | measured; bootloader | kept |
 | - | Flashing the ELRS module through the USB bridge | bootloader code | kept |
 

@@ -4,7 +4,7 @@ Set-Location $PSScriptRoot
 
 New-Item -ItemType Directory -Force build-tests | Out-Null
 g++ -std=c++20 -Wall -Wextra -Werror -Isrc `
-    tests/core_tests.cpp src/core/crsf.cpp src/core/channels.cpp src/core/settings.cpp src/core/profiles.cpp `
+    tests/core_tests.cpp src/core/crsf.cpp src/core/channels.cpp src/core/settings.cpp src/core/profiles.cpp src/core/joystick.cpp `
     -o build-tests/core_tests.exe
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
