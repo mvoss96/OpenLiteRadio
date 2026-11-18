@@ -58,15 +58,27 @@ the radio into update mode and back by itself. Otherwise enter update mode with
 the buttons first: USB unplugged, hold SETUP and power until the double beep,
 plug USB in. Details are in `docs/ZEPHYR.md`.
 
-## Live view
+## Configurator
 
-Open `web/live.html` in Chrome or Edge, plug the radio in and press Connect.
-Press Disconnect before loading firmware; the serial port can only be open in
-one program.
-The page shows sticks, switches, buttons, trim buttons and the power state as
-the radio reports them, the computed channels and the link to the ELRS module,
-and can set the status LED, the battery LEDs, the
-buzzer and the ELRS module. It needs no installation; the browser reaches the
+Open `web/index.html` in Chrome or Edge, plug the radio in and press
+"Verbinden". Press "Trennen" before loading firmware; the serial port can only
+be open in one program. The page is in German.
+
+- "Belegung" shows the profile and a drawing of the radio. The profile menu
+  loads, creates, renames and deletes up to four own profiles stored on the
+  radio and applies the templates AETR and TAER. Each control carries a label
+  with its channel and live value; clicking a label opens a card with its
+  channel, dead zone or switch positions, response curve, and under
+  "Erweitert" weight and reverse. Choosing a taken channel asks whether to
+  swap or replace. In a narrow window the labels become a list below the
+  drawing. "Knüppel kalibrieren" starts the stick calibration run.
+- "Einstellungen" holds the unlock gesture and the tones.
+- "System" shows firmware and battery readings, test buttons for tone,
+  module and binding, the fixed button combinations, and every setting the
+  radio reports in raw form.
+
+Every change is stored on the radio at once, in the active own profile if
+there is one. The page needs no installation; the browser reaches the
 radio's USB serial port through the Web Serial API.
 
 ## Limits

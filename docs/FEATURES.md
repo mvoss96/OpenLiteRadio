@@ -30,9 +30,13 @@ analysis kept outside this repository.
 - The radio starts locked and sends no channel data until it is unlocked. How
   it unlocks is a setting: unlocked at once, throttle at its lower end (the
   default), or throttle up and down again. Further gestures may follow.
-- Flash below 0x08008000 is only read. The factory calibration there is used
-  as the default; own settings are stored in the application area. The stock
-  firmware therefore finds its data unchanged when it is flashed back.
+- Flash below 0x08008000 is not written. The factory calibration there is
+  not used because it does not fit the stick readings (docs/HARDWARE.md); own
+  settings are stored in the application area. The stock firmware therefore
+  finds its data unchanged when it is flashed back.
+- The radio reports its settings with key, range and default; the web tool
+  holds labels and layout. ELRS parameters will be handled in the web tool,
+  with the radio passing raw CRSF frames through.
 - The vendor bootloader stays. The RF stack stays in the ELRS module.
 
 ## Inputs
@@ -41,8 +45,8 @@ analysis kept outside this repository.
 |---|---|---|---|
 | M | Four stick axes with averaging | code: 5 samples | raw readings in the board layer, hw |
 | M | Stick calibration (upper end, centre, lower end), output 988..2012 | code; factory values read | hw |
-| M | Read the factory calibration at 0x08007800 as default | - | built; the values do not fit the readings, see docs/HARDWARE.md |
-| M | Centre dead zone 1 %, not on throttle | manual, code | missing |
+| - | Read the factory calibration at 0x08007800 as default | - | dropped; the values do not fit the readings, see docs/HARDWARE.md |
+| M | Centre dead zone 1 %, not on throttle | manual, code | setting per axis, 0 to 10 %, default 1; shown and edited in the web tool; PC tests only |
 | M | Switches SA, SD (toggle), SB, SC (three positions), buttons SE, SF | manual; pins measured | pins known, hw |
 | M | Buttons: power, BIND, SETUP with short and long press | manual, code | missing |
 | S | Two five-way trim buttons | manual; key device on a software two-wire bus, measured | read in the test build, hw |
@@ -52,13 +56,13 @@ analysis kept outside this repository.
 
 | Prio | Feature | Stock | Status |
 |---|---|---|---|
-| M | Channel order AETR, switches on channels 5 to 10 | manual, measured | missing |
-| M | Channel assignment table with per-channel weight and reverse | code; table read | missing |
+| M | Channel order AETR, switches on channels 5 to 10 | manual, measured | default assignment, hw |
+| M | Channel assignment table with per-channel weight and reverse | code; table read | settings ch.N.*, editable in the web tool; defaults seen on the radio, changes only in the PC tests |
 | S | Trim in 1 % steps, continuous on long press, reset, stored | manual | missing |
 | S | Stick mode selection (mode 2 by default) | code: mode flag, meaning open | missing |
 | S | Response curve per stick (expo) | code: 512-entry table | missing |
 | C | Dual rates | no | missing |
-| C | Several model memories | no | missing |
+| C | Several model memories | no | four named channel-assignment profiles (0.6.0); not yet in the configurator |
 | C | Free mixes beyond the assignment table | no | missing |
 
 ## Link to the ELRS module
@@ -80,7 +84,7 @@ analysis kept outside this repository.
 | Prio | Feature | Stock | Status |
 |---|---|---|---|
 | M | No output while the throttle is not at its lower end at power-on | manual | lock seen held and released in the state lines, hw; not seen with the module on |
-| S | Unlock gesture selectable: at once, throttle down, throttle up and down | - | throttle down only |
+| S | Unlock gesture selectable: at once, throttle down, throttle up and down | - | setting unlock.mode; modes 0 and 2 only in the PC tests |
 | M | Power on/off: short press, then long press | manual; latch on PC15, measured | latch set and released by the test build, hw |
 | M | Battery voltage measurement and low-battery warning | manual; PB0 with the stock thresholds in raw counts, code | raw value read, hw; not checked on a discharged battery |
 | S | Battery level on the four-LED indicator on a short power press | manual; LEDs on shift register 0x0f, measured | LEDs switched by the test build, hw |
@@ -93,8 +97,8 @@ analysis kept outside this repository.
 |---|---|---|---|
 | M | Status LED: blue working, purple Bluetooth, green WiFi, red throttle warning | manual; WS2812-type LED on PB3, measured | colours shown by the test build, hw |
 | M | Buzzer patterns for power, binding, calibration, warnings | manual, code; buzzer on PB1, measured | single tone in the test build, hw |
-| S | Buzzer can be switched off | manual | missing |
-| S | Tone on release of the throttle lock can be switched off in the web tool | - | tone built, setting missing |
+| S | Buzzer can be switched off | manual | setting buzzer.on, not heard |
+| S | Tone on release of the throttle lock can be switched off in the web tool | - | setting unlock.beep, not heard |
 
 ## USB
 
@@ -104,8 +108,8 @@ analysis kept outside this repository.
 | M | USB connector switching between controller and bridge | measured | hw |
 | S | Gamepad as HID (DirectInput) | measured | classes build, no reports |
 | S | Gamepad as XInput | manual: stick position while plugging in; class found in the image | missing |
-| S | Serial configuration interface with own protocol | stock uses the Configurator protocol | missing |
-| S | Live stream of stick and switch values for the configuration tool | measured: 10 values at about 500 Hz | state lines 25 times per second, shown by web/live.html, hw |
+| S | Serial configuration interface with own protocol | stock uses the Configurator protocol | list, get, set, save, revert, defaults, hw |
+| S | Live stream of stick and switch values for the configuration tool | measured: 10 values at about 500 Hz | state lines 25 times per second, shown by web/index.html, hw |
 | S | USB serial port for configuration and update whenever a cable is plugged in | no: stock has USB only when off | hw |
 | - | Update with SETUP + power | measured; bootloader | kept |
 | - | Flashing the ELRS module through the USB bridge | bootloader code | kept |
@@ -114,7 +118,7 @@ analysis kept outside this repository.
 
 | Prio | Feature | Stock | Status |
 |---|---|---|---|
-| M | Persistent settings in the application area | stock stores below 0x08008000 | NVS in the top four pages; holds the stick calibration and survives a firmware update, hw |
+| M | Persistent settings in the application area | stock stores below 0x08008000 | NVS in the top four pages, one record per setting; survives a firmware update, hw |
 | S | Configurable button and switch actions | no | missing |
 | S | Fixed reset to default behaviour at power-on | no | missing |
 
