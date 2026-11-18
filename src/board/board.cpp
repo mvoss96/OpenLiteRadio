@@ -52,9 +52,6 @@ constexpr uint8_t SHIFT_USB_TO_CONTROLLER = 0x40;
 constexpr uint8_t ADC_CHANNEL_BATTERY = 8; /* PB0 */
 constexpr uint8_t KEYS_ADDRESS = 0x1d;
 
-/* Stick calibration in the vendor's settings area. Read only. */
-constexpr uintptr_t FACTORY_CALIBRATION = 0x08007800;
-
 const struct device *const adc = DEVICE_DT_GET(DT_NODELABEL(adc1));
 const struct device *const module_uart = DEVICE_DT_GET(DT_NODELABEL(usart1));
 uint8_t shift_state = SHIFT_STOCK_HIGH | SHIFT_USB_TO_CONTROLLER;
@@ -401,11 +398,6 @@ void read_trims(Inputs &inputs)
     inputs.trim_right = inputs.trims_valid ? trim_bits(word, 9, 10, 11, 12, 13) : 0;
 }
 
-void read_factory_calibration(uint16_t values[12])
-{
-    memcpy(values, (const void *)FACTORY_CALIBRATION, 12 * sizeof(uint16_t));
-}
-
 bool storage_read(uint16_t id, void *data, size_t size)
 {
     return storage_ready && nvs_read(&storage, id, data, size) == (ssize_t)size;
@@ -415,6 +407,11 @@ bool storage_write(uint16_t id, const void *data, size_t size)
 {
     /* nvs_write returns 0 if the record already holds this data. */
     return storage_ready && nvs_write(&storage, id, data, size) >= 0;
+}
+
+bool storage_delete(uint16_t id)
+{
+    return storage_ready && nvs_delete(&storage, id) == 0;
 }
 
 bool module_send(const uint8_t *data, size_t length)

@@ -51,13 +51,6 @@ void read_controls(Inputs &inputs);
 void read_trims(Inputs &inputs);
 
 /*
- * Copy the factory stick calibration from the vendor's settings page: for
- * each of the four axes the raw values at the upper end, the centre and the
- * lower end, in that order.
- */
-void read_factory_calibration(uint16_t values[12]);
-
-/*
  * Read a settings record from the settings area at the top of the application
  * flash. Returns false if the record does not exist or has another size.
  */
@@ -68,6 +61,9 @@ bool storage_read(uint16_t id, void *data, size_t size);
  * flash page is erased, so call this only while no channel frames are sent.
  */
 bool storage_write(uint16_t id, const void *data, size_t size);
+
+/* Remove a settings record; true also if it did not exist. Same timing as storage_write. */
+bool storage_delete(uint16_t id);
 
 /*
  * Queue bytes for the ELRS module; they are sent by interrupt. Returns false

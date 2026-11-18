@@ -23,12 +23,19 @@ enum Axis {
     AXIS_COUNT = 4,
 };
 
-/* Channel numbers, counted from 0. */
-enum Channel {
-    CHANNEL_AILERON = 0,
-    CHANNEL_ELEVATOR = 1,
-    CHANNEL_THROTTLE = 2,
-    CHANNEL_RUDDER = 3,
+/* What a channel can follow; the value of the setting ch.N.source. */
+enum Source {
+    SOURCE_NONE = 0,     /* the channel stays at the centre */
+    SOURCE_AILERON = 1,  /* right stick, right gives 2012 */
+    SOURCE_ELEVATOR = 2, /* right stick, up gives 2012 */
+    SOURCE_THROTTLE = 3, /* left stick, up gives 2012 */
+    SOURCE_RUDDER = 4,   /* left stick, right gives 2012 */
+    SOURCE_SA = 5,
+    SOURCE_SB = 6,
+    SOURCE_SC = 7,
+    SOURCE_SD = 8,
+    SOURCE_SE = 9,
+    SOURCE_SF = 10,
 };
 
 /* Raw 12-bit readings of one axis at its two ends and at rest. */
@@ -56,11 +63,13 @@ AxisCalibration calibration_from_sweep(uint16_t min, uint16_t max, uint16_t rest
 /*
  * Scale a raw reading to 988..2012.
  * centred: the axis returns to its centre by itself. The two halves are then
- *   scaled separately and readings within 1 % of the centre give exactly 1500.
- *   Otherwise the whole range is scaled in one piece.
+ *   scaled separately and readings within dead_zone percent of the half range
+ *   around the centre give exactly 1500. Otherwise the whole range is scaled
+ *   in one piece and dead_zone is ignored.
  * inverted: the high raw end gives 988.
  */
-uint16_t scale_axis(uint16_t raw, const AxisCalibration &calibration, bool centred, bool inverted);
+uint16_t scale_axis(uint16_t raw, const AxisCalibration &calibration, bool centred, bool inverted,
+                    int dead_zone = 1);
 
 /* What the channel computation needs from the controls. */
 struct Controls {
@@ -74,36 +83,50 @@ struct Controls {
 };
 
 /*
- * Compute all channels: aileron, elevator, throttle, rudder from the sticks
- * (mode 2), then SA, SB, SC, SD, SE, SF on channels 5 to 10. The remaining
- * channels are at the centre.
+ * Value of a source in 988..2012, from the controls and the calibration in
+ * the settings (settings::values).
  */
-void compute_channels(const Controls &controls, const AxisCalibration calibration[AXIS_COUNT],
-                      uint16_t channels[CHANNEL_COUNT]);
+uint16_t source_value(Source source, const Controls &controls, const int16_t *settings_values);
 
 /*
- * Holds back the output after switching on until the throttle has been at its
- * lower end once.
+ * Compute all channels from the settings: each channel follows its source,
+ * scaled by its weight around the centre and reversed if set.
  */
+void compute_channels(const Controls &controls, const int16_t *settings_values,
+                      uint16_t channels[CHANNEL_COUNT]);
+
+/* Holds back the output after switching on until the throttle stick has unlocked it. */
 class ThrottleLock {
 public:
-    /* Returns true while the output has to stay off. */
-    bool update(uint16_t throttle)
+    /*
+     * throttle: value of SOURCE_THROTTLE. mode: the setting unlock.mode, 0
+     * unlocks at once, 1 with the throttle at its lower end, 2 with the
+     * throttle at its upper and then at its lower end.
+     * Returns true while the output has to stay off.
+     */
+    bool update(uint16_t throttle, int mode)
     {
-        if (throttle <= RELEASE_BELOW) {
+        if (throttle >= CHANNEL_MAX - END_ZONE) {
+            seen_high_ = true;
+        }
+        if (mode == 0 || (throttle <= CHANNEL_MIN + END_ZONE && (mode == 1 || seen_high_))) {
             locked_ = false;
         }
         return locked_;
     }
 
-    void lock() { locked_ = true; }
-    bool locked() const { return locked_; }
+    void lock()
+    {
+        locked_ = true;
+        seen_high_ = false;
+    }
 
 private:
-    /* About 2 % of the range above the lower end. */
-    static constexpr uint16_t RELEASE_BELOW = CHANNEL_MIN + 20;
+    /* About 2 % of the range from each end. */
+    static constexpr uint16_t END_ZONE = 20;
 
     bool locked_ = true;
+    bool seen_high_ = false;
 };
 
 } // namespace core

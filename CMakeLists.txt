@@ -8,5 +8,7 @@ target_sources(app PRIVATE
   src/board/board.cpp
   src/core/channels.cpp
   src/core/crsf.cpp
+  src/core/profiles.cpp
+  src/core/settings.cpp
 )
 target_sources_ifdef(CONFIG_UPDATER_ENTRY app PRIVATE src/updater_entry.c)

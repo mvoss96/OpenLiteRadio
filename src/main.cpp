@@ -9,6 +9,8 @@
 #include "board/board.h"
 #include "core/channels.h"
 #include "core/crsf.h"
+#include "core/profiles.h"
+#include "core/settings.h"
 
 /*
  * OpenLiteRadio firmware, stage 2: power handling, controls and indicators,
@@ -22,9 +24,11 @@
  * Host protocol, one message per line.
  * From the radio:
  *   hello OpenLiteRadio <version> proto=1
- *   cal source=own|factory|default a0=low,centre,high a1=... a2=... a3=...
+ *   setting KEY TYPE MIN MAX DEFAULT VALUE   one per setting after "list", then "end"
+ *   value KEY VALUE                          answer to "get"
+ *   ok ... / error REASON                    answer to the other settings commands
  *   state sticks=a,b,c,d sa= sb= sc= sd= se= sf= bind= setup= power= tl= tr=
- *         keys= battery= usb= on= module= ch=c1,...,c10 lock= period= frames=
+ *         keys= battery= usb= on= module= ch=c1,...,c16 lock= period= frames=
  *         crc= lq= rssi= offset= bindpar= calib=
  * To the radio:
  *   hello             ask for the hello line
@@ -35,6 +39,21 @@
  *   module 0|1        ELRS module off or on
  *   bind              start binding, as a long press of BIND does
  *   frames 0|1        print every frame received from the module as "rx" plus hex bytes
+ *   list              report all settings
+ *   get KEY           report one setting
+ *   set KEY VALUE     change a setting; it applies at once and is lost at power-off
+ *   save              store all settings
+ *   revert            return to the stored settings
+ *   defaults          set all settings to their defaults, without storing them
+ *   calibrate start|end|cancel   stick calibration run, as SETUP does; cancel keeps the old values
+ *   profiles          report "profile N NAME" for each used slot, then "active N" (0: none)
+ *   profile load N    put profile N into the ch.N.* settings and store them
+ *   profile save N NAME   store the ch.N.* settings as profile N and make it the active one
+ *   profile name N NAME   rename profile N
+ *   profile delete N  remove profile N
+ *   profile none      make no profile the active one
+ *
+ * Every change of a setting locks the channel output again.
  */
 
 extern "C" void updater_enter(void);
@@ -56,20 +75,15 @@ constexpr uint32_t DEFAULT_PERIOD_US = 4000;
 constexpr uint32_t MIN_PERIOD_US = 1000;
 constexpr uint32_t MAX_PERIOD_US = 20000;
 
-/* Used when neither an own nor a plausible factory calibration exists. */
-constexpr core::AxisCalibration DEFAULT_CALIBRATION = { 600, 2048, 3500 };
-
-/* Settings record with the own stick calibration: four AxisCalibration. */
-constexpr uint16_t STORAGE_CALIBRATION = 1;
-
-/* Changed by the main thread with the scheduler locked, read by the control thread. */
-static core::AxisCalibration calibration[core::AXIS_COUNT];
-static const char *calibration_source;
-
-/* Written by the main thread, read by the control thread. */
+/*
+ * Written by the main thread, read by the control thread. The same goes for
+ * settings::values.
+ */
 static atomic_t module_on;
-/* Set during a calibration run; no channel frames are sent meanwhile. */
-static atomic_t calibrating;
+/* While set no channel frames are sent: calibration run, writing to flash. */
+static atomic_t hold_output;
+/* Set to lock the output once; the control thread clears it. */
+static atomic_t relock;
 static atomic_t frame_period_us = ATOMIC_INIT(DEFAULT_PERIOD_US);
 /* Delay in microseconds for one frame after a timing frame; 0 means none pending. */
 static atomic_t next_delay_us;
@@ -92,9 +106,14 @@ static bool radio_on;
 static bool stream = true;
 static bool led_from_host;
 static int beep_loops;
+/* A stick calibration run is in progress. */
+static bool calibrating;
 
 static void beep(uint32_t frequency, int milliseconds)
 {
+    if (settings::values[settings::BUZZER_ON] == 0) {
+        return;
+    }
     board::set_buzzer(frequency);
     beep_loops = milliseconds / LOOP_MS;
 }
@@ -130,16 +149,18 @@ static void control_thread(void *, void *, void *)
             .sf = inputs.sf,
         };
 
-        core::compute_channels(controls, calibration, channels);
+        core::compute_channels(controls, settings::values, channels);
 
-        /* Every start of the module needs the throttle at its lower end again. */
+        /* Every start of the module and every changed setting needs the unlock gesture again. */
         bool module_is_on = atomic_get(&module_on) != 0;
 
-        if (!module_is_on || atomic_get(&calibrating) != 0) {
+        if (!module_is_on || atomic_get(&hold_output) != 0 || atomic_set(&relock, 0) != 0) {
             lock.lock();
         }
 
-        bool locked = lock.update(channels[core::CHANNEL_THROTTLE]);
+        bool locked = lock.update(
+            core::source_value(core::SOURCE_THROTTLE, controls, settings::values),
+            settings::values[settings::UNLOCK_MODE]);
 
         if (module_is_on && !locked) {
             uint16_t values[crsf::CHANNELS];
@@ -158,50 +179,205 @@ static void control_thread(void *, void *, void *)
     }
 }
 
-static bool all_valid(const core::AxisCalibration values[core::AXIS_COUNT])
+/* Take each setting from the storage, or its default if it is not stored or out of range. */
+static void settings_load()
 {
-    for (int axis = 0; axis < core::AXIS_COUNT; axis++) {
-        if (!core::calibration_valid(values[axis])) {
-            return false;
+    for (int index = 0; index < settings::COUNT; index++) {
+        settings::Info info = settings::info(index);
+        int16_t stored;
+
+        if (!board::storage_read(info.id, &stored, sizeof(stored)) ||
+            !settings::set(index, stored)) {
+            settings::values[index] = info.default_value;
         }
     }
-    return true;
 }
 
-/* Take the own calibration, else the factory calibration if plausible, else fixed values. */
-static void load_calibration()
+/*
+ * Store the settings. Only values that differ from their default take up
+ * space; the storage skips a record that already holds the same value.
+ */
+static bool settings_save()
 {
-    uint16_t factory[3 * core::AXIS_COUNT];
+    bool stored = true;
 
-    if (board::storage_read(STORAGE_CALIBRATION, calibration, sizeof(calibration)) &&
-        all_valid(calibration)) {
-        calibration_source = "own";
+    atomic_set(&hold_output, 1);
+    for (int index = 0; index < settings::COUNT; index++) {
+        settings::Info info = settings::info(index);
+        int16_t value = settings::values[index];
+
+        if (value == info.default_value) {
+            stored = board::storage_delete(info.id) && stored;
+        } else {
+            stored = board::storage_write(info.id, &value, sizeof(value)) && stored;
+        }
+    }
+    atomic_set(&hold_output, 0);
+    return stored;
+}
+
+/* Slot of the profile last loaded or saved, 1 to profiles::SLOTS; 0 for none. */
+static uint8_t active_profile;
+
+static void active_profile_load()
+{
+    if (!board::storage_read(profiles::ACTIVE_ID, &active_profile, sizeof(active_profile)) ||
+        active_profile > profiles::SLOTS) {
+        active_profile = 0;
+    }
+}
+
+static bool active_profile_store(uint8_t slot)
+{
+    active_profile = slot;
+    return board::storage_write(profiles::ACTIVE_ID, &active_profile, sizeof(active_profile));
+}
+
+/* Read a profile; false if the slot is empty or the record is damaged. */
+static bool profile_read(int slot, profiles::Profile &profile)
+{
+    if (!board::storage_read(profiles::FIRST_ID + slot - 1, &profile, sizeof(profile))) {
+        return false;
+    }
+    profile.name[profiles::NAME_SIZE - 1] = '\0';
+    return profiles::name_valid(profile.name);
+}
+
+static bool profile_write(int slot, const profiles::Profile &profile)
+{
+    atomic_set(&hold_output, 1);
+    bool stored = board::storage_write(profiles::FIRST_ID + slot - 1, &profile, sizeof(profile));
+    atomic_set(&hold_output, 0);
+    return stored;
+}
+
+static void print_profiles()
+{
+    profiles::Profile profile;
+
+    for (int slot = 1; slot <= profiles::SLOTS; slot++) {
+        if (profile_read(slot, profile)) {
+            printk("profile %d %s\n", slot, profile.name);
+        }
+    }
+    printk("active %u\n", active_profile);
+}
+
+static void reply_profile(bool stored, const char *action, long slot)
+{
+    if (stored) {
+        printk("ok profile %s %ld\n", action, slot);
+    } else {
+        printk("error storage\n");
+    }
+}
+
+/*
+ * Run "profile ACTION N [NAME]". The name is the rest of the line and may
+ * contain spaces, so this runs before the line is split into words.
+ */
+static void handle_profile(char *text)
+{
+    char *end = nullptr;
+    char *action = text;
+
+    while (*text != '\0' && *text != ' ') {
+        text++;
+    }
+    if (*text == ' ') {
+        *text++ = '\0';
+    }
+    /* No profile is active any more, e.g. after the host wrote a template. */
+    if (strcmp(action, "none") == 0) {
+        if (active_profile_store(0)) {
+            printk("ok profile none\n");
+        } else {
+            printk("error storage\n");
+        }
         return;
     }
 
-    board::read_factory_calibration(factory);
-    for (int axis = 0; axis < core::AXIS_COUNT; axis++) {
-        /* Stored as upper end, centre, lower end. */
-        calibration[axis] = { factory[3 * axis + 2], factory[3 * axis + 1], factory[3 * axis] };
+    long slot = strtol(text, &end, 10);
+    const char *name = end;
+
+    while (*name == ' ') {
+        name++;
     }
-    calibration_source = "factory";
-    if (!all_valid(calibration)) {
-        for (core::AxisCalibration &axis : calibration) {
-            axis = DEFAULT_CALIBRATION;
+    if (end == text || slot < 1 || slot > profiles::SLOTS) {
+        printk("error unknown profile\n");
+        return;
+    }
+
+    profiles::Profile profile;
+
+    if (strcmp(action, "save") == 0) {
+        if (!profiles::name_valid(name)) {
+            printk("error invalid name\n");
+            return;
         }
-        calibration_source = "default";
+        profiles::capture(settings::values, name, profile);
+        bool stored = profile_write((int)slot, profile) && active_profile_store((uint8_t)slot) &&
+                      settings_save();
+        reply_profile(stored, "save", slot);
+    } else if (strcmp(action, "load") == 0) {
+        if (!profile_read((int)slot, profile)) {
+            printk("error unknown profile\n");
+        } else if (!profiles::apply(profile)) {
+            printk("error invalid profile\n");
+        } else {
+            atomic_set(&relock, 1);
+            bool stored = active_profile_store((uint8_t)slot) && settings_save();
+            reply_profile(stored, "load", slot);
+        }
+    } else if (strcmp(action, "name") == 0) {
+        if (!profiles::name_valid(name)) {
+            printk("error invalid name\n");
+        } else if (!profile_read((int)slot, profile)) {
+            printk("error unknown profile\n");
+        } else {
+            memset(profile.name, 0, sizeof(profile.name));
+            strncpy(profile.name, name, profiles::NAME_SIZE - 1);
+            reply_profile(profile_write((int)slot, profile), "name", slot);
+        }
+    } else if (strcmp(action, "delete") == 0) {
+        bool stored = board::storage_delete(profiles::FIRST_ID + slot - 1);
+
+        if (stored && active_profile == slot) {
+            stored = active_profile_store(0);
+        }
+        reply_profile(stored, "delete", slot);
+    } else {
+        printk("error unknown command\n");
     }
 }
 
 static void print_hello()
 {
     printk("hello OpenLiteRadio %s proto=1\n", APP_VERSION_STRING);
-    printk("cal source=%s", calibration_source);
-    for (int axis = 0; axis < core::AXIS_COUNT; axis++) {
-        printk(" a%d=%u,%u,%u", axis, calibration[axis].low, calibration[axis].centre,
-               calibration[axis].high);
+}
+
+static void print_setting(int index)
+{
+    char key[settings::KEY_SIZE];
+    settings::Info info = settings::info(index);
+
+    settings::key(index, key);
+    printk("setting %s %s %d %d %d %d\n", key, (info.min == 0 && info.max == 1) ? "bool" : "int",
+           info.min, info.max, info.default_value, settings::values[index]);
+}
+
+/* Next setting the "list" command still has to report; COUNT when it is done. */
+static int list_next = settings::COUNT;
+
+/* Report a few settings per loop so that the USB buffer keeps up. */
+static void list_tick()
+{
+    for (int i = 0; i < 4 && list_next < settings::COUNT; i++) {
+        print_setting(list_next++);
+        if (list_next == settings::COUNT) {
+            printk("end\n");
+        }
     }
-    printk("\n");
 }
 
 static void show_status_led(bool locked)
@@ -214,7 +390,7 @@ static void show_status_led(bool locked)
         shown = UINT32_MAX;
         return;
     }
-    if (atomic_get(&calibrating) != 0) {
+    if (calibrating) {
         colour = 0x302000; /* yellow: calibration run */
     } else if (atomic_get(&module_on) != 0 && locked) {
         colour = 0x300000; /* red: waiting for throttle down */
@@ -237,11 +413,15 @@ static uint16_t sweep_max[core::AXIS_COUNT];
 
 static void calibration_start()
 {
+    if (calibrating) {
+        return;
+    }
     for (int axis = 0; axis < core::AXIS_COUNT; axis++) {
         sweep_min[axis] = UINT16_MAX;
         sweep_max[axis] = 0;
     }
-    atomic_set(&calibrating, 1);
+    calibrating = true;
+    atomic_set(&hold_output, 1);
     beep(2700, 100);
 }
 
@@ -253,29 +433,35 @@ static void calibration_track(const uint16_t sticks[core::AXIS_COUNT])
     }
 }
 
-/* Use and store the result of the run if it is valid for all axes. */
-static void calibration_finish(const uint16_t rest[core::AXIS_COUNT])
+/*
+ * End the run. If the result is valid for all axes it goes into the settings
+ * cal.N.* and all settings are stored. Returns false otherwise.
+ */
+static bool calibration_finish(const uint16_t rest[core::AXIS_COUNT])
 {
     core::AxisCalibration result[core::AXIS_COUNT];
+    bool stored = calibrating;
 
     for (int axis = 0; axis < core::AXIS_COUNT; axis++) {
         result[axis] = core::calibration_from_sweep(sweep_min[axis], sweep_max[axis], rest[axis],
                                                     axis != core::AXIS_LEFT_VERTICAL);
+        stored = stored && core::calibration_valid(result[axis]);
     }
+    if (stored) {
+        for (int axis = 0; axis < core::AXIS_COUNT; axis++) {
+            int16_t *values =
+                &settings::values[settings::CALIBRATION_FIRST + settings::CALIBRATION_FIELDS * axis];
 
-    bool stored = false;
-
-    if (all_valid(result)) {
-        k_sched_lock();
-        memcpy(calibration, result, sizeof(calibration));
-        k_sched_unlock();
-        calibration_source = "own";
-        /* Still locked here, so no channel frame is delayed by the flash write. */
-        stored = board::storage_write(STORAGE_CALIBRATION, result, sizeof(result));
+            values[0] = (int16_t)result[axis].low;
+            values[1] = (int16_t)result[axis].centre;
+            values[2] = (int16_t)result[axis].high;
+        }
+        stored = settings_save();
     }
-    atomic_set(&calibrating, 0);
+    calibrating = false;
+    atomic_set(&hold_output, 0);
     beep(stored ? 3200 : 600, stored ? 300 : 600);
-    print_hello();
+    return stored;
 }
 
 /* Step of the search for the module's bind action, see bind_start(). */
@@ -451,6 +637,11 @@ static void poll_module()
 /* Run one command line from the host. */
 static void handle_command(char *line)
 {
+    if (strncmp(line, "profile ", 8) == 0) {
+        handle_profile(line + 8);
+        return;
+    }
+
     char *arguments[4] = {};
     char *command = strtok(line, " ");
 
@@ -483,6 +674,46 @@ static void handle_command(char *line)
         show_frames = number(0) != 0;
     } else if (strcmp(command, "bind") == 0) {
         bind_start();
+    } else if (strcmp(command, "list") == 0) {
+        list_next = 0;
+    } else if (strcmp(command, "profiles") == 0) {
+        print_profiles();
+    } else if (strcmp(command, "get") == 0 || strcmp(command, "set") == 0) {
+        int index = (arguments[0] != nullptr) ? settings::find(arguments[0]) : -1;
+
+        if (index < 0) {
+            printk("error unknown key\n");
+        } else if (command[0] == 'g') {
+            printk("value %s %d\n", arguments[0], settings::values[index]);
+        } else if (arguments[1] == nullptr || !settings::set(index, number(1))) {
+            printk("error value out of range\n");
+        } else {
+            atomic_set(&relock, 1);
+            printk("ok %s %d\n", arguments[0], settings::values[index]);
+        }
+    } else if (strcmp(command, "save") == 0) {
+        printk(settings_save() ? "ok save\n" : "error storage\n");
+    } else if (strcmp(command, "revert") == 0 || strcmp(command, "defaults") == 0) {
+        if (command[0] == 'r') {
+            settings_load();
+        } else {
+            settings::set_defaults();
+        }
+        atomic_set(&relock, 1);
+        printk("ok %s\n", command);
+    } else if (strcmp(command, "calibrate") == 0 && arguments[0] != nullptr) {
+        if (strcmp(arguments[0], "start") == 0) {
+            calibration_start();
+            printk("ok calibrate start\n");
+        } else if (strcmp(arguments[0], "end") == 0) {
+            printk(calibration_finish(control_state.inputs.sticks) ? "ok calibrate end\n"
+                                                                   : "error calibration rejected\n");
+        } else if (strcmp(arguments[0], "cancel") == 0) {
+            /* Leave the run without changing the calibration. */
+            calibrating = false;
+            atomic_set(&hold_output, 0);
+            printk("ok calibrate cancel\n");
+        }
     }
 }
 
@@ -518,7 +749,8 @@ int main(void)
     int setup_held_loops = 0;
 
     board::init();
-    load_calibration();
+    settings_load();
+    active_profile_load();
     print_hello();
     /* Priority -1: runs before the main thread whenever its timer expires. */
     k_thread_create(&control_thread_data, control_stack, K_THREAD_STACK_SIZEOF(control_stack),
@@ -558,7 +790,7 @@ int main(void)
         /* One tone when the throttle lock is released; the LED is red until then. */
         bool module_is_on = atomic_get(&module_on) != 0;
 
-        if (module_is_on && was_locked && !locked) {
+        if (module_is_on && was_locked && !locked && settings::values[settings::UNLOCK_BEEP] != 0) {
             beep(2700, 100);
         }
         was_locked = locked;
@@ -574,17 +806,15 @@ int main(void)
         }
 
         /* SETUP held for 2 s starts a calibration run, a short press ends it. */
-        bool is_calibrating = atomic_get(&calibrating) != 0;
-
-        if (is_calibrating) {
+        if (calibrating) {
             calibration_track(inputs.sticks);
         }
         if (inputs.setup) {
-            if (++setup_held_loops == SETUP_HOLD_LOOPS && !is_calibrating) {
+            if (++setup_held_loops == SETUP_HOLD_LOOPS) {
                 calibration_start();
             }
         } else {
-            if (is_calibrating && setup_held_loops > 0 && setup_held_loops < SETUP_HOLD_LOOPS) {
+            if (calibrating && setup_held_loops > 0 && setup_held_loops < SETUP_HOLD_LOOPS) {
                 calibration_finish(inputs.sticks);
             }
             setup_held_loops = 0;
@@ -593,6 +823,7 @@ int main(void)
         poll_module();
         bind_tick();
         poll_host();
+        list_tick();
         if (stream && loops % STATE_EVERY_LOOPS == 0) {
             printk("state sticks=%u,%u,%u,%u sa=%u sb=%u sc=%u sd=%u se=%u sf=%u bind=%u "
                    "setup=%u power=%u tl=%u tr=%u keys=%u battery=%u usb=%u on=%u module=%u",
@@ -601,14 +832,16 @@ int main(void)
                    inputs.bind, inputs.setup, inputs.power, inputs.trim_left,
                    inputs.trim_right, inputs.trims_valid, board::battery_raw(),
                    board::usb_supply_present(), radio_on, module_is_on);
-            printk(" ch=%u,%u,%u,%u,%u,%u,%u,%u,%u,%u lock=%u period=%u frames=%u crc=%u "
-                   "lq=%u rssi=%u offset=%d bindpar=%u calib=%u\n",
-                   channels[0], channels[1], channels[2], channels[3], channels[4],
-                   channels[5], channels[6], channels[7], channels[8], channels[9], locked,
-                   (unsigned int)atomic_get(&frame_period_us), (unsigned int)module_frames,
-                   (unsigned int)module_parser.crc_errors(), link_statistics.uplink_quality,
-                   link_statistics.uplink_rssi, (int)timing_offset_us, bind_parameter,
-                   is_calibrating);
+            printk(" ch=");
+            for (int channel = 0; channel < core::CHANNEL_COUNT; channel++) {
+                printk(channel == 0 ? "%u" : ",%u", channels[channel]);
+            }
+            printk(" lock=%u period=%u frames=%u crc=%u lq=%u rssi=%u offset=%d bindpar=%u "
+                   "calib=%u\n",
+                   locked, (unsigned int)atomic_get(&frame_period_us),
+                   (unsigned int)module_frames, (unsigned int)module_parser.crc_errors(),
+                   link_statistics.uplink_quality, link_statistics.uplink_rssi,
+                   (int)timing_offset_us, bind_parameter, calibrating);
         }
         loops++;
 

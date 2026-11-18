@@ -1,11 +1,12 @@
 #include "core/channels.h"
 
+#include "core/settings.h"
+
 namespace core {
 
 namespace {
 
 constexpr int32_t HALF_RANGE = CHANNEL_MAX - CHANNEL_CENTRE;
-constexpr int32_t DEAD_ZONE = HALF_RANGE / 100; /* 1 % of the half range */
 constexpr uint16_t MIN_SPAN = 200; /* raw counts between two calibration points */
 
 uint16_t two_positions(bool on)
@@ -18,6 +19,14 @@ uint16_t three_positions(uint8_t position)
     static const uint16_t values[] = { CHANNEL_MIN, CHANNEL_CENTRE, CHANNEL_MAX };
 
     return values[(position < 3) ? position : 1];
+}
+
+AxisCalibration axis_calibration(const int16_t *settings_values, Axis axis)
+{
+    const int16_t *values =
+        &settings_values[settings::CALIBRATION_FIRST + settings::CALIBRATION_FIELDS * (int)axis];
+
+    return { (uint16_t)values[0], (uint16_t)values[1], (uint16_t)values[2] };
 }
 
 } // namespace
@@ -53,7 +62,8 @@ AxisCalibration calibration_from_sweep(uint16_t min, uint16_t max, uint16_t rest
     return { low, (uint16_t)((low + high) / 2), high };
 }
 
-uint16_t scale_axis(uint16_t raw, const AxisCalibration &calibration, bool centred, bool inverted)
+uint16_t scale_axis(uint16_t raw, const AxisCalibration &calibration, bool centred, bool inverted,
+                    int dead_zone)
 {
     if (!calibration_valid(calibration)) {
         return centred ? CHANNEL_CENTRE : CHANNEL_MIN;
@@ -80,7 +90,9 @@ uint16_t scale_axis(uint16_t raw, const AxisCalibration &calibration, bool centr
         result = CHANNEL_CENTRE - (centre - value) * HALF_RANGE / (centre - low);
     }
 
-    if (centred && result >= CHANNEL_CENTRE - DEAD_ZONE && result <= CHANNEL_CENTRE + DEAD_ZONE) {
+    int32_t band = HALF_RANGE * dead_zone / 100;
+
+    if (centred && result >= CHANNEL_CENTRE - band && result <= CHANNEL_CENTRE + band) {
         result = CHANNEL_CENTRE;
     }
     if (inverted) {
@@ -89,31 +101,62 @@ uint16_t scale_axis(uint16_t raw, const AxisCalibration &calibration, bool centr
     return (uint16_t)result;
 }
 
-void compute_channels(const Controls &controls, const AxisCalibration calibration[AXIS_COUNT],
-                      uint16_t channels[CHANNEL_COUNT])
+uint16_t source_value(Source source, const Controls &controls, const int16_t *settings_values)
 {
     /*
-     * Right and up give 2012. The raw value rises when the left stick moves up
-     * and the right stick moves right, and falls for the other two movements.
+     * The raw value rises when the left stick moves up and the right stick
+     * moves right, and falls for the other two movements.
      */
-    channels[CHANNEL_AILERON] = scale_axis(controls.sticks[AXIS_RIGHT_HORIZONTAL],
-                                           calibration[AXIS_RIGHT_HORIZONTAL], true, false);
-    channels[CHANNEL_ELEVATOR] = scale_axis(controls.sticks[AXIS_RIGHT_VERTICAL],
-                                            calibration[AXIS_RIGHT_VERTICAL], true, true);
-    channels[CHANNEL_THROTTLE] = scale_axis(controls.sticks[AXIS_LEFT_VERTICAL],
-                                            calibration[AXIS_LEFT_VERTICAL], false, false);
-    channels[CHANNEL_RUDDER] = scale_axis(controls.sticks[AXIS_LEFT_HORIZONTAL],
-                                          calibration[AXIS_LEFT_HORIZONTAL], true, true);
+    auto stick = [&](Axis axis, bool centred, bool inverted) {
+        int dead_zone = settings_values[settings::CALIBRATION_FIRST +
+                                        settings::CALIBRATION_FIELDS * (int)axis +
+                                        settings::CALIBRATION_DEAD_ZONE];
 
-    channels[4] = two_positions(controls.sa != 0);
-    channels[5] = three_positions(controls.sb);
-    channels[6] = three_positions(controls.sc);
-    channels[7] = two_positions(controls.sd != 0);
-    channels[8] = two_positions(controls.se);
-    channels[9] = two_positions(controls.sf);
+        return scale_axis(controls.sticks[axis], axis_calibration(settings_values, axis), centred,
+                          inverted, dead_zone);
+    };
 
-    for (int channel = 10; channel < CHANNEL_COUNT; channel++) {
-        channels[channel] = CHANNEL_CENTRE;
+    switch (source) {
+    case SOURCE_AILERON:
+        return stick(AXIS_RIGHT_HORIZONTAL, true, false);
+    case SOURCE_ELEVATOR:
+        return stick(AXIS_RIGHT_VERTICAL, true, true);
+    case SOURCE_THROTTLE:
+        return stick(AXIS_LEFT_VERTICAL, false, false);
+    case SOURCE_RUDDER:
+        return stick(AXIS_LEFT_HORIZONTAL, true, true);
+    case SOURCE_SA:
+        return two_positions(controls.sa != 0);
+    case SOURCE_SB:
+        return three_positions(controls.sb);
+    case SOURCE_SC:
+        return three_positions(controls.sc);
+    case SOURCE_SD:
+        return two_positions(controls.sd != 0);
+    case SOURCE_SE:
+        return two_positions(controls.se);
+    case SOURCE_SF:
+        return two_positions(controls.sf);
+    default:
+        return CHANNEL_CENTRE;
+    }
+}
+
+void compute_channels(const Controls &controls, const int16_t *settings_values,
+                      uint16_t channels[CHANNEL_COUNT])
+{
+    for (int channel = 0; channel < CHANNEL_COUNT; channel++) {
+        const int16_t *fields =
+            &settings_values[settings::CHANNEL_FIRST + settings::CHANNEL_FIELDS * channel];
+        int32_t deflection =
+            (int32_t)source_value((Source)fields[settings::CHANNEL_SOURCE], controls,
+                                  settings_values) - CHANNEL_CENTRE;
+
+        deflection = deflection * fields[settings::CHANNEL_WEIGHT] / 100;
+        if (fields[settings::CHANNEL_REVERSE] != 0) {
+            deflection = -deflection;
+        }
+        channels[channel] = (uint16_t)(CHANNEL_CENTRE + deflection);
     }
 }
 

@@ -5,6 +5,8 @@
 
 #include "core/channels.h"
 #include "core/crsf.h"
+#include "core/profiles.h"
+#include "core/settings.h"
 
 static int failures;
 
@@ -204,6 +206,12 @@ static void test_scale_axis()
     CHECK(core::scale_axis(1990, calibration, true, false) == 1500);
     CHECK(core::scale_axis(2030, calibration, true, false) == 1510);
 
+    /* Dead zone as a parameter: none, and 10 % of the half range (51 us). */
+    CHECK(core::scale_axis(2010, calibration, true, false, 0) == 1503);
+    CHECK(core::scale_axis(2130, calibration, true, false, 10) == 1500);
+    CHECK(core::scale_axis(2200, calibration, true, false, 10) == 1568);
+    CHECK(core::scale_axis(600, calibration, false, false, 10) == 988);
+
     /* Inverted. */
     CHECK(core::scale_axis(600, calibration, true, true) == 2012);
     CHECK(core::scale_axis(3500, calibration, true, true) == 988);
@@ -247,20 +255,78 @@ static void test_calibration_from_sweep()
     CHECK(!core::calibration_valid(core::calibration_from_sweep(616, 3586, 3580, true)));
 }
 
+static void test_settings()
+{
+    char key[settings::KEY_SIZE];
+
+    /* Positions and keys agree. */
+    CHECK(settings::find("unlock.mode") == settings::UNLOCK_MODE);
+    CHECK(settings::find("buzzer.on") == settings::BUZZER_ON);
+    CHECK(settings::find("ch.1.source") == settings::CHANNEL_FIRST);
+    CHECK(settings::find("ch.16.reverse") == settings::CALIBRATION_FIRST - 1);
+    CHECK(settings::find("cal.0.low") == settings::CALIBRATION_FIRST);
+    CHECK(settings::find("cal.3.deadzone") == settings::COUNT - 1);
+    CHECK(settings::find("cal.1.deadzone") == settings::CALIBRATION_FIRST + 4 + 3);
+    CHECK(settings::find("ch.17.source") == -1);
+    CHECK(settings::find("ch.0.source") == -1);
+    settings::key(settings::CHANNEL_FIRST + 3 * 9 + 1, key);
+    CHECK(std::strcmp(key, "ch.10.weight") == 0);
+
+    /* Storage numbers are distinct. */
+    for (int a = 0; a < settings::COUNT; a++) {
+        for (int b = a + 1; b < settings::COUNT; b++) {
+            CHECK(settings::info(a).id != settings::info(b).id);
+        }
+    }
+    CHECK(settings::info(settings::UNLOCK_MODE).id == 0x100);
+    CHECK(settings::info(settings::find("ch.2.weight")).id == 0x209);
+    /* Adding the dead zone kept the numbers of the stored calibration values. */
+    CHECK(settings::info(settings::find("cal.3.high")).id == 0x31a);
+    CHECK(settings::info(settings::find("cal.3.deadzone")).id == 0x31b);
+    CHECK(settings::info(settings::find("cal.2.deadzone")).default_value == 1);
+
+    /* Defaults: channels 1 to 10 follow sources 1 to 10, the others none. */
+    settings::set_defaults();
+    CHECK(settings::values[settings::UNLOCK_MODE] == 1);
+    CHECK(settings::values[settings::find("ch.3.source")] == core::SOURCE_THROTTLE);
+    CHECK(settings::values[settings::find("ch.10.source")] == core::SOURCE_SF);
+    CHECK(settings::values[settings::find("ch.11.source")] == core::SOURCE_NONE);
+    CHECK(settings::values[settings::find("ch.11.weight")] == 100);
+
+    /* Values outside the range are refused. */
+    CHECK(settings::set(settings::UNLOCK_MODE, 2));
+    CHECK(!settings::set(settings::UNLOCK_MODE, 3));
+    CHECK(!settings::set(settings::UNLOCK_MODE, -1));
+    CHECK(settings::values[settings::UNLOCK_MODE] == 2);
+    CHECK(!settings::set(settings::COUNT, 0));
+}
+
+/* Default settings with the same calibration for all four axes. */
+static void use_test_settings()
+{
+    settings::set_defaults();
+    for (int axis = 0; axis < core::AXIS_COUNT; axis++) {
+        int16_t *values = &settings::values[settings::CALIBRATION_FIRST + 4 * axis];
+
+        values[settings::CALIBRATION_LOW] = 600;
+        values[settings::CALIBRATION_CENTRE] = 2000;
+        values[settings::CALIBRATION_HIGH] = 3500;
+    }
+}
+
 static void test_channels()
 {
-    const core::AxisCalibration calibration[core::AXIS_COUNT] = {
-        { 600, 2000, 3500 }, { 600, 2000, 3500 }, { 600, 2000, 3500 }, { 600, 2000, 3500 },
-    };
     core::Controls controls = {};
     uint16_t channels[core::CHANNEL_COUNT];
+
+    use_test_settings();
 
     /* Throttle down, other axes at rest, all switches in position 0. */
     controls.sticks[core::AXIS_LEFT_VERTICAL] = 600;
     controls.sticks[core::AXIS_LEFT_HORIZONTAL] = 2000;
     controls.sticks[core::AXIS_RIGHT_VERTICAL] = 2000;
     controls.sticks[core::AXIS_RIGHT_HORIZONTAL] = 2000;
-    core::compute_channels(controls, calibration, channels);
+    core::compute_channels(controls, settings::values, channels);
     CHECK(channels[0] == 1500 && channels[1] == 1500 && channels[2] == 988 && channels[3] == 1500);
     for (int channel = 4; channel < 10; channel++) {
         CHECK(channels[channel] == 988);
@@ -279,24 +345,87 @@ static void test_channels()
     controls.sc = 2;
     controls.sd = 1;
     controls.se = true;
-    core::compute_channels(controls, calibration, channels);
+    core::compute_channels(controls, settings::values, channels);
     CHECK(channels[0] == 2012 && channels[1] == 2012 && channels[2] == 2012 && channels[3] == 2012);
     CHECK(channels[4] == 2012 && channels[5] == 1500 && channels[6] == 2012);
     CHECK(channels[7] == 2012 && channels[8] == 2012 && channels[9] == 988);
+
+    /* Another source, half weight and reverse on channel 1; a switch on channel 12. */
+    settings::values[settings::find("ch.1.source")] = core::SOURCE_THROTTLE;
+    settings::values[settings::find("ch.1.weight")] = 50;
+    settings::values[settings::find("ch.1.reverse")] = 1;
+    settings::values[settings::find("ch.12.source")] = core::SOURCE_SC;
+    core::compute_channels(controls, settings::values, channels);
+    CHECK(channels[0] == 1244);
+    CHECK(channels[11] == 2012);
+    CHECK(core::source_value(core::SOURCE_THROTTLE, controls, settings::values) == 2012);
 }
 
 static void test_throttle_lock()
 {
     core::ThrottleLock lock;
 
-    CHECK(lock.update(1500));
-    CHECK(lock.update(1009));
-    CHECK(!lock.update(1008));
+    /* Mode 1: throttle at its lower end. */
+    CHECK(lock.update(1500, 1));
+    CHECK(lock.update(1009, 1));
+    CHECK(!lock.update(1008, 1));
     /* Once released it stays released. */
-    CHECK(!lock.update(2012));
+    CHECK(!lock.update(2012, 1));
     lock.lock();
-    CHECK(lock.update(1200));
-    CHECK(!lock.update(988));
+    CHECK(lock.update(1200, 1));
+    CHECK(!lock.update(988, 1));
+
+    /* Mode 2: the lower end counts only after the upper end. */
+    lock.lock();
+    CHECK(lock.update(988, 2));
+    CHECK(lock.update(2000, 2));
+    CHECK(lock.update(1500, 2));
+    CHECK(!lock.update(1000, 2));
+    /* Locking again forgets the upper end. */
+    lock.lock();
+    CHECK(lock.update(988, 2));
+
+    /* Mode 0: unlocked wherever the throttle is. */
+    CHECK(!lock.update(1700, 0));
+}
+
+static void test_profiles()
+{
+    profiles::Profile profile;
+    profiles::Profile out_of_range;
+
+    CHECK(profiles::name_valid("Mein Quad"));
+    CHECK(profiles::name_valid("Übung 15 Bytes"));
+    CHECK(!profiles::name_valid(""));
+    CHECK(!profiles::name_valid("sechzehn Zeichen"));
+    CHECK(!profiles::name_valid("Tab\there"));
+
+    /* Capture a changed assignment, reset to the defaults, apply it again. */
+    settings::set_defaults();
+    settings::set(settings::find("ch.1.source"), 4);
+    settings::set(settings::find("ch.4.source"), 1);
+    settings::set(settings::find("ch.4.weight"), 80);
+    settings::set(settings::find("ch.16.reverse"), 1);
+    profiles::capture(settings::values, "Mein Quad", profile);
+    CHECK(std::strcmp(profile.name, "Mein Quad") == 0);
+    CHECK(profile.source[0] == 4 && profile.source[3] == 1 && profile.weight[3] == 80);
+    CHECK(profile.reverse == 0x8000);
+
+    settings::set_defaults();
+    CHECK(profiles::apply(profile));
+    CHECK(settings::values[settings::find("ch.1.source")] == 4);
+    CHECK(settings::values[settings::find("ch.4.source")] == 1);
+    CHECK(settings::values[settings::find("ch.4.weight")] == 80);
+    CHECK(settings::values[settings::find("ch.16.reverse")] == 1);
+    CHECK(settings::values[settings::find("ch.15.reverse")] == 0);
+
+    /* A damaged record changes nothing. */
+    out_of_range = profile;
+    out_of_range.source[0] = 11;
+    out_of_range.source[1] = 9;
+    CHECK(!profiles::apply(out_of_range));
+    CHECK(settings::values[settings::find("ch.2.source")] == 2);
+    settings::set_defaults();
 }
 
 int main()
@@ -310,8 +439,10 @@ int main()
     test_link_statistics();
     test_scale_axis();
     test_calibration_from_sweep();
+    test_settings();
     test_channels();
     test_throttle_lock();
+    test_profiles();
 
     if (failures != 0) {
         std::printf("%d check(s) failed\n", failures);
