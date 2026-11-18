@@ -5,6 +5,12 @@ project(openliteradio)
 target_include_directories(app PRIVATE src)
 target_sources(app PRIVATE
   src/main.cpp
+  src/calibration.cpp
+  src/host.cpp
+  src/indicators.cpp
+  src/module_link.cpp
+  src/output.cpp
+  src/storage.cpp
   src/board/board.cpp
   src/core/channels.cpp
   src/core/crsf.cpp

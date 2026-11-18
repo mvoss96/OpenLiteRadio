@@ -20,6 +20,15 @@ in [WIRING.md](WIRING.md).
 | core | `src/core/` | calibration, dead zone, channel assignment, trim, CRSF encoding and decoding, parameter access, action table, settings model | no |
 | app | `src/` | operating modes, threads, host protocol | through board only |
 
+The app layer is one file per task: `output.cpp` (control thread, holds,
+throttle lock, test inputs), `module_link.cpp` (frames from the module, link
+statistics, binding), `host.cpp` (line protocol and state lines),
+`storage.cpp` (settings and profiles in flash), `calibration.cpp` (stick
+calibration run), `indicators.cpp` (buzzer and status LED), `usb_device.c`
+(USB serial port and joystick) and `main.cpp` (start, power button, BIND and
+SETUP, the main loop). Only `output.cpp` touches the state shared between the
+two threads; the others go through its functions.
+
 The core layer contains everything where an error is dangerous or hard to see
 on the radio. Because it touches no hardware it is also compiled for the PC and
 checked there with fixed inputs.
@@ -27,7 +36,7 @@ checked there with fixed inputs.
 ## Threads
 
 - Control thread, high priority, at the module's frame rate: read sticks and
-  switches, compute channels, send the CRSF frame.
+  switches, compute channels, send the CRSF frame and the joystick report.
 - Main thread, low priority, 50 Hz: buttons and actions, LED and buzzer
   patterns, battery, power, CRSF parameters, host protocol.
 - Bytes from the module arrive by interrupt in a ring buffer and are parsed in
