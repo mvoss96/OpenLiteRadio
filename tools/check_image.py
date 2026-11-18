@@ -13,8 +13,8 @@ def main():
     parser.add_argument("--elf", type=Path, required=True)
     args = parser.parse_args()
     data = args.image.read_bytes()
-    if len(data) < 8 or len(data) > 0x18000:
-        raise SystemExit("application must fit in 96 KiB and contain vectors")
+    if len(data) < 8 or len(data) > 0x17000:
+        raise SystemExit("application must fit in 92 KiB and contain vectors")
     stack, reset = struct.unpack_from("<II", data)
     if not 0x20000000 < stack <= 0x20005000 or stack % 8:
         raise SystemExit("invalid initial stack")
@@ -30,7 +30,7 @@ def main():
             "<8I", elf, header[5] + index * header[9]
         )
         if kind == 1 and size:
-            if not 0x08008000 <= physical < physical + size <= 0x08020000:
+            if not 0x08008000 <= physical < physical + size <= 0x0801F000:
                 raise SystemExit("file-backed ELF segment outside application flash")
             loads.append({"address": hex(physical), "bytes": size})
     if not loads:

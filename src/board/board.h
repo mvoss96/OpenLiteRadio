@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 
 namespace board {
@@ -43,7 +44,40 @@ struct Inputs {
 /* Configure all pins and peripherals. Call once before anything else. */
 void init();
 
-void read_inputs(Inputs &inputs);
+/* Read sticks, switches and buttons. Fast enough for the control thread. */
+void read_controls(Inputs &inputs);
+
+/* Read the two trim buttons; takes about 0.5 ms. */
+void read_trims(Inputs &inputs);
+
+/*
+ * Copy the factory stick calibration from the vendor's settings page: for
+ * each of the four axes the raw values at the upper end, the centre and the
+ * lower end, in that order.
+ */
+void read_factory_calibration(uint16_t values[12]);
+
+/*
+ * Read a settings record from the settings area at the top of the application
+ * flash. Returns false if the record does not exist or has another size.
+ */
+bool storage_read(uint16_t id, void *data, size_t size);
+
+/*
+ * Store a settings record. The processor stands still for up to 40 ms while a
+ * flash page is erased, so call this only while no channel frames are sent.
+ */
+bool storage_write(uint16_t id, const void *data, size_t size);
+
+/*
+ * Queue bytes for the ELRS module; they are sent by interrupt. Returns false
+ * and sends nothing if the previous bytes are still going out or the length
+ * exceeds 64.
+ */
+bool module_send(const uint8_t *data, size_t length);
+
+/* Take received bytes from the ELRS module; returns how many were copied. */
+size_t module_receive(uint8_t *data, size_t capacity);
 
 /* Raw 12-bit reading of the battery input. */
 uint16_t battery_raw();

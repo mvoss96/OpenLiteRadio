@@ -101,6 +101,46 @@ at its lower end at rest, so it is the throttle. Channels 1 and 2 decrease
 for right and up. Noise at rest was 1 to 2 counts. Only one direction per
 axis was measured.
 
+Stick ranges, observed 2026-11-18 on USB supply with a 25 s recording of the
+raw readings at 25 samples per second while both sticks were moved to all
+corners and along all edges:
+
+| Channel | Smallest | Largest | Released |
+|---------|----------|---------|----------|
+| 0       | 544      | 3577    | 671 to 678 at the lower end |
+| 1       | 616      | 3586    | 2078 to 2081 |
+| 2       | 464      | 3669    | 2075 to 2080 |
+| 3       | 630      | 3594    | 2083 to 2085 |
+
+- The throttle (channel 0) read 547 to 590 while it was held against its
+  lower stop and 671 to 678 once released there, before and after the run.
+- The calibration stored at 0x08007800 does not describe these readings.
+  Its four centres are 1993 to 2025, 55 to 90 counts below the released
+  readings of channels 1 to 3. No assignment of the four records to the four
+  channels, with or without the 25 or 40 counts the stock firmware moves the
+  ends inward before storing, brings all ends within 50 counts.
+- With that calibration applied record by record, the released sticks give
+  1534, 1477 and 1481 instead of 1500, and the released throttle 1065.
+
+Stock ADC setup (code at 0x0800d1c0): ADC1 converts channels 0, 1, 2, 3, 4,
+5 and 8 in this order as ranks 1 to 7, sampling time code 2, results by DMA.
+The axis number of the stock firmware is the rank, so axis 0 to 3 are ADC
+channels 0 to 3.
+
+Hypotheses: the stored calibration was taken under conditions that shift
+the readings (stock scan mode with a short sampling time, another supply),
+or the gimbals have moved since. Which one is not established.
+
+Settings storage, observed 2026-11-18 with firmware 0.3.0 (59340 bytes, the
+largest image loaded so far):
+
+- Zephyr's STM32F1 flash driver writes the Geehy chip: a calibration record
+  written through NVS into the pages at 0x0801F000 was read back unchanged
+  after a reset.
+- The record was also unchanged after the same image had been loaded again
+  with the vendor USB updater. The updater therefore left those pages alone
+  for an image of this size.
+
 Update mode entered from the application (`src/updater_entry.c`), observed:
 
 - A RAM word at 0x20004000 keeps its value across a software reset and the
@@ -258,9 +298,8 @@ Hypotheses from these tests:
 ## Unverified in this implementation
 
 Option-byte watchdog setting, volts per count of the battery input, the
-function of the shift register outputs 0x20 and 0x80, stick readings against the saved
-calibration, calibrated voltage monitoring, CRSF output and timing, USB HID
+function of the shift register outputs 0x20 and 0x80, calibrated voltage monitoring, CRSF output and timing, USB HID
 reports, and STM32 drivers other than clock, GPIO, ADC and USB device.
 No settings writes are enabled during feasibility work. The largest image
 loaded through the stock USB updater and seen running is 48516 bytes; the
-stock application is 58672 bytes. Larger images are untested.
+stock application is 58672 bytes.

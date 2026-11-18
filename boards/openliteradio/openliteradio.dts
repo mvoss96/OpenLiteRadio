@@ -32,6 +32,23 @@
     apb2-prescaler = <1>;
 };
 
+/*
+ * The last four 1 KiB pages hold the settings. The image ends below them
+ * (CONFIG_FLASH_LOAD_SIZE in prj.conf).
+ */
+&flash0 {
+    partitions {
+        compatible = "fixed-partitions";
+        #address-cells = <1>;
+        #size-cells = <1>;
+
+        storage_partition: partition@1f000 {
+            label = "storage";
+            reg = <0x0001f000 0x00001000>;
+        };
+    };
+};
+
 &usart1 {
     pinctrl-0 = <&usart1_tx_pa9 &usart1_rx_pa10>;
     pinctrl-names = "default";

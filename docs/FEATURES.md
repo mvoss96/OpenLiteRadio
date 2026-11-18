@@ -25,9 +25,11 @@ analysis kept outside this repository.
   the Web Serial API (Chrome, Edge).
 - Button and switch assignments are settings, editable from that tool. Without
   own settings the radio behaves as the stock manual describes.
-- Not configurable: power on/off on the power button, the throttle lock at
-  power-on (it can only be switched off as a whole), and a fixed button
+- Not configurable: power on/off on the power button, and a fixed button
   combination at power-on that ignores all own settings.
+- The radio starts locked and sends no channel data until it is unlocked. How
+  it unlocks is a setting: unlocked at once, throttle at its lower end (the
+  default), or throttle up and down again. Further gestures may follow.
 - Flash below 0x08008000 is only read. The factory calibration there is used
   as the default; own settings are stored in the application area. The stock
   firmware therefore finds its data unchanged when it is flashed back.
@@ -38,13 +40,13 @@ analysis kept outside this repository.
 | Prio | Feature | Stock | Status |
 |---|---|---|---|
 | M | Four stick axes with averaging | code: 5 samples | raw readings in the board layer, hw |
-| M | Stick calibration (upper end, centre, lower end), output 988..2012 | code; factory values read | missing |
-| M | Read the factory calibration at 0x08007800 as default | - | missing |
+| M | Stick calibration (upper end, centre, lower end), output 988..2012 | code; factory values read | hw |
+| M | Read the factory calibration at 0x08007800 as default | - | built; the values do not fit the readings, see docs/HARDWARE.md |
 | M | Centre dead zone 1 %, not on throttle | manual, code | missing |
 | M | Switches SA, SD (toggle), SB, SC (three positions), buttons SE, SF | manual; pins measured | pins known, hw |
 | M | Buttons: power, BIND, SETUP with short and long press | manual, code | missing |
 | S | Two five-way trim buttons | manual; key device on a software two-wire bus, measured | read in the test build, hw |
-| S | Stick calibration started on the radio | manual: SETUP long, short, short | missing |
+| S | Stick calibration started on the radio | manual: SETUP long, short, short | SETUP held 2 s, a short press ends it, hw |
 
 ## Channels and mixing
 
@@ -77,7 +79,8 @@ analysis kept outside this repository.
 
 | Prio | Feature | Stock | Status |
 |---|---|---|---|
-| M | No output while the throttle is not at its lower end at power-on | manual | missing |
+| M | No output while the throttle is not at its lower end at power-on | manual | lock seen held and released in the state lines, hw; not seen with the module on |
+| S | Unlock gesture selectable: at once, throttle down, throttle up and down | - | throttle down only |
 | M | Power on/off: short press, then long press | manual; latch on PC15, measured | latch set and released by the test build, hw |
 | M | Battery voltage measurement and low-battery warning | manual; PB0 with the stock thresholds in raw counts, code | raw value read, hw; not checked on a discharged battery |
 | S | Battery level on the four-LED indicator on a short power press | manual; LEDs on shift register 0x0f, measured | LEDs switched by the test build, hw |
@@ -91,6 +94,7 @@ analysis kept outside this repository.
 | M | Status LED: blue working, purple Bluetooth, green WiFi, red throttle warning | manual; WS2812-type LED on PB3, measured | colours shown by the test build, hw |
 | M | Buzzer patterns for power, binding, calibration, warnings | manual, code; buzzer on PB1, measured | single tone in the test build, hw |
 | S | Buzzer can be switched off | manual | missing |
+| S | Tone on release of the throttle lock can be switched off in the web tool | - | tone built, setting missing |
 
 ## USB
 
@@ -110,7 +114,7 @@ analysis kept outside this repository.
 
 | Prio | Feature | Stock | Status |
 |---|---|---|---|
-| M | Persistent settings in the application area | stock stores below 0x08008000 | missing |
+| M | Persistent settings in the application area | stock stores below 0x08008000 | NVS in the top four pages; holds the stick calibration and survives a firmware update, hw |
 | S | Configurable button and switch actions | no | missing |
 | S | Fixed reset to default behaviour at power-on | no | missing |
 

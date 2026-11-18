@@ -2,7 +2,12 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/adc.h>
+#include <zephyr/drivers/flash.h>
+#include <zephyr/kvss/nvs.h>
+#include <zephyr/storage/flash_map.h>
+#include <zephyr/drivers/uart.h>
 #include <soc.h>
+#include <string.h>
 
 namespace board {
 
@@ -47,7 +52,11 @@ constexpr uint8_t SHIFT_USB_TO_CONTROLLER = 0x40;
 constexpr uint8_t ADC_CHANNEL_BATTERY = 8; /* PB0 */
 constexpr uint8_t KEYS_ADDRESS = 0x1d;
 
+/* Stick calibration in the vendor's settings area. Read only. */
+constexpr uintptr_t FACTORY_CALIBRATION = 0x08007800;
+
 const struct device *const adc = DEVICE_DT_GET(DT_NODELABEL(adc1));
+const struct device *const module_uart = DEVICE_DT_GET(DT_NODELABEL(usart1));
 uint8_t shift_state = SHIFT_STOCK_HIGH | SHIFT_USB_TO_CONTROLLER;
 
 void configure_pins(GPIO_TypeDef *port, uint32_t pins, uint32_t mode)
@@ -236,6 +245,79 @@ void buzzer_init()
     TIM3->CCER = TIM_CCER_CC4E;
 }
 
+/*
+ * USART1 to the ELRS module. Received bytes go into a ring buffer; one frame
+ * at a time is sent from module_tx.
+ */
+uint8_t module_rx[256];
+volatile size_t module_rx_head;
+volatile size_t module_rx_tail;
+uint8_t module_tx[64];
+volatile size_t module_tx_position;
+volatile size_t module_tx_length;
+
+void module_uart_interrupt(const struct device *device, void *)
+{
+    uart_irq_update(device);
+
+    if (uart_irq_rx_ready(device)) {
+        uint8_t bytes[16];
+        int count = uart_fifo_read(device, bytes, sizeof(bytes));
+
+        for (int i = 0; i < count; i++) {
+            size_t next = (module_rx_head + 1) % sizeof(module_rx);
+
+            /* A full buffer drops the byte. */
+            if (next != module_rx_tail) {
+                module_rx[module_rx_head] = bytes[i];
+                module_rx_head = next;
+            }
+        }
+    }
+
+    if (uart_irq_tx_ready(device)) {
+        if (module_tx_position < module_tx_length) {
+            module_tx_position += (size_t)uart_fifo_fill(
+                device, &module_tx[module_tx_position],
+                (int)(module_tx_length - module_tx_position));
+        } else {
+            uart_irq_tx_disable(device);
+        }
+    }
+}
+
+/*
+ * Settings records in Zephyr's NVS, in the partition at the top of the
+ * application flash. NVS appends each new version of a record and erases a
+ * page only when it is full.
+ */
+struct nvs_fs storage;
+bool storage_ready;
+
+void storage_init()
+{
+    struct flash_pages_info page;
+
+    storage.flash_device = FIXED_PARTITION_DEVICE(storage_partition);
+    storage.offset = FIXED_PARTITION_OFFSET(storage_partition);
+    if (!device_is_ready(storage.flash_device) ||
+        flash_get_page_info_by_offs(storage.flash_device, storage.offset, &page) != 0) {
+        return;
+    }
+    storage.sector_size = (uint16_t)page.size;
+    storage.sector_count = (uint16_t)(FIXED_PARTITION_SIZE(storage_partition) / page.size);
+
+    /* Pages holding something other than NVS data are erased once. */
+    if (nvs_mount(&storage) != 0) {
+        if (flash_erase(storage.flash_device, storage.offset,
+                        FIXED_PARTITION_SIZE(storage_partition)) != 0 ||
+            nvs_mount(&storage) != 0) {
+            return;
+        }
+    }
+    storage_ready = true;
+}
+
 } // namespace
 
 void init()
@@ -282,9 +364,14 @@ void init()
 
     status_led_init();
     buzzer_init();
+
+    uart_irq_callback_user_data_set(module_uart, module_uart_interrupt, nullptr);
+    uart_irq_rx_enable(module_uart);
+
+    storage_init();
 }
 
-void read_inputs(Inputs &inputs)
+void read_controls(Inputs &inputs)
 {
     for (uint8_t axis = 0; axis < 4; axis++) {
         inputs.sticks[axis] = adc_read_channel(axis);
@@ -303,12 +390,57 @@ void read_inputs(Inputs &inputs)
     inputs.bind = (a & PA_BUTTON_BIND) == 0u;
     inputs.setup = (b & PB_BUTTON_SETUP) == 0u;
     inputs.power = (c & PC_BUTTON_POWER) == 0u;
+}
 
+void read_trims(Inputs &inputs)
+{
     uint16_t word = 0;
 
     inputs.trims_valid = keys_read(word);
     inputs.trim_left = inputs.trims_valid ? trim_bits(word, 4, 5, 6, 7, 8) : 0;
     inputs.trim_right = inputs.trims_valid ? trim_bits(word, 9, 10, 11, 12, 13) : 0;
+}
+
+void read_factory_calibration(uint16_t values[12])
+{
+    memcpy(values, (const void *)FACTORY_CALIBRATION, 12 * sizeof(uint16_t));
+}
+
+bool storage_read(uint16_t id, void *data, size_t size)
+{
+    return storage_ready && nvs_read(&storage, id, data, size) == (ssize_t)size;
+}
+
+bool storage_write(uint16_t id, const void *data, size_t size)
+{
+    /* nvs_write returns 0 if the record already holds this data. */
+    return storage_ready && nvs_write(&storage, id, data, size) >= 0;
+}
+
+bool module_send(const uint8_t *data, size_t length)
+{
+    if (module_tx_position < module_tx_length || length > sizeof(module_tx)) {
+        return false;
+    }
+    /* Keep the interrupt away from the buffer while it changes. */
+    uart_irq_tx_disable(module_uart);
+    memcpy(module_tx, data, length);
+    module_tx_position = 0;
+    module_tx_length = length;
+    uart_irq_tx_enable(module_uart);
+    return true;
+}
+
+size_t module_receive(uint8_t *data, size_t capacity)
+{
+    size_t count = 0;
+
+    /* Only this function moves the tail, only the interrupt moves the head. */
+    while (count < capacity && module_rx_tail != module_rx_head) {
+        data[count++] = module_rx[module_rx_tail];
+        module_rx_tail = (module_rx_tail + 1) % sizeof(module_rx);
+    }
+    return count;
 }
 
 uint16_t battery_raw()

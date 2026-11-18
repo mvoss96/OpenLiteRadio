@@ -2,8 +2,11 @@
 
 Experimental open controller firmware for the BETAFPV LiteRadio 4, built on
 Zephyr for the radio's Geehy APM32F103CBT6. It is not flight-ready: the
-firmware reads all controls, drives the indicators and handles power, but it
-does not send channel data to the ELRS module yet.
+firmware reads all controls, drives the indicators, handles power and sends
+channel frames to the ELRS module, but binding has not been tried with a
+receiver and it has not been flown. Calibrate the sticks first: hold SETUP for
+2 s, move both sticks to all ends, release the right stick, leave the throttle
+at its lower end and press SETUP briefly.
 
 The controller talks CRSF to a separate ESP32 ExpressLRS module on the RF
 board. That module's hardware configuration belongs in the sibling
@@ -33,6 +36,9 @@ as described under Setup in `docs/ZEPHYR.md`, then:
 
 `build.ps1` builds into `build/` and runs `tools/check_image.py` on the result.
 
+`./test.ps1` runs the tests of the hardware-free code in `src/core/` on the
+PC. It needs `g++` on PATH.
+
 Devicetree (`boards/`) describes the MCU, its clock and the peripherals Zephyr
 drives; Kconfig (`prj.conf`) selects compiled features. Application logic is
 C++20, built without exceptions, RTTI and the C++ standard library; code tied
@@ -55,8 +61,11 @@ plug USB in. Details are in `docs/ZEPHYR.md`.
 ## Live view
 
 Open `web/live.html` in Chrome or Edge, plug the radio in and press Connect.
+Press Disconnect before loading firmware; the serial port can only be open in
+one program.
 The page shows sticks, switches, buttons, trim buttons and the power state as
-the radio reports them, and can set the status LED, the battery LEDs, the
+the radio reports them, the computed channels and the link to the ELRS module,
+and can set the status LED, the battery LEDs, the
 buzzer and the ELRS module. It needs no installation; the browser reaches the
 radio's USB serial port through the Web Serial API.
 
