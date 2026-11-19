@@ -29,6 +29,8 @@ const ELRS_LABELS = {
   "BLE Joystick": ["Bluetooth-Joystick", "Modul"],
 };
 const ELRS_BUTTONS = { "Bind": "Binden", "Send VTx": "Senden" };
+// Commands the radio starts itself through its own host commands, because they change its mode.
+const ELRS_RADIO_COMMANDS = { "Bind": "bind", "Enable WiFi": "wifi", "BLE Joystick": "ble" };
 // Groups in two columns, with the icon of each; a group of an unknown folder goes to the left.
 const ELRS_COLUMNS = [["Funk", "Sendeleistung", "Videosender"], ["Empfänger", "Modul"]];
 const ELRS_ICONS = {
@@ -194,8 +196,9 @@ function elrsTile(entry, label) {
 function elrsHeader() {
   const mode = lastFields ? lastFields.mode : "";
   const shown = !$("elrsGroups").hidden;
-  $("elrsState").textContent = !shown ? ""
-    : mode === "elrs_active" ? "TX aktiv" : mode === "elrs_locked" ? "TX gesperrt" : "";
+  const texts = { elrs_active: "TX aktiv", elrs_locked: "TX gesperrt", elrs_binding: "bindet",
+                  wifi: "WiFi läuft – zum Beenden ausschalten", bluetooth: "Bluetooth-Joystick – zum Beenden ausschalten" };
+  $("elrsState").textContent = shown ? texts[mode] || "" : "";
   // The same colours as the status LED in the drawing: blue while sending, orange while locked.
   $("elrsState").style.color = mode === "elrs_active" ? ACCENT : mode === "elrs_locked" ? WARN : "";
 }
@@ -275,7 +278,11 @@ document.getElementById("elrsGroups").addEventListener("change", (event) => {
 document.getElementById("elrsGroups").addEventListener("click", (event) => {
   const button = event.target.closest("[data-command]");
   if (!button) return;
-  elrsWrite(Number(button.dataset.command), button.dataset.confirm === "true" ? COMMAND.CONFIRM : COMMAND.START);
+  const index = Number(button.dataset.command);
+  // Binding, WiFi and Bluetooth change the radio's mode, so the radio starts them itself.
+  const own = ELRS_RADIO_COMMANDS[elrs.entries[index].name];
+  if (own) send(own);
+  else elrsWrite(index, button.dataset.confirm === "true" ? COMMAND.CONFIRM : COMMAND.START);
   // The module reports progress in the entry; read again once it had time to start.
   setTimeout(() => elrsQueue(readModule), 500);
 });

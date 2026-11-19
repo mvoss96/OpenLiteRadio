@@ -38,6 +38,8 @@ atomic_t hold_output;
 atomic_t relock_requested;
 /* Set once a frame from the module arrived since it was switched on. */
 atomic_t module_answered;
+/* The command running on the module, a core::ModuleTask; written by module_link. */
+atomic_t module_task;
 /* Frames the control thread handed to the UART, and those refused because the previous one was still being sent. */
 atomic_t frames_sent;
 atomic_t frames_not_sent;
@@ -146,13 +148,17 @@ void control_thread(void *, void *, void *)
         };
 
         bool on = atomic_get(&module_on) != 0;
+        core::ModuleTask task = (core::ModuleTask)atomic_get(&module_task);
 
-        /* Trimmed for the module only; joystick and Xbox get the untrimmed channels. */
-        core::compute_channels(controls, settings::values, channels, on);
+        /* Trimmed for a model only; joystick, Xbox and the Bluetooth joystick get them untrimmed. */
+        core::compute_channels(controls, settings::values, channels,
+                               on && task != core::ModuleTask::BLUETOOTH);
 
         core::ModeInputs mode_inputs = {
             .module_on = on,
-            .usb_host = usb_joystick_ready(),
+            .task = task,
+            /* The stack does not report a pulled cable, so the USB supply has to be there too. */
+            .usb_host = usb_joystick_ready() && board::usb_supply_present(),
             .held = atomic_get(&hold_output) != 0,
             .relock = atomic_set(&relock_requested, 0) != 0,
             .throttle = core::source_value(core::SOURCE_THROTTLE, controls, settings::values),
@@ -181,23 +187,28 @@ void control_thread(void *, void *, void *)
 
         bool locked = mode != core::Mode::ELRS_ACTIVE;
 
-        if (!locked) {
+        if (mode == core::Mode::ELRS_ACTIVE || mode == core::Mode::BLUETOOTH) {
+            /* To the model, or to the Bluetooth joystick, which needs a channel frame every period. */
             send_channels(channels);
-        } else if (mode == core::Mode::ELRS_LOCKED) {
+        } else if (mode == core::Mode::ELRS_BINDING ||
+                   (mode == core::Mode::ELRS_LOCKED && atomic_get(&module_answered) == 0)) {
             /*
-             * Keep the module answering without controlling the model: safe
-             * channel frames until it has answered once, so that it never
-             * transmits its zero-initialised channels, then pings only. The
-             * module stops sending channel data 1 s after the last channel
-             * frame, and the receiver enters its own failsafe.
+             * Safe channel frames: before the module has answered once, so
+             * that it never transmits its zero-initialised channels, and while
+             * binding, when it sends the channels between its bind packets.
              */
-            if (atomic_get(&module_answered) == 0) {
-                uint16_t safe[core::CHANNEL_COUNT];
+            uint16_t safe[core::CHANNEL_COUNT];
 
-                core::compute_channels(core::safe_controls(settings::values), settings::values,
-                                       safe);
-                send_channels(safe);
-            } else if (k_uptime_get() - last_ping_ms >= PING_INTERVAL_MS) {
+            core::compute_channels(core::safe_controls(settings::values), settings::values, safe);
+            send_channels(safe);
+        } else if (mode == core::Mode::ELRS_LOCKED || mode == core::Mode::WIFI) {
+            /*
+             * Keep the module answering without controlling the model: pings
+             * only. The module stops sending channel data 1 s after the last
+             * channel frame, and the receiver enters its own failsafe. In WiFi
+             * it no longer transmits but still answers parameter requests.
+             */
+            if (k_uptime_get() - last_ping_ms >= PING_INTERVAL_MS) {
                 uint8_t ping[crsf::PING_FRAME_SIZE];
 
                 crsf::encode_ping(ping);
@@ -228,6 +239,7 @@ void set_module_on(bool on)
         atomic_set(&period_us, DEFAULT_PERIOD_US);
     }
     atomic_clear(&module_answered);
+    atomic_set(&module_task, (atomic_val_t)core::ModuleTask::NONE);
     atomic_set(&module_on, on);
     board::set_module_enabled(on);
 }
@@ -241,6 +253,21 @@ void sent_counts(uint32_t &sent, uint32_t &not_sent)
 void note_module_frame()
 {
     atomic_set(&module_answered, 1);
+}
+
+bool module_answered_once()
+{
+    return atomic_get(&module_answered) != 0;
+}
+
+void set_module_task(core::ModuleTask task)
+{
+    atomic_set(&module_task, (atomic_val_t)task);
+}
+
+core::ModuleTask module_task_now()
+{
+    return (core::ModuleTask)atomic_get(&module_task);
 }
 
 bool module_is_on()

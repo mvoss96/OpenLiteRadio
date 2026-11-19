@@ -30,15 +30,30 @@ const char *mode_name(Mode mode)
 }
 
 /*
- * Rules in order: the module decides between USB and ELRS; a hold locks and
- * ignores the throttle, so that no part of the unlock gesture is made while
- * held; entering ELRS and a changed setting lock; the unlock gesture opens.
+ * Rules in order: the module decides between USB and ELRS; a command running
+ * on the module decides its mode, and binding keeps the lock closed; a hold
+ * locks and ignores the throttle, so that no part of the unlock gesture is
+ * made while held; entering ELRS, also after binding, and a changed setting
+ * lock; the unlock gesture opens.
  */
 Mode ModeMachine::update(const ModeInputs &in)
 {
     if (!in.module_on) {
         mode_ = in.usb_host ? Mode::USB_JOYSTICK : Mode::OFF;
         return mode_;
+    }
+    switch (in.task) {
+    case ModuleTask::BINDING:
+        mode_ = Mode::ELRS_BINDING;
+        return mode_;
+    case ModuleTask::WIFI:
+        mode_ = Mode::WIFI;
+        return mode_;
+    case ModuleTask::BLUETOOTH:
+        mode_ = Mode::BLUETOOTH;
+        return mode_;
+    case ModuleTask::NONE:
+        break;
     }
     bool entering = mode_ != Mode::ELRS_LOCKED && mode_ != Mode::ELRS_ACTIVE;
 

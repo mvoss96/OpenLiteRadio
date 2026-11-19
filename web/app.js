@@ -12,7 +12,7 @@
 // elrs.js, which is loaded first and uses send() and $() from here.
 
 // The project's version from the file VERSION; test.ps1 checks that both agree.
-const WEB_VERSION = "0.11.2";
+const WEB_VERSION = "0.12.0";
 const USB_VENDOR_ID = 0x2fe3;
 const CHANNEL_COUNT = 16;
 const BATTERY_THRESHOLDS = [3232, 3298, 3391, 3552];   // stock firmware: 1, 2, 3, 4 LEDs
@@ -444,11 +444,14 @@ function showState(fields) {
   document.querySelectorAll(".batLed").forEach((led, index) => led.setAttribute("fill", index < level ? FG1 : HAIR));
   setFill("statusLed", fields.calib === "1" ? "#f2d24b" : moduleOn && locked ? WARN : fields.on === "1" ? ACCENT : HAIR);
 
-  $("lockNote").hidden = !(moduleOn && locked);
+  $("lockNote").hidden = fields.mode !== "elrs_locked";
   $("lockNote").textContent = setting("unlock.mode") === 2 ? "Gesperrt: Gas hoch, dann runter" : "Gesperrt: Gas nach unten";
   const link = fields.lq === "0" ? "kein Empfänger" : `Empfänger ${fields.lq} %, -${fields.rssi} dBm`;
-  $("stModule").textContent = !moduleOn ? "aus"
-    : `${locked ? "gesperrt" : "aktiv"} · ${Math.round(1e6 / Number(fields.period))} Hz · ${link}`;
+  const rate = `${Math.round(1e6 / Number(fields.period))} Hz`;
+  // The module's own modes need no rate or receiver: it does not send to a model then.
+  const special = { elrs_binding: "bindet", wifi: "WiFi", bluetooth: "Bluetooth-Joystick" }[fields.mode];
+  $("stModule").textContent = !moduleOn ? "aus" : special
+    || `${locked ? "gesperrt" : "aktiv"} · ${rate} · ${link}`;
   $("stBattery").textContent = `${level} von 4`;
   $("sysBattery").textContent = battery;
   $("sysUsb").textContent = fields.usb === "1" ? "vorhanden" : "fehlt";

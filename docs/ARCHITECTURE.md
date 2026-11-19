@@ -89,7 +89,7 @@ flowchart LR
   M --> J[USB: joystick]
   M -.-> X[USB: Xbox controller]:::planned
   M --> E[ELRS module: radio link to the model]
-  M -.-> BT[ELRS module: Bluetooth joystick]:::planned
+  M --> BT[ELRS module: Bluetooth joystick]
   CH --> S[State line to the configurator]
   classDef planned stroke-dasharray: 5 5
 ```
@@ -108,7 +108,7 @@ enum class Mode : uint8_t {
     ELRS_HOST,        // frames with the values from the PC, controls ignored
     ELRS_BINDING,     // bind command sent; the module looks for a receiver
     BLUETOOTH,        // module is a Bluetooth joystick: frames with the controls, no lock
-    WIFI,             // module runs its web page for updates: no frames
+    WIFI,             // module runs its web page for updates: pings only
 };
 ```
 
@@ -135,9 +135,11 @@ stateDiagram-v2
     Host --> Locked: BIND + SETUP, PC releases, USB removed, 200 ms without PC values
     Locked --> Binding: BIND 1 s
     Active --> Binding: BIND 1 s
-    Binding --> Locked: bound or timeout
-    Locked --> Ble: command from the configurator
-    Locked --> Wifi: command from the configurator
+    Binding --> Locked: receiver answers, 8 s, or BIND short
+    [*] --> Ble: left trim centre held at switch-on, or configurator
+    [*] --> Wifi: right trim centre held at switch-on, or configurator
+    Locked --> Ble: configurator
+    Locked --> Wifi: configurator
   }
   [*] --> Off
   Off --> Joy: PC connected, stored joystick
@@ -154,14 +156,19 @@ stateDiagram-v2
   class Xbox planned
   class HostReady planned
   class Host planned
-  class Binding planned
-  class Ble planned
-  class Wifi planned
 ```
 
-Switching off at a PC leads to the stored USB mode instead of Off. Battery
-empty and auto power-off are planned. Binding works today, but without a mode
-of its own.
+Switching off at a PC leads to the stored USB mode instead of Off. "At a PC"
+needs both the joystick interface set up by the PC and the USB supply: the
+USB stack does not report a pulled cable, so after unplugging the radio
+stayed a USB joystick and the LED flashed white when switched off on
+battery. In the Bluetooth mode the USB joystick still exists and reports
+centred values; it is to go away with the re-enumeration planned for the
+Xbox mode. Both joysticks report a high channel as a high axis value, which
+Windows draws downwards (pitch up moves the cross down); simulators set the
+direction per axis. Battery
+empty and auto power-off are planned. WiFi and Bluetooth end only by
+switching the radio off, since the module leaves them only by a restart.
 
 | Mode | Frames to the module | Values from | USB controller |
 |------|----------------------|-------------|----------------|
@@ -171,11 +178,11 @@ of its own.
 | ELRS active | one channel frame per frame period | controls | centred |
 | ELRS host ready (planned) | as locked | – | centred |
 | ELRS host (planned) | one channel frame per frame period | PC program on the serial port | centred |
-| ELRS binding (planned) | as locked | – | centred |
-| Bluetooth joystick (planned) | one channel frame per frame period | controls | centred |
-| WiFi (planned) | none | – | centred |
+| ELRS binding | safe frames | fixed safe values | centred |
+| Bluetooth joystick | one channel frame per frame period | controls, untrimmed | centred |
+| WiFi | pings | – | centred |
 
-Built: Off, USB joystick, ELRS locked and ELRS active in `src/core/mode.cpp`
+Built: Off, USB joystick, ELRS locked, ELRS active, binding, Bluetooth and WiFi in `src/core/mode.cpp`
 and `src/output.cpp`. Outside the joystick mode the
 joystick reports all channels centred (1500 µs, buttons released), so that a
 simulator still open on the PC does not keep the last positions. The serial
@@ -285,8 +292,9 @@ confirmation (status 3) its button sends 4. Known ELRS 3.6 names get German
 labels and fixed groups (Funk, Sendeleistung, Videosender, Empfänger,
 Modul); any other entry appears under its folder's name or in Modul. Hidden
 entries and folders themselves are not shown. The receiver's link comes
-from the state line. Starting Bind, WiFi or the Bluetooth joystick from the
-tab does not yet change the radio's mode. Next to the title the tab says
+from the state line. Bind, WiFi and the Bluetooth joystick are started
+through the radio's own commands `bind`, `wifi` and `ble`, so that the radio
+knows its mode. Next to the title the tab says
 "TX aktiv" (mode `elrs_active`) or "TX gesperrt"; the status bar says
 TX aus, gesperrt or aktiv.
 
@@ -353,7 +361,7 @@ this brightness.
 | Off, on a charger or without USB | off |
 
 Built in `src/core/led.cpp` (with tests) for every row; the rows of modes
-that have no transitions yet (error, binding, WiFi, Bluetooth, PC, Xbox)
+that have no transitions yet (error, PC, Xbox)
 show once those modes exist. The colours are driven at about a fifth of the
 LED's range; white is 0x181818. Orange (0x300500) for the joystick was
 too close to red on the radio. "Receiver connected" means link statistics with a link quality above
@@ -408,11 +416,22 @@ Stage 2 as built so far:
   locked; one tone marks the release unless `unlock.beep` is 0. `buzzer.on`
   0 silences all tones.
 - Switching the radio on starts the module, switching it off stops it.
-- Binding: BIND held for 1 s, or the host command `bind`. The firmware asks
-  the module for its number of parameters, reads the entries until one is a
-  command named "Bind", and starts it by writing 1. The parameter number is
-  kept until the next reset. A high tone reports that the command was sent, a
-  low one that the search failed.
+- Module commands (0.12.0, `src/module_link.cpp`): binding (BIND held 1 s,
+  host `bind`), WiFi (right trim centre held at switch-on, host `wifi`) and
+  the Bluetooth joystick (left trim centre held at switch-on, host `ble`).
+  Once the module answers after switching on, the firmware asks it for its
+  number of parameters, reads the entries until the command's name comes
+  ("Bind", "Enable WiFi", "BLE Joystick"), keeps every command number met on
+  the way until the next reset, and writes 1 for Bind and 4 (confirmed) for
+  WiFi and Bluetooth, which the module would otherwise ask about while a
+  receiver is connected. Then the module's task sets the mode. A tone reports
+  that the command was sent, a low one that the search failed. Binding ends
+  when link statistics arrive at least 1.5 s after the start (high tone),
+  after 8 s (low tone) or with a short press of BIND; ELRS 3.6.4 itself binds
+  for 25 bind packets, about 1 s, and reports no end. Measured with
+  `module 1`: binding after 0.6 s, back to locked after 8 s without a
+  receiver in bind mode; with `wifi` the module's web page answered after
+  7 s and the module kept answering pings; `ble` gave the Bluetooth mode.
 - Stick calibration, taken from stage 3 because the factory calibration does
   not fit the readings (docs/HARDWARE.md): SETUP held for 2 s starts a run,
   the status LED blinks yellow and no channel frames are sent. The sticks are
@@ -475,6 +494,8 @@ To the radio:
 | `beep HZ MS` | tone |
 | `batleds MASK` | battery LEDs, bit 0 is the leftmost |
 | `bind` | start binding, as holding BIND for 1 s does |
+| `wifi` | start the module's WiFi, as the right trim centre at switch-on does |
+| `ble` | start the module's Bluetooth joystick, as the left trim centre at switch-on does |
 | `module 0` / `module 1` | ELRS module off or on; channel frames follow once the throttle lock is released |
 | `frames 0` / `frames 1` | stop or start printing every frame from the module as `rx` and its bytes in hex |
 | `crsf HEX` | send one complete CRSF frame to the module, given in hex with its CRC, at most 26 bytes; answers `ok crsf` or `error crsf`. The configurator reads and writes the module's parameters with it and `frames 1` |

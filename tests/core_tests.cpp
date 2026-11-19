@@ -487,6 +487,27 @@ static void test_mode()
     in.throttle = 2012;
     CHECK(machine.update(in) == Mode::ELRS_LOCKED);
 
+    /* Binding from active: the end locks again, also with the throttle low (mode 1). */
+    in.unlock_mode = 1;
+    in.throttle = 988;
+    CHECK(machine.update(in) == Mode::ELRS_ACTIVE);
+    in.task = core::ModuleTask::BINDING;
+    CHECK(machine.update(in) == Mode::ELRS_BINDING);
+    in.task = core::ModuleTask::NONE;
+    in.throttle = 1500;
+    CHECK(machine.update(in) == Mode::ELRS_LOCKED);
+    in.throttle = 988;
+    CHECK(machine.update(in) == Mode::ELRS_ACTIVE);
+
+    /* WiFi and Bluetooth follow the task whatever the throttle does, and end with the module. */
+    in.task = core::ModuleTask::WIFI;
+    CHECK(machine.update(in) == Mode::WIFI);
+    in.task = core::ModuleTask::BLUETOOTH;
+    in.throttle = 2012;
+    CHECK(machine.update(in) == Mode::BLUETOOTH);
+    in.module_on = false;
+    CHECK(machine.update(in) == Mode::OFF);
+
     CHECK(std::strcmp(core::mode_name(Mode::ELRS_ACTIVE), "elrs_active") == 0);
 }
 

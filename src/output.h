@@ -42,6 +42,13 @@ bool module_is_on();
 /* Called for every frame received from the module: it is running and answering. */
 void note_module_frame();
 
+/* True once a frame from the module arrived since it was switched on. */
+bool module_answered_once();
+
+/* The command running on the module, which sets the mode; module_link keeps it. */
+void set_module_task(core::ModuleTask task);
+core::ModuleTask module_task_now();
+
 /* Frames the control thread sent to the module, and those refused because the line was busy. */
 void sent_counts(uint32_t &sent, uint32_t &not_sent);
 

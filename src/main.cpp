@@ -155,6 +155,12 @@ int main(void)
             if (!power_handled && !radio_on && power_held_loops >= POWER_ON_LOOPS) {
                 set_radio_on(true);
                 power_handled = true;
+                /* A trim centre held while switching on: left Bluetooth joystick, right WiFi. */
+                if (inputs.trim_left & board::TRIM_CENTRE) {
+                    module_link::command_start(module_link::COMMAND_BLUETOOTH);
+                } else if (inputs.trim_right & board::TRIM_CENTRE) {
+                    module_link::command_start(module_link::COMMAND_WIFI);
+                }
             } else if (!power_handled && radio_on && power_held_loops >= POWER_OFF_LOOPS) {
                 set_radio_on(false);
                 power_handled = true;
@@ -172,14 +178,25 @@ int main(void)
             indicators::beep(2700, 100);
         }
         was_locked = snapshot.locked;
-        indicators::tick({ snapshot.mode, calibration::running(), module_link::receiver_connected() });
+        /* While WiFi or Bluetooth waits for the module, the LED shows it already; the output stays locked. */
+        core::Mode shown = snapshot.mode;
 
-        /* BIND held for 1 s starts binding. */
+        if (module_link::starting_task() == core::ModuleTask::WIFI) {
+            shown = core::Mode::WIFI;
+        } else if (module_link::starting_task() == core::ModuleTask::BLUETOOTH) {
+            shown = core::Mode::BLUETOOTH;
+        }
+        indicators::tick({ shown, calibration::running(), module_link::receiver_connected() });
+
+        /* BIND held for 1 s starts binding, a short press ends it. */
         if (inputs.bind) {
             if (++bind_held_loops == BIND_HOLD_LOOPS) {
-                module_link::bind_start();
+                module_link::command_start(module_link::COMMAND_BIND);
             }
         } else {
+            if (bind_held_loops > 0 && bind_held_loops < BIND_HOLD_LOOPS) {
+                module_link::bind_cancel();
+            }
             bind_held_loops = 0;
         }
 

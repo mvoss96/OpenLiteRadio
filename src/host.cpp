@@ -15,7 +15,10 @@
  *   beep HZ MS        tone
  *   batleds MASK      battery LEDs, bit 0 is the leftmost
  *   module 0|1        ELRS module off or on
- *   bind              start binding, as a long press of BIND does *   frames 0|1        print every frame received from the module as "rx" plus hex bytes
+ *   bind              start binding, as a long press of BIND does
+ *   wifi              start the module's WiFi, as the right trim centre at switch-on does
+ *   ble               start the module's Bluetooth joystick, as the left trim centre at
+ *                     switch-on does; WiFi and Bluetooth end when the module is switched off *   frames 0|1        print every frame received from the module as "rx" plus hex bytes
  *   crsf HEX          send one complete CRSF frame (hex, CRC included) to the module
  *   list              report all settings
  *   get KEY           report one setting
@@ -203,7 +206,11 @@ void handle_command(char *line)
         }
         printk(sent ? "ok crsf\n" : "error crsf\n");
     } else if (strcmp(command, "bind") == 0) {
-        module_link::bind_start();
+        module_link::command_start(module_link::COMMAND_BIND);
+    } else if (strcmp(command, "wifi") == 0) {
+        module_link::command_start(module_link::COMMAND_WIFI);
+    } else if (strcmp(command, "ble") == 0) {
+        module_link::command_start(module_link::COMMAND_BLUETOOTH);
     } else if (strcmp(command, "list") == 0) {
         list_next = 0;
     } else if (strcmp(command, "get") == 0 || strcmp(command, "set") == 0) {

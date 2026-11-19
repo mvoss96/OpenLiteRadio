@@ -7,7 +7,8 @@
 /*
  * The mode of the radio: exactly one at a time, see "Operating modes" in
  * docs/ARCHITECTURE.md. Built so far: off, USB joystick, ELRS locked and
- * active; the other modes have no transitions yet.
+ * active, binding, Bluetooth and WiFi; Xbox and PC control have no
+ * transitions yet.
  */
 namespace core {
 
@@ -28,9 +29,18 @@ enum class Mode : uint8_t {
 /* Name of a mode for the state line, e.g. "elrs_active". */
 const char *mode_name(Mode mode);
 
+/* A command the radio started on the module, which changes what it does. */
+enum class ModuleTask : uint8_t {
+    NONE,       // the module sends what the radio gives it
+    BINDING,    // "Bind" started; ends when a receiver answers, after 8 s or by BIND
+    WIFI,       // "Enable WiFi" started; only a restart of the module ends it
+    BLUETOOTH,  // "BLE Joystick" started; only a restart of the module ends it
+};
+
 /* What the mode machine reads once per frame period. */
 struct ModeInputs {
     bool module_on;     // the ELRS module is switched on
+    ModuleTask task;    // command running on the module
     bool usb_host;      // a PC has set up the USB joystick
     bool held;          // calibration or storing holds the output back
     bool relock;        // a setting changed since the last update (an event, true once)

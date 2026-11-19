@@ -29,9 +29,10 @@ constexpr uint8_t TYPE_PARAMETER_ENTRY = 0x2B;
 constexpr uint8_t TYPE_PARAMETER_READ = 0x2C;
 constexpr uint8_t TYPE_PARAMETER_WRITE = 0x2D;
 
-/* Parameter type of an action such as "Bind"; writing 1 starts it. */
+/* Parameter type of an action such as "Bind"; writing 1 starts it, 4 starts it confirmed. */
 constexpr uint8_t PARAMETER_TYPE_COMMAND = 13;
 constexpr uint8_t COMMAND_START = 1;
+constexpr uint8_t COMMAND_CONFIRM = 4;
 
 /* Sizes of the frames built by the encode functions below. */
 constexpr size_t PING_FRAME_SIZE = 6;
