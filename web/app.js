@@ -12,7 +12,7 @@
 // elrs.js, which is loaded first and uses send() and $() from here.
 
 // The project's version from the file VERSION; test.ps1 checks that both agree.
-const WEB_VERSION = "0.12.1";
+const WEB_VERSION = "0.13.0";
 const USB_VENDOR_ID = 0x2fe3;
 const CHANNEL_COUNT = 16;
 const BATTERY_THRESHOLDS = [3232, 3298, 3391, 3552];   // stock firmware: 1, 2, 3, 4 LEDs
@@ -404,6 +404,17 @@ function stickFractions(sticks) {
   return [[1 - sticks[1] / 4095, 1 - sticks[0] / 4095], [sticks[3] / 4095, sticks[2] / 4095]];
 }
 
+// The status LED as the radio reports it (led=RRGGBB, as sent to the LED, blinking
+// included). The LED is driven at about a fifth of its range, so the colour is
+// brightened to full scale for the drawing; off is drawn as the unlit LED.
+function ledColour(fields) {
+  const value = parseInt(fields.led || "0", 16);
+  const parts = [value >> 16, (value >> 8) & 255, value & 255];
+  const top = Math.max(...parts);
+  if (!top) return HAIR;
+  return "#" + parts.map((p) => Math.round(p * 255 / top).toString(16).padStart(2, "0")).join("");
+}
+
 function showState(fields) {
   lastFields = fields;
   const sticks = fields.sticks.split(",").map(Number);
@@ -442,7 +453,7 @@ function showState(fields) {
   const battery = Number(fields.battery);
   const level = BATTERY_THRESHOLDS.filter((threshold) => battery >= threshold).length;
   document.querySelectorAll(".batLed").forEach((led, index) => led.setAttribute("fill", index < level ? FG1 : HAIR));
-  setFill("statusLed", fields.calib === "1" ? "#f2d24b" : moduleOn && locked ? WARN : fields.on === "1" ? ACCENT : HAIR);
+  setFill("statusLed", ledColour(fields));
 
   $("lockNote").hidden = fields.mode !== "elrs_locked";
   $("lockNote").textContent = setting("unlock.mode") === 2 ? "Gesperrt: Gas hoch, dann runter" : "Gesperrt: Gas nach unten";

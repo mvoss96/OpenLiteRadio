@@ -102,7 +102,7 @@ enum class Mode : uint8_t {
     OFF,              // radio off, no PC: nothing (charging only)
     USB_JOYSTICK,     // radio off at a PC: DirectInput joystick from the controls
     USB_XBOX,         // radio off at a PC: Xbox controller from the controls
-    ELRS_LOCKED,      // radio on: safe frames until the module answers, then pings only
+    ELRS_LOCKED,      // radio on: channel frames with safe values
     ELRS_ACTIVE,      // radio on: frames with the controls
     ELRS_HOST_READY,  // PC control allowed at the radio: as locked until the PC sends values
     ELRS_HOST,        // frames with the values from the PC, controls ignored
@@ -174,7 +174,7 @@ switching the radio off, since the module leaves them only by a restart.
 |------|----------------------|-------------|----------------|
 | Off | none, module off | – | – |
 | USB joystick / Xbox | none, module off | controls | reports |
-| ELRS locked | safe frames until the module answers, then pings | fixed safe values | centred |
+| ELRS locked | one channel frame per frame period | fixed safe values | centred |
 | ELRS active | one channel frame per frame period | controls | centred |
 | ELRS host ready (planned) | as locked | – | centred |
 | ELRS host (planned) | one channel frame per frame period | PC program on the serial port | centred |
@@ -191,7 +191,15 @@ by `core::safe_controls()`: throttle at its lower end, the other sticks at
 their centres, every switch in its first position, with each channel's
 mapping, weight and reverse; channels without a source stay centred.
 
-- **Locked keeps the module answering without controlling the model.** The
+- **Locked sends safe channel frames, as EdgeTX keeps sending.** The
+  receiver stays connected and gets the throttle down, the sticks centred and
+  every switch in its first position; for a copter with the arm switch on a
+  switch channel that is disarmed. Pings alone would let the receiver enter
+  its own failsafe (measured below), but then it has no link at the desk: an
+  ELRS receiver starts its WiFi after 60 s without a link and does not
+  connect until restarted, and the link quality is unknown while locked. The
+  status LED blinks red without a receiver.
+- **What the module does with pings only.** The
   module answers requests only while valid CRSF frames keep arriving, of any
   type (measured 2026-11-19: with one channel frame and then pings every
   20 ms it answered for 5.6 s; without frames it does not answer). Without
@@ -199,32 +207,28 @@ mapping, weight and reverse; channels without a source stay centred.
   rate again. It stops sending channel data over the air once its last
   channel frame is older than 1 s; before its first channel frame it would
   send the zero-initialised `ChannelData` array, all channels at the lower end
-  (ELRS 3.6.4 source). The radio therefore sends safe channel frames until the
-  module answers (about 1.8 s after it is switched on) and pings afterwards.
-  A bound receiver gets the safe values for at most about 1 s and then enters
-  the failsafe configured for that model, while the configurator can still
-  read and write the module's parameters.
+  (ELRS 3.6.4 source). A bound receiver then enters the failsafe configured
+  for that model, while the module still answers parameter requests.
 - Measured on 2026-11-19 with a Betaflight 2026.6.1 quad (BETAFPV Air65, ELRS
   3.6.4 receiver, powered from USB only) read over MSP: with the output held
   and no frames at all, Betaflight entered failsafe 1.4 s after the last
   channel frame and the link returned 3.6 s after the output was released;
   with pings every 20 ms instead, failsafe came after 1.35 s, the module kept
   answering, and the link returned 0.6 s after the release. After the module
-  is switched on, the first link takes about 4.8 s. With the built locked
-  mode (safe frames until the module answers, then pings every 20 ms) and
-  the module switched on while held, Betaflight stayed in failsafe for 8 s
-  and never received channel values, the module answered throughout, and
-  the radio controlled the quad 0.14 s after the release. A receiver that has been
+  is switched on, the first link takes about 4.8 s. With safe frames until
+  the module answers and pings every 20 ms after that, and the module
+  switched on while held, Betaflight stayed in failsafe for 8 s and never
+  received channel values, the module answered throughout, and the radio
+  controlled the quad 0.14 s after the release. A receiver that has been
   without a link for 60 s starts its WiFi and does not connect until it is
   restarted.
 - PC control is allowed only at the radio: with the radio on and USB
   connected, BIND and SETUP held together for 1 s. The PC alone can never take
   over. While both buttons are down, neither binding nor calibration starts.
 - Every end of PC control leads to Locked, without exceptions. The receiver
-  enters its failsafe, and the controls take over only after the unlock
-  gesture, so the throttle cannot jump. Sending the last PC values on, or a
-  fixed position with the throttle down, would not be safe: the first keeps a
-  model moving, the second drops a copter.
+  gets the safe values, and the controls take over only after the unlock
+  gesture, so the throttle cannot jump. Sending the last PC values on would
+  keep a model moving.
 - Calibration and storing are not modes of their own: while they hold the
   output, Locked does not evaluate the unlock gesture.
 - Every change of mode while the radio is on gives a tone.
@@ -352,7 +356,8 @@ this brightness.
 | Binding | cyan, slow blinking |
 | Module in WiFi mode | green, slow blinking |
 | On, Bluetooth joystick | purple |
-| On, locked | red |
+| On, locked, receiver connected | red |
+| On, locked, no receiver | red, slow blinking |
 | On, PC in control | blue, fast blinking |
 | On, sending, receiver connected | blue |
 | On, sending, no receiver | blue, slow blinking |
@@ -477,8 +482,9 @@ From the radio:
   until it was searched), `tx` and `txbusy` (frames the control thread
   handed to the module's UART, and those refused because the previous one
   was still being sent), `mode` (the mode, e.g. `usb_joystick`,
-  `elrs_locked`, `elrs_active`, see "Operating modes"), `calib` (1 during a
-  calibration run).
+  `elrs_locked`, `elrs_active`, see "Operating modes"), `led` (the colour as
+  RRGGBB now sent to the status LED, blinking included; the configurator
+  draws it brightened), `calib` (1 during a calibration run).
 - `setting KEY TYPE MIN MAX DEFAULT VALUE`, one line per setting after `list`,
   followed by `end`. TYPE is `bool` or `int`.
 - `value KEY VALUE` after `get`; `ok ...` or `error REASON` after the other

@@ -232,7 +232,6 @@ function showElrs() {
     `<div class="tile"><span>Verbunden</span><span class="value" id="elrsLinked">–</span></div>`,
     `<div class="tile"><span>Qualität</span><span class="value" id="elrsQuality">–</span></div>`);
   const version = elrs.entries.find((e) => e && e.type === ELRS_TYPE.INFO && /^\d+\.\d+/.test(e.name));
-  groups.get("Modul").push(`<div class="tile"><span>Name</span><span class="value mono">${escapeHtml(elrs.device.name)}</span></div>`);
   if (version) groups.get("Modul").push(`<div class="tile"><span>Version</span><span class="value mono">${escapeHtml(version.name)}</span></div>`);
 
   const known = ELRS_COLUMNS.flat();

@@ -190,24 +190,21 @@ void control_thread(void *, void *, void *)
         if (mode == core::Mode::ELRS_ACTIVE || mode == core::Mode::BLUETOOTH) {
             /* To the model, or to the Bluetooth joystick, which needs a channel frame every period. */
             send_channels(channels);
-        } else if (mode == core::Mode::ELRS_BINDING ||
-                   (mode == core::Mode::ELRS_LOCKED && atomic_get(&module_answered) == 0)) {
+        } else if (mode == core::Mode::ELRS_LOCKED || mode == core::Mode::ELRS_BINDING) {
             /*
-             * Safe channel frames: before the module has answered once, so
-             * that it never transmits its zero-initialised channels, and while
-             * binding, when it sends the channels between its bind packets.
+             * Safe channel frames, as EdgeTX keeps sending: the receiver stays
+             * connected and gets the throttle down, the sticks centred and
+             * every switch in its first position. Without channel frames the
+             * module stops transmitting after 1 s, and an ELRS receiver
+             * without a link starts its WiFi after 60 s. While binding the
+             * module sends them between its bind packets.
              */
             uint16_t safe[core::CHANNEL_COUNT];
 
             core::compute_channels(core::safe_controls(settings::values), settings::values, safe);
             send_channels(safe);
-        } else if (mode == core::Mode::ELRS_LOCKED || mode == core::Mode::WIFI) {
-            /*
-             * Keep the module answering without controlling the model: pings
-             * only. The module stops sending channel data 1 s after the last
-             * channel frame, and the receiver enters its own failsafe. In WiFi
-             * it no longer transmits but still answers parameter requests.
-             */
+        } else if (mode == core::Mode::WIFI) {
+            /* No longer transmitting, the module still answers parameter requests while it gets frames. */
             if (k_uptime_get() - last_ping_ms >= PING_INTERVAL_MS) {
                 uint8_t ping[crsf::PING_FRAME_SIZE];
 

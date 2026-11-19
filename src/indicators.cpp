@@ -11,6 +11,8 @@ namespace {
 
 int64_t beep_until;
 bool led_from_host;
+/* Colour as 0xRRGGBB last sent to the LED. */
+uint32_t led_now;
 
 } // namespace
 
@@ -28,6 +30,7 @@ void set_led_from_host(bool from_host, uint8_t red, uint8_t green, uint8_t blue)
     led_from_host = from_host;
     if (from_host) {
         board::set_status_led(red, green, blue);
+        led_now = ((uint32_t)red << 16) | ((uint32_t)green << 8) | blue;
     }
 }
 
@@ -50,8 +53,14 @@ void tick(const core::LedInputs &state)
 
     if (colour != shown) {
         shown = colour;
+        led_now = colour;
         board::set_status_led((uint8_t)(colour >> 16), (uint8_t)(colour >> 8), (uint8_t)colour);
     }
+}
+
+uint32_t led_colour_now()
+{
+    return led_now;
 }
 
 } // namespace indicators

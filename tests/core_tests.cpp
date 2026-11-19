@@ -374,8 +374,12 @@ static void test_led()
     CHECK(core::led_colour(in, 0) == 0);
     in.mode = Mode::USB_JOYSTICK;
     CHECK(core::led_colour(in, 0) == 0x181818);
+    /* Locked: red, blinking slowly without a receiver, steady with one. */
     in.mode = Mode::ELRS_LOCKED;
-    CHECK(core::led_colour(in, 0) == 0x300000);
+    CHECK(core::led_colour(in, 0) == 0x300000 && core::led_colour(in, 500) == 0);
+    in.receiver_connected = true;
+    CHECK(core::led_colour(in, 500) == 0x300000);
+    in.receiver_connected = false;
 
     /* Sending with a receiver: blue, steady. */
     in.mode = Mode::ELRS_ACTIVE;

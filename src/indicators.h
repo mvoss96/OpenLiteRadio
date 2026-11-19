@@ -17,4 +17,7 @@ void set_led_from_host(bool from_host, uint8_t red, uint8_t green, uint8_t blue)
 /* Call every loop: ends a tone and shows the radio's state on the LED (core::led_colour). */
 void tick(const core::LedInputs &state);
 
+/* Colour as 0xRRGGBB the LED shows now, also one set by the host. */
+uint32_t led_colour_now();
+
 } // namespace indicators

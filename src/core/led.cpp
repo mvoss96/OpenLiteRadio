@@ -38,7 +38,7 @@ uint32_t led_colour(const LedInputs &in, uint32_t ms)
     case Mode::BLUETOOTH:
         return PURPLE;
     case Mode::ELRS_LOCKED:
-        return RED;
+        return in.receiver_connected ? RED : blink(RED, ms, SLOW_MS);
     case Mode::ELRS_HOST_READY:
     case Mode::ELRS_HOST:
         return blink(BLUE, ms, FAST_MS);
