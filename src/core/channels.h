@@ -86,6 +86,14 @@ struct Controls {
 };
 
 /*
+ * Controls with the throttle at its lower end, the other sticks at their
+ * calibrated centres and every switch in its first position: what a model
+ * gets while nobody controls it. compute_channels() turns them into channels
+ * with the mapping, weight and reverse of each channel.
+ */
+Controls safe_controls(const int16_t *settings_values);
+
+/*
  * Value of a source in 988..2012, from the controls and the calibration in
  * the settings (settings::values).
  */

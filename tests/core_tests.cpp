@@ -6,6 +6,7 @@
 #include "core/channels.h"
 #include "core/crsf.h"
 #include "core/joystick.h"
+#include "core/mode.h"
 #include "core/profiles.h"
 #include "core/settings.h"
 
@@ -362,6 +363,98 @@ static void test_channels()
     CHECK(core::source_value(core::SOURCE_THROTTLE, controls, settings::values) == 2012);
 }
 
+static void test_safe_controls()
+{
+    uint16_t channels[core::CHANNEL_COUNT];
+
+    /* Default mapping AETR: throttle on channel 3 low, sticks centred, switches low. */
+    settings::set_defaults();
+    core::compute_channels(core::safe_controls(settings::values), settings::values, channels);
+    CHECK(channels[0] == 1500 && channels[1] == 1500 && channels[3] == 1500);
+    CHECK(channels[2] == 988);
+    for (int i = 4; i < 10; i++) {
+        CHECK(channels[i] == 988);
+    }
+    /* Channels without a source stay at the centre. */
+    CHECK(channels[10] == 1500);
+
+    /* TAER with the throttle reversed: the safe value follows the mapping. */
+    settings::values[settings::find("ch.1.source")] = core::SOURCE_THROTTLE;
+    settings::values[settings::find("ch.1.reverse")] = 1;
+    settings::values[settings::find("ch.3.source")] = core::SOURCE_AILERON;
+    core::compute_channels(core::safe_controls(settings::values), settings::values, channels);
+    CHECK(channels[0] == 2012);
+    CHECK(channels[2] == 1500);
+    settings::set_defaults();
+}
+
+static void test_mode()
+{
+    using core::Mode;
+    core::ModeMachine machine;
+    core::ModeInputs in = {};
+
+    in.unlock_mode = 1;
+    in.throttle = 988;
+
+    /* Without the module: off, or the USB joystick at a PC. */
+    CHECK(machine.update(in) == Mode::OFF);
+    in.usb_host = true;
+    CHECK(machine.update(in) == Mode::USB_JOYSTICK);
+
+    /* Module on with the throttle up: locked until the throttle is low. */
+    in.module_on = true;
+    in.throttle = 1500;
+    CHECK(machine.update(in) == Mode::ELRS_LOCKED);
+    CHECK(machine.update(in) == Mode::ELRS_LOCKED);
+    in.throttle = 988;
+    CHECK(machine.update(in) == Mode::ELRS_ACTIVE);
+    CHECK(machine.update(in) == Mode::ELRS_ACTIVE);
+
+    /* A changed setting locks; with the throttle still low mode 1 opens again in the next period. */
+    in.relock = true;
+    in.throttle = 1500;
+    CHECK(machine.update(in) == Mode::ELRS_LOCKED);
+    in.relock = false;
+    CHECK(machine.update(in) == Mode::ELRS_LOCKED);
+    in.throttle = 988;
+    CHECK(machine.update(in) == Mode::ELRS_ACTIVE);
+
+    /* A hold keeps it locked although the throttle is low (fixed in 0.7.2). */
+    in.held = true;
+    CHECK(machine.update(in) == Mode::ELRS_LOCKED);
+    CHECK(machine.update(in) == Mode::ELRS_LOCKED);
+    in.held = false;
+    CHECK(machine.update(in) == Mode::ELRS_ACTIVE);
+
+    /* Mode 2 needs the upper end again after a hold. */
+    in.unlock_mode = 2;
+    in.held = true;
+    in.throttle = 2012;
+    CHECK(machine.update(in) == Mode::ELRS_LOCKED);
+    in.held = false;
+    in.throttle = 988;
+    CHECK(machine.update(in) == Mode::ELRS_LOCKED);
+    in.throttle = 2012;
+    CHECK(machine.update(in) == Mode::ELRS_LOCKED);
+    in.throttle = 988;
+    CHECK(machine.update(in) == Mode::ELRS_ACTIVE);
+
+    /* Module off leads back to USB, and switching on again locks. */
+    in.module_on = false;
+    CHECK(machine.update(in) == Mode::USB_JOYSTICK);
+    in.usb_host = false;
+    CHECK(machine.update(in) == Mode::OFF);
+    in.module_on = true;
+    in.throttle = 2012;
+    CHECK(machine.update(in) == Mode::ELRS_LOCKED);
+    /* Mode 0 opens wherever the throttle is. */
+    in.unlock_mode = 0;
+    CHECK(machine.update(in) == Mode::ELRS_ACTIVE);
+
+    CHECK(std::strcmp(core::mode_name(Mode::ELRS_ACTIVE), "elrs_active") == 0);
+}
+
 static void test_throttle_lock()
 {
     core::ThrottleLock lock;
@@ -461,6 +554,8 @@ int main()
     test_settings();
     test_channels();
     test_throttle_lock();
+    test_mode();
+    test_safe_controls();
     test_profiles();
     test_joystick();
 

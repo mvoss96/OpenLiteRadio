@@ -7,7 +7,7 @@
  *   ok ... / error REASON                    answer to the other settings commands
  *   state sticks=a,b,c,d sa= sb= sc= sd= se= sf= bind= setup= power= tl= tr=
  *         keys= battery= usb= on= module= ch=c1,...,c16 lock= period= frames=
- *         crc= lq= rssi= offset= bindpar= calib=
+ *         crc= lq= rssi= offset= bindpar= mode= calib=
  * To the radio:
  *   hello             ask for the hello line
  *   stream 0|1        stop or start the state lines
@@ -17,6 +17,7 @@
  *   module 0|1        ELRS module off or on
  *   bind              start binding, as a long press of BIND does
  *   frames 0|1        print every frame received from the module as "rx" plus hex bytes
+ *   crsf HEX          send one complete CRSF frame (hex, CRC included) to the module
  *   list              report all settings
  *   get KEY           report one setting
  *   set KEY VALUE     change a setting; it applies at once and is lost at power-off
@@ -297,6 +298,20 @@ void handle_command(char *line)
         module_link::set_module_on(number(0) != 0);
     } else if (strcmp(command, "frames") == 0) {
         module_link::set_show_frames(number(0) != 0);
+    } else if (strcmp(command, "crsf") == 0 && arguments[0] != nullptr) {
+        /* One complete frame in hex, CRC included, passed to the module unchanged. */
+        uint8_t frame[26]; /* a channel frame is the longest one sent */
+        size_t size = strlen(arguments[0]) / 2;
+        bool valid = size >= 4 && size <= sizeof(frame) && strlen(arguments[0]) % 2 == 0;
+
+        for (size_t i = 0; valid && i < size; i++) {
+            char pair[3] = { arguments[0][2 * i], arguments[0][2 * i + 1], 0 };
+            char *end = nullptr;
+
+            frame[i] = (uint8_t)strtoul(pair, &end, 16);
+            valid = end == pair + 2;
+        }
+        printk(valid && output::send_to_module(frame, size) ? "ok crsf\n" : "error crsf\n");
     } else if (strcmp(command, "bind") == 0) {
         module_link::bind_start();
     } else if (strcmp(command, "list") == 0) {
@@ -352,7 +367,7 @@ void handle_command(char *line)
 /* Collect characters from the host into lines. */
 void poll()
 {
-    static char line[48];
+    static char line[64]; /* "crsf" with a channel frame needs 57 characters */
     static size_t length;
     unsigned char character;
 
@@ -402,10 +417,11 @@ void print_state(const output::Snapshot &snapshot, bool radio_on)
         printk(channel == 0 ? "%u" : ",%u", snapshot.channels[channel]);
     }
     printk(" lock=%u period=%u frames=%u crc=%u lq=%u rssi=%u offset=%d bindpar=%u "
-           "calib=%u\n",
+           "mode=%s calib=%u\n",
            snapshot.locked, (unsigned int)output::frame_period_us(), (unsigned int)link.frames,
            (unsigned int)link.crc_errors, link.link_quality, link.rssi,
-           (int)link.timing_offset_us, link.bind_parameter, calibration::running());
+           (int)link.timing_offset_us, link.bind_parameter, core::mode_name(snapshot.mode),
+           calibration::running());
 }
 
 } // namespace host

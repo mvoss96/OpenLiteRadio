@@ -11,6 +11,7 @@
 
 #include "board/board.h"
 #include "core/channels.h"
+#include "core/mode.h"
 
 namespace output {
 
@@ -18,24 +19,28 @@ namespace output {
 struct Snapshot {
     board::Inputs inputs;
     uint16_t channels[core::CHANNEL_COUNT];
-    bool locked; /* no channel frames go out */
+    core::Mode mode;
+    bool locked; /* no channel frames go out: every mode except ELRS active */
 };
 
-/* Test inputs that replace the readings, see inject(). */
+/* Test inputs that replace the readings, see inject(); one bit each. */
 enum InjectField : uint32_t {
-    INJECT_STICKS = 1u << 0,
-    INJECT_SA = 1u << 1,
-    INJECT_SB = 1u << 2,
-    INJECT_SC = 1u << 3,
-    INJECT_SD = 1u << 4,
-    INJECT_SE = 1u << 5,
-    INJECT_SF = 1u << 6,
+    INJECT_STICKS = 1u << 0,  // the four raw stick readings
+    INJECT_SA = 1u << 1,      // switch SA
+    INJECT_SB = 1u << 2,      // switch SB
+    INJECT_SC = 1u << 3,      // switch SC
+    INJECT_SD = 1u << 4,      // switch SD
+    INJECT_SE = 1u << 5,      // button SE
+    INJECT_SF = 1u << 6,      // button SF
 };
 
 void start();
 
 void set_module_on(bool on);
 bool module_is_on();
+
+/* Called for every frame received from the module: it is running and answering. */
+void note_module_frame();
 
 /*
  * Stop or allow channel frames, e.g. for a calibration run or a flash write.

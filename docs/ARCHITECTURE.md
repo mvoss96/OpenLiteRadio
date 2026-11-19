@@ -70,6 +70,254 @@ Each further thread would cost about 1 KiB of stack.
 - The status LED is driven by TIM2 with DMA, not by timed loops with
   interrupts masked, so that no CRSF byte is lost while a colour is sent.
 
+## Operating modes
+
+Agreed on 2026-11-19. The radio is in exactly one mode at a time: off, a
+USB controller at a PC, or one of the ELRS modes. It is never a USB
+controller and a remote control for a model at once, so that a model on the
+bench does not follow the simulator. Today the logic is spread over flags in
+`src/output.cpp`; it is to become one tested state machine in
+`src/core/mode.cpp`. In the diagrams, dashed states are planned; the rest is
+built.
+
+```mermaid
+flowchart LR
+  K[Sticks and switches] --> B[Mapping: AETR, TAER or Custom]
+  B --> CH[16 channels]
+  CH --> M{Mode}
+  PC[PC program]:::planned -.-> M
+  M --> J[USB: joystick]
+  M -.-> X[USB: Xbox controller]:::planned
+  M --> E[ELRS module: radio link to the model]
+  M -.-> BT[ELRS module: Bluetooth joystick]:::planned
+  CH --> S[State line to the configurator]
+  classDef planned stroke-dasharray: 5 5
+```
+
+### Modes
+
+```cpp
+/* What the radio is doing; exactly one at a time. */
+enum class Mode : uint8_t {
+    OFF,              // radio off, no PC: nothing (charging only)
+    USB_JOYSTICK,     // radio off at a PC: DirectInput joystick from the controls
+    USB_XBOX,         // radio off at a PC: Xbox controller from the controls
+    ELRS_LOCKED,      // radio on: safe frames until the module answers, then pings only
+    ELRS_ACTIVE,      // radio on: frames with the controls
+    ELRS_HOST_READY,  // PC control allowed at the radio: as locked until the PC sends values
+    ELRS_HOST,        // frames with the values from the PC, controls ignored
+    ELRS_BINDING,     // bind command sent; the module looks for a receiver
+    BLUETOOTH,        // module is a Bluetooth joystick: frames with the controls, no lock
+    WIFI,             // module runs its web page for updates: no frames
+};
+```
+
+```mermaid
+stateDiagram-v2
+  state "Off" as Off
+  state "USB joystick" as Joy
+  state "USB Xbox controller" as Xbox
+  state "Radio on" as On {
+    state "ELRS locked" as Locked
+    state "ELRS active" as Active
+    state "ELRS host ready" as HostReady
+    state "ELRS host" as Host
+    state "ELRS binding" as Binding
+    state "Bluetooth joystick" as Ble
+    state "WiFi" as Wifi
+    [*] --> Locked
+    Locked --> Active: unlock gesture, not held
+    Active --> Locked: setting changed, calibration, storing
+    Locked --> HostReady: BIND + SETUP 1 s, USB connected
+    Active --> HostReady: BIND + SETUP 1 s, USB connected
+    HostReady --> Host: PC sends values
+    HostReady --> Locked: BIND + SETUP, USB removed, 30 s without PC values
+    Host --> Locked: BIND + SETUP, PC releases, USB removed, 200 ms without PC values
+    Locked --> Binding: BIND 1 s
+    Active --> Binding: BIND 1 s
+    Binding --> Locked: bound or timeout
+    Locked --> Ble: command from the configurator
+    Locked --> Wifi: command from the configurator
+  }
+  [*] --> Off
+  Off --> Joy: PC connected, stored joystick
+  Off --> Xbox: PC connected, stored Xbox
+  Joy --> Off: PC disconnected
+  Xbox --> Off: PC disconnected
+  Joy --> Xbox: both trim centres 2 s, or configurator
+  Xbox --> Joy: both trim centres 2 s, or configurator
+  Off --> On: power button 1 s
+  Joy --> On: power button 1 s
+  Xbox --> On: power button 1 s
+  On --> Off: power button 2 s, battery empty, auto power-off without USB
+  classDef planned stroke-dasharray: 5 5
+  class Xbox planned
+  class HostReady planned
+  class Host planned
+  class Binding planned
+  class Ble planned
+  class Wifi planned
+```
+
+Switching off at a PC leads to the stored USB mode instead of Off. Battery
+empty and auto power-off are planned. Binding works today, but without a mode
+of its own.
+
+| Mode | Frames to the module | Values from | USB controller |
+|------|----------------------|-------------|----------------|
+| Off | none, module off | – | – |
+| USB joystick / Xbox | none, module off | controls | reports |
+| ELRS locked | safe frames until the module answers, then pings | fixed safe values | centred |
+| ELRS active | one channel frame per frame period | controls | centred |
+| ELRS host ready (planned) | as locked | – | centred |
+| ELRS host (planned) | one channel frame per frame period | PC program on the serial port | centred |
+| ELRS binding (planned) | as locked | – | centred |
+| Bluetooth joystick (planned) | one channel frame per frame period | controls | centred |
+| WiFi (planned) | none | – | centred |
+
+Built: Off, USB joystick, ELRS locked and ELRS active in `src/core/mode.cpp`
+and `src/output.cpp`. Outside the joystick mode the
+joystick reports all channels centred (1500 µs, buttons released), so that a
+simulator still open on the PC does not keep the last positions. The serial
+port stays available in every mode. Safe values are the channels computed
+by `core::safe_controls()`: throttle at its lower end, the other sticks at
+their centres, every switch in its first position, with each channel's
+mapping, weight and reverse; channels without a source stay centred.
+
+- **Locked keeps the module answering without controlling the model.** The
+  module answers requests only while valid CRSF frames keep arriving, of any
+  type (measured 2026-11-19: with one channel frame and then pings every
+  20 ms it answered for 5.6 s; without frames it does not answer). Without
+  frames it drops the connection to the radio after 1 s and searches the baud
+  rate again. It stops sending channel data over the air once its last
+  channel frame is older than 1 s; before its first channel frame it would
+  send the zero-initialised `ChannelData` array, all channels at the lower end
+  (ELRS 3.6.4 source). The radio therefore sends safe channel frames until the
+  module answers (about 1.8 s after it is switched on) and pings afterwards.
+  A bound receiver gets the safe values for at most about 1 s and then enters
+  the failsafe configured for that model, while the configurator can still
+  read and write the module's parameters.
+- Measured on 2026-11-19 with a Betaflight 2026.6.1 quad (BETAFPV Air65, ELRS
+  3.6.4 receiver, powered from USB only) read over MSP: with the output held
+  and no frames at all, Betaflight entered failsafe 1.4 s after the last
+  channel frame and the link returned 3.6 s after the output was released;
+  with pings every 20 ms instead, failsafe came after 1.35 s, the module kept
+  answering, and the link returned 0.6 s after the release. After the module
+  is switched on, the first link takes about 4.8 s. With the built locked
+  mode (safe frames until the module answers, then pings every 20 ms) and
+  the module switched on while held, Betaflight stayed in failsafe for 8 s
+  and never received channel values, the module answered throughout, and
+  the radio controlled the quad 0.14 s after the release. A receiver that has been
+  without a link for 60 s starts its WiFi and does not connect until it is
+  restarted.
+- PC control is allowed only at the radio: with the radio on and USB
+  connected, BIND and SETUP held together for 1 s. The PC alone can never take
+  over. While both buttons are down, neither binding nor calibration starts.
+- Every end of PC control leads to Locked, without exceptions. The receiver
+  enters its failsafe, and the controls take over only after the unlock
+  gesture, so the throttle cannot jump. Sending the last PC values on, or a
+  fixed position with the throttle down, would not be safe: the first keeps a
+  model moving, the second drops a copter.
+- Calibration and storing are not modes of their own: while they hold the
+  output, Locked does not evaluate the unlock gesture.
+- Every change of mode while the radio is on gives a tone.
+
+### USB device
+
+The radio presents one device description per enumeration, so changing the
+mode means disconnecting from USB and enumerating again.
+
+```mermaid
+stateDiagram-v2
+  direction LR
+  state "Serial port + joystick (2FE3:0005)" as Joy
+  state "Serial port + Xbox controller" as Xbox
+  state "Vendor updater (0483:5740)" as Upd
+  [*] --> Joy: stored mode joystick
+  [*] --> Xbox: stored mode Xbox
+  Joy --> Xbox: radio off, both trim centres 2 s, or configurator
+  Xbox --> Joy: radio off, both trim centres 2 s, or configurator
+  Joy --> Upd: port opened at 1200 baud
+  Upd --> [*]: image written, restart
+  classDef planned stroke-dasharray: 5 5
+  class Xbox planned
+```
+
+- The mode is stored and applies at every further connection. BIND + SETUP
+  stays reserved for PC control.
+- Xbox mode was tested with a test build on Windows 11: with our own vendor
+  ID and the compatible ID `XUSB10` in an MS OS 2.0 descriptor, Windows loads
+  its "Xbox 360 Controller for Windows" driver, alone and next to the serial
+  port. The Microsoft controller's IDs are not needed, and the serial port
+  stays available in Xbox mode.
+- Each Xbox axis, trigger and button follows a channel or none, one setting
+  per element. Default: left stick channels 4 and 3, right stick 1 and 2,
+  triggers 5 and 6, buttons A, B, X, Y, LB, RB, Back, Start channels 9 to 16.
+
+### ELRS module
+
+The module has its own processor and firmware. The radio switches it on and
+off and starts actions through CRSF parameters: binding, Bluetooth joystick
+and WiFi are commands of the module (modes above). The module leaves
+Bluetooth and WiFi only by a restart, so the radio returns from them by
+switching the module off.
+
+Read from the module on 2026-11-19: "BETAFPV LiteRadi", ELRS 3.6.4 ISM2G4,
+21 parameters: Packet Rate, Telem Ratio, Switch Mode, Link Mode, Model Match,
+the folder TX Power (Max Power 25/50/100 mW, Dynamic), the folder VTX
+Administrator (Band, Channel, Pwr Lvl, Pitmode, Send VTx), the folder WiFi
+Connectivity (Enable WiFi, Enable Rx WiFi), the commands BLE Joystick and
+Bind, and the read-only entries Bad/Good and the version.
+
+The configurator gets a tab "ELRS-Modul" that shows everything the module
+offers. It reads the list from the module through the radio, which only
+passes the frames on, so another ELRS version with other parameters needs no
+change. The module is configured with the radio switched on, also while
+locked; with the radio off the tab shows no values and asks to switch the
+radio on.
+
+### Mapping and trim
+
+- The mapping is one of three: AETR and TAER are fixed, Custom is the own
+  mapping (channels, weight, reverse). The choice and the Custom mapping are
+  stored and changed only from the PC. Changing AETR or TAER turns it into
+  Custom with the template as starting point; an existing Custom mapping is
+  replaced after a question. There are no profiles; the current profile code
+  (`profile ...`, NVS 0x400 to 0x410) is to be removed. Custom is stored in the
+  format of one profile slot, so that more slots can be added later.
+  Export and import of the mapping as a file follow in the configurator.
+- Trim shifts the centre of the four stick axes, 4 µs per step, at most ±25
+  steps. It is stored apart from the mapping and changed with the trim
+  buttons, a short tone per step and another at the centre. It applies only to
+  the frames to the ELRS module, not to joystick and Xbox. The trim centres do
+  nothing while the radio is on; trim is reset from the configurator.
+
+### LEDs
+
+One colour per state. One colour steady is a normal state, pulsing is a
+notice, two colours alternating slowly (about 0.5 s, always with white) is a
+special mode, fast red blinking is an error. When several states apply, the
+upper row wins.
+
+| State | Status LED |
+|-------|------------|
+| Error (storage, module does not answer) | red, fast blinking |
+| Calibration | yellow and white alternating (today yellow) |
+| Binding | cyan and white alternating |
+| Module in WiFi mode | green and white alternating |
+| On, Bluetooth joystick | purple |
+| On, locked | red |
+| On, PC in control | blue and white alternating |
+| On, sending, receiver connected | blue |
+| On, sending, no receiver | blue, pulsing |
+| Off, at a PC as joystick | orange |
+| Off, at a PC as Xbox controller | yellow |
+| Off, on a charger or without USB | off |
+
+The four battery LEDs show the charge, four to one; below one the last LED
+blinks, with a warning tone if enabled. Still to be observed on the device:
+what the vendor bootloader shows on these LEDs.
+
 ## Stages
 
 | Stage | Result | State |
@@ -152,7 +400,9 @@ From the radio:
   correct and with a wrong checksum), `lq` (percent) and `rssi` (dBm without
   the sign) from the receiver's link statistics, `offset` (microseconds, from
   the last timing frame), `bindpar` (number of the module's bind parameter, 0
-  until it was searched), `calib` (1 during a calibration run).
+  until it was searched), `mode` (the mode, e.g. `usb_joystick`,
+  `elrs_locked`, `elrs_active`, see "Operating modes"), `calib` (1 during a
+  calibration run).
 - `setting KEY TYPE MIN MAX DEFAULT VALUE`, one line per setting after `list`,
   followed by `end`. TYPE is `bool` or `int`.
 - `value KEY VALUE` after `get`; `ok ...` or `error REASON` after the other
@@ -169,6 +419,8 @@ To the radio:
 | `batleds MASK` | battery LEDs, bit 0 is the leftmost |
 | `bind` | start binding, as holding BIND for 1 s does |
 | `module 0` / `module 1` | ELRS module off or on; channel frames follow once the throttle lock is released |
+| `frames 0` / `frames 1` | stop or start printing every frame from the module as `rx` and its bytes in hex |
+| `crsf HEX` | send one complete CRSF frame to the module, given in hex with its CRC, at most 26 bytes; answers `ok crsf` or `error crsf`. The configurator reads and writes the module's parameters with it and `frames 1` |
 | `list` | report all settings |
 | `get KEY` | report one setting |
 | `set KEY VALUE` | change a setting; answers `ok KEY VALUE`. It applies at once, locks the output and is lost at power-off unless stored |

@@ -119,6 +119,7 @@ void poll()
                 continue;
             }
             frames++;
+            output::note_module_frame();
             if (show_frames) {
                 printk("rx");
                 for (size_t k = 0; k < parser.size(); k++) {

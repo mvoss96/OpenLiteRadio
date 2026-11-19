@@ -101,6 +101,19 @@ uint16_t scale_axis(uint16_t raw, const AxisCalibration &calibration, bool centr
     return (uint16_t)result;
 }
 
+Controls safe_controls(const int16_t *settings_values)
+{
+    Controls controls = {};
+
+    for (int axis = 0; axis < AXIS_COUNT; axis++) {
+        AxisCalibration calibration = axis_calibration(settings_values, (Axis)axis);
+
+        controls.sticks[axis] =
+            (axis == AXIS_LEFT_VERTICAL) ? calibration.low : calibration.centre;
+    }
+    return controls;
+}
+
 uint16_t source_value(Source source, const Controls &controls, const int16_t *settings_values)
 {
     /*

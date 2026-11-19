@@ -60,10 +60,12 @@ static const struct device *const joystick = DEVICE_DT_GET(DT_NODELABEL(joystick
 /* The stack sends from this buffer without copying it; it is not touched while busy. */
 static uint8_t __aligned(sizeof(void *)) report[REPORT_SIZE];
 static atomic_t report_busy;
+static atomic_t joystick_is_ready;
 
 static void joystick_ready(const struct device *dev, const bool ready)
 {
 	ARG_UNUSED(dev);
+	atomic_set(&joystick_is_ready, ready ? 1 : 0);
 	if (!ready) {
 		atomic_clear(&report_busy);
 	}
@@ -93,6 +95,12 @@ static const struct hid_device_ops joystick_ops = {
 	.get_report = joystick_get_report,
 	.input_report_done = joystick_report_done,
 };
+
+/* True while a PC has set up the joystick interface. */
+bool usb_joystick_ready(void)
+{
+	return atomic_get(&joystick_is_ready) != 0;
+}
 
 /* Send a joystick report; dropped while the previous one is still on its way. */
 void usb_joystick_send(const uint8_t *data)
