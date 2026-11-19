@@ -6,7 +6,7 @@
  *   value KEY VALUE                          answer to "get"
  *   ok ... / error REASON                    answer to the other settings commands
  *   state sticks=a,b,c,d sa= sb= sc= sd= se= sf= bind= setup= power= tl= tr=
- *         keys= battery= usb= on= module= ch=c1,...,c16 lock= period= frames=
+ *         keys= battery= usb= on= module= trim=t,r,e,a ch=c1,...,c16 lock= period= frames=
  *         crc= lq= rssi= offset= bindpar= tx= txbusy= mode= calib=
  * To the radio:
  *   hello             ask for the hello line
@@ -292,7 +292,9 @@ void print_state(const output::Snapshot &snapshot, bool radio_on)
            inputs.bind, inputs.setup, inputs.power, inputs.trim_left,
            inputs.trim_right, inputs.trims_valid, board::battery_raw(),
            board::usb_supply_present(), radio_on, output::module_is_on());
-    printk(" ch=");
+    const int16_t *trim = &settings::values[settings::TRIM_FIRST];
+
+    printk(" trim=%d,%d,%d,%d ch=", trim[0], trim[1], trim[2], trim[3]);
     for (int channel = 0; channel < core::CHANNEL_COUNT; channel++) {
         printk(channel == 0 ? "%u" : ",%u", snapshot.channels[channel]);
     }

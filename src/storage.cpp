@@ -1,6 +1,7 @@
 #include "storage.h"
 
 #include "board/board.h"
+#include "core/channels.h"
 #include "core/settings.h"
 #include "output.h"
 
@@ -19,14 +20,16 @@ void load_settings()
     }
 }
 
-/* The storage skips a record that already holds the same value. */
-bool save_settings()
+namespace {
+
+/* Store count settings from first on. The storage skips a record that already holds the same value. */
+bool save(int first, int count)
 {
     bool stored = true;
     /* A calibration run may already hold the output; it keeps holding it afterwards. */
     bool held = output::set_hold(true);
 
-    for (int index = 0; index < settings::COUNT; index++) {
+    for (int index = first; index < first + count; index++) {
         settings::Info info = settings::info(index);
         int16_t value = settings::values[index];
 
@@ -38,6 +41,18 @@ bool save_settings()
     }
     output::set_hold(held);
     return stored;
+}
+
+} // namespace
+
+bool save_settings()
+{
+    return save(0, settings::COUNT);
+}
+
+bool save_trim()
+{
+    return save(settings::TRIM_FIRST, core::AXIS_COUNT);
 }
 
 } // namespace storage

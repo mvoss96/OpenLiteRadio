@@ -58,7 +58,7 @@ analysis kept outside this repository.
 |---|---|---|---|
 | M | Channel order AETR, switches on channels 5 to 10 | manual, measured | default assignment, hw |
 | M | Channel assignment table with per-channel weight and reverse | code; table read | settings ch.N.*, editable in the web tool; defaults seen on the radio, changes only in the PC tests |
-| S | Trim in 1 % steps, continuous on long press, reset, stored | manual | missing |
+| S | Trim in 4 µs steps up to ±25, reset, stored | manual; steps and range agreed | built in 0.11.0, one step per press, no repeat on long press; buttons not yet checked on the radio |
 | S | Stick mode selection (mode 2 by default) | code: mode flag, meaning open | missing |
 | S | Response curve per stick (expo) | code: 512-entry table | missing |
 | C | Dual rates | no | missing |

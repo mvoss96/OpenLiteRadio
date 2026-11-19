@@ -13,4 +13,7 @@ void load_settings();
 /* Store all settings; only values that differ from their default take up space. */
 bool save_settings();
 
+/* Store only the trim (trim.*), leaving other unsaved changes unsaved. */
+bool save_trim();
+
 } // namespace storage

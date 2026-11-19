@@ -45,6 +45,11 @@ const MAPPINGS = [
 const MAPPING_CUSTOM = 2;
 const MAPPING_NAMES = ["AETR", "TAER", "Custom"];
 
+// Trim of the stick axes (settings trim.*), in the order of the axes and of
+// "trim=" in the state line. One step is TRIM_STEP_US.
+const TRIM_KEYS = ["trim.thr", "trim.rud", "trim.ele", "trim.ail"];
+const TRIM_STEP_US = 4;
+
 const $ = (id) => document.getElementById(id);
 const ICON = { check: "m5 12 5 5 9-10" };
 const icon = (name) => `<svg class="i" viewBox="0 0 24 24"><path d="${ICON[name]}"/></svg>`;
@@ -63,6 +68,7 @@ let menuOpen = false;
 let calibrating = false;
 let calStage = 1;                  // 1: move the sticks, 2: release them
 let seen = null;                   // per stick [minX, maxX, minY, maxY] as fractions, during a run
+let shownTrim = 0;                 // trim of the open control as the detail card shows it
 
 const setting = (key) => (settings.has(key) ? settings.get(key).value : undefined);
 
@@ -77,6 +83,13 @@ function chValue(n, field) {
 const channelsOf = (source) =>
   [...Array(CHANNEL_COUNT).keys()].map((i) => i + 1).filter((n) => chValue(n, "source") === source);
 const controlOf = (source) => CONTROLS.find((control) => control.source === source);
+
+// Trim of a control in steps, from the last state line; 0 for a switch.
+function trimOf(control) {
+  if (!control.stick || !lastFields || !lastFields.trim) return 0;
+  return Number(lastFields.trim.split(",")[control.stick[0]]);
+}
+const trimText = (steps) => (steps > 0 ? "+" : steps < 0 ? "−" : "") + Math.abs(steps);
 
 // ---- Storing changes
 
@@ -142,12 +155,14 @@ function buildLabels() {
     const [x0, x1] = c.side === "L" ? [-350, -90] : [730, 990];
     const near = c.side === "L" ? x1 : x0;
     return `<g class="callout" tabindex="0" role="button" data-source="${c.source}" aria-label="${c.name} einstellen">
-      <rect class="hit" x="${x0 - 14}" y="${c.y - 34}" width="${x1 - x0 + 28}" height="46" rx="10"></rect>
+      <rect class="hit" id="coHit${c.source}" x="${x0 - 14}" y="${c.y - 34}" width="${x1 - x0 + 28}" height="46" rx="10"></rect>
       <text id="coName${c.source}" x="${x0}" y="${c.y - 10}" font-size="17" font-weight="600" fill="${FG1}">${c.name}</text>
       <text id="coChannel${c.source}" x="${x0 + 14 + 10 * c.name.length}" y="${c.y - 10}" font-size="14" fill="${FG3}"></text>
       <text id="coValue${c.source}" x="${x1}" y="${c.y - 10}" text-anchor="end" font-size="16" fill="${FG1}"></text>
       <path d="M ${x0} ${c.y} H ${x1}" stroke="${HAIR}" stroke-width="3" stroke-linecap="round"></path>
       <path id="coMeter${c.source}" data-x0="${x0}" data-x1="${x1}" data-y="${c.y}" d="" stroke="${ACCENT}" stroke-width="3" stroke-linecap="round"></path>
+      ${c.stick ? `<rect id="coTrim${c.source}" y="${c.y - 7}" width="2" height="14" rx="1" fill="${FG1}" visibility="hidden"></rect>
+      <text id="coTrimText${c.source}" x="${x1}" y="${c.y + 20}" text-anchor="end" font-size="13" fill="${FG3}"></text>` : ""}
       <path d="M ${near} ${c.y} L ${c.target[0]} ${c.target[1]}" fill="none" stroke="${LEVER}"></path>
       <circle cx="${c.target[0]}" cy="${c.target[1]}" r="3.5" fill="${FG3}"></circle>
     </g>`;
@@ -175,8 +190,16 @@ function showLabels() {
     $("coValue" + c.source).textContent = value === undefined ? "–" : value;
     $("liValue" + c.source).textContent = value === undefined ? "–" : value;
     const meter = $("coMeter" + c.source);
-    const x0 = Number(meter.dataset.x0);
-    meter.setAttribute("d", part > 0 ? `M ${x0} ${meter.dataset.y} H ${x0 + (Number(meter.dataset.x1) - x0) * part}` : "");
+    const x0 = Number(meter.dataset.x0), x1 = Number(meter.dataset.x1);
+    meter.setAttribute("d", part > 0 ? `M ${x0} ${meter.dataset.y} H ${x0 + (x1 - x0) * part}` : "");
+    if (!c.stick) continue;
+    // A trimmed axis: a mark where the centre now lies, and the trim below the line.
+    const steps = trimOf(c);
+    const centre = output(1500 + steps * TRIM_STEP_US, shapeOf(c.source));
+    $("coTrim" + c.source).setAttribute("x", x0 + (x1 - x0) * (centre - 988) / 1024 - 1);
+    $("coTrim" + c.source).setAttribute("visibility", steps ? "visible" : "hidden");
+    $("coTrimText" + c.source).textContent = steps ? "Trimm " + trimText(steps) : "";
+    $("coHit" + c.source).setAttribute("height", steps ? 64 : 46);
   }
 }
 
@@ -192,14 +215,17 @@ function openDetail(source) {
   showDetail();
 }
 
-// Weight and reverse of the open control: those of its first channel.
-function channelShape() {
-  const channel = channelsOf(selected)[0];
+// Weight and reverse of a control: those of its first channel.
+function shapeOf(source) {
+  const channel = channelsOf(source)[0];
   return channel ? { weight: chValue(channel, "weight"), reverse: chValue(channel, "reverse") !== 0 }
                  : { weight: 100, reverse: false };
 }
+const channelShape = () => shapeOf(selected);
 
-const output = (raw, shape) => Math.round(1500 + (shape.reverse ? -1 : 1) * (raw - 1500) * shape.weight / 100);
+// Channel value for a source value, limited to 988..2012 as in the firmware.
+const output = (raw, shape) =>
+  Math.max(988, Math.min(2012, Math.round(1500 + (shape.reverse ? -1 : 1) * (raw - 1500) * shape.weight / 100)));
 
 function showDetail() {
   const control = controlOf(selected);
@@ -240,6 +266,12 @@ function showDetail() {
     const raw = control.positions.length === 3 ? [988, 1500, 2012] : [988, 2012];
     middle = `<div class="cap">Stellungen</div><div class="positions">` + control.positions.map((word, i) =>
       `<div class="mitem${i === now ? " sel" : ""}"><span>${word}</span><span class="sec">${output(raw[i], shape)}</span></div>`).join("") + `</div>`;
+  }
+  const steps = trimOf(control);
+  shownTrim = steps;
+  if (steps) {
+    middle += `<div class="trimblock"><div class="cap">Trimmung</div><div class="weightrow">` +
+              `<div class="big">${trimText(steps)}</div><button class="btn subtle" id="dTrimReset">Zurücksetzen</button></div></div>`;
   }
   $("dMiddle").innerHTML = middle;
   if ($("dDead")) fill($("dDead"));
@@ -306,7 +338,8 @@ function drawCurve() {
   if (control.stick) {
     const dead = control.axis ? Number($("dDead") ? $("dDead").value : 0) : 0;
     const X = (p) => pad + (p + 100) / 200 * (W - 2 * pad);
-    const out = (p) => output(Math.abs(p) <= dead ? 1500 : 1500 + 512 * p / 100, shape);
+    const offset = trimOf(control) * TRIM_STEP_US;
+    const out = (p) => output((Math.abs(p) <= dead ? 1500 : 1500 + 512 * p / 100) + offset, shape);
     const points = dead ? [-100, -dead, dead, 100] : [-100, 100];
     const line = points.map((p, i) => `${i ? "L" : "M"} ${X(p).toFixed(1)} ${Y(out(p)).toFixed(1)}`).join(" ");
     if (dead) inner += `<rect x="${X(-dead)}" y="0" width="${X(dead) - X(-dead)}" height="${H}" fill="${ACCENT}" fill-opacity=".14"></rect>`;
@@ -421,6 +454,7 @@ function showState(fields) {
   if (selected) {
     // Only the live parts; a full redraw would reset a slider being dragged.
     const control = controlOf(selected);
+    if (trimOf(control) !== shownTrim && document.activeElement !== $("dDead")) showDetail();
     if (control.positions) {
       const now = Number(fields[STATE_KEY[control.source]]);
       document.querySelectorAll(".positions .mitem").forEach((row, i) => row.classList.toggle("sel", i === now));
@@ -702,6 +736,11 @@ $("dMiddle").addEventListener("input", (event) => {
   $("dDeadOut").textContent = event.target.value + " %";
   fill(event.target);
   drawCurve();
+});
+$("dMiddle").addEventListener("click", (event) => {
+  if (event.target.id !== "dTrimReset") return;
+  send(`set ${TRIM_KEYS[controlOf(selected).stick[0]]} 0`);
+  send("save");
 });
 $("dMiddle").addEventListener("change", (event) => {
   if (event.target.id !== "dDead") return;

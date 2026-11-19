@@ -106,14 +106,20 @@ Controls safe_controls(const int16_t *settings_values);
  */
 uint16_t source_value(Source source, const Controls &controls, const int16_t *settings_values);
 
+/* One trim step in microseconds; the settings trim.* hold steps. */
+constexpr int TRIM_STEP_US = 4;
+
 /*
  * Compute all channels from the settings: each channel follows its source,
  * scaled by its weight around the centre and reversed if set. With a fixed
  * mapping (map.mode AETR or TAER) the sources come from that mapping, with
  * weight 100 and no reverse, and the ch.N.* settings are not used.
+ * trimmed: add the trim (trim.*) to the four stick sources before weight and
+ *   reverse; only the frames to the ELRS module are trimmed.
+ * Every channel is limited to 988..2012.
  */
 void compute_channels(const Controls &controls, const int16_t *settings_values,
-                      uint16_t channels[CHANNEL_COUNT]);
+                      uint16_t channels[CHANNEL_COUNT], bool trimmed = false);
 
 /* Holds back the output after switching on until the throttle stick has unlocked it. */
 class ThrottleLock {

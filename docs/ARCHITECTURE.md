@@ -294,7 +294,21 @@ radio on.
   steps. It is stored apart from the mapping and changed with the trim
   buttons, a short tone per step and another at the centre. It applies only to
   the frames to the ELRS module, not to joystick and Xbox. The trim centres do
-  nothing while the radio is on; trim is reset from the configurator.
+  nothing while the radio is on; trim is reset from the configurator. Built in
+  0.11.0: the settings `trim.thr`, `trim.rud`, `trim.ele`, `trim.ail` (−25..25
+  steps of `core::TRIM_STEP_US`) are added to the stick source before weight
+  and reverse, and every channel is limited to 988..2012. Left trim button up
+  and down trim the throttle, left and right the yaw; the right button pitch
+  and roll. The buttons work only while the radio is on, one step per press,
+  the stock firmware's tones: 1176 Hz 100 ms for a step away from the centre,
+  784 Hz 100 ms towards it, 989 Hz 300 ms when a trim reaches 0. The stock
+  firmware has no tone for the end; here 659 Hz 300 ms sounds at ±25 and for
+  every press beyond. The stock tones were read from its disassembly (TIM3
+  prescaler 99, a table of nine periods at 0x08008d68, chosen at 0x08011fde),
+  not recorded on the radio. Writing to flash holds the output and locks it, so trim from
+  the buttons is stored only when the radio is switched off (`storage::save_trim()`,
+  only the trim values). The state line reports `trim=` and `ch=` as sent:
+  trimmed while the module is on.
 
 ### LEDs
 
@@ -413,7 +427,8 @@ From the radio:
   `bind`, `setup`, `power` (1 while pressed), `tl`, `tr` (trim buttons: bit 0
   up, 1 down, 2 left, 3 right, 4 centre), `keys` (1 if the trim key device
   answers), `battery` (raw 12-bit), `usb` (1 with USB supply), `on`, `module`,
-  `ch` (channels 1 to 16 in microseconds, 988 to 2012), `lock` (1 while the
+  `trim` (trim steps of throttle, yaw, pitch, roll), `ch` (channels 1 to 16
+  in microseconds, 988 to 2012, trimmed while the module is on), `lock` (1 while the
   throttle lock holds the output back), `period` (frame period in
   microseconds), `frames` and `crc` (frames received from the module with a
   correct and with a wrong checksum), `lq` (percent) and `rssi` (dBm without

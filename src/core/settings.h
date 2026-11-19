@@ -19,7 +19,8 @@ enum Index {
     UNLOCK_BEEP = 1,   /* tone when the output is released */
     BUZZER_ON = 2,     /* 0 silences all tones */
     MAP_MODE = 3,      /* the assignment in use, a core::Mapping */
-    CHANNEL_FIRST = 4, /* 16 channels with CHANNEL_FIELDS values each: the Custom assignment */
+    TRIM_FIRST = 4,    /* trim of the 4 stick axes in steps, in the order of core::Axis */
+    CHANNEL_FIRST = 8, /* 16 channels with CHANNEL_FIELDS values each: the Custom assignment */
     CALIBRATION_FIRST = CHANNEL_FIRST + 16 * 3, /* 4 axes with CALIBRATION_FIELDS values each */
     COUNT = CALIBRATION_FIRST + 4 * 4,
 };

@@ -561,6 +561,44 @@ static void test_mapping()
     settings::set_defaults();
 }
 
+static void test_trim()
+{
+    uint16_t channels[core::CHANNEL_COUNT];
+    core::Controls controls = {};
+
+    use_test_settings();
+    controls.sticks[core::AXIS_LEFT_VERTICAL] = 600;
+    controls.sticks[core::AXIS_LEFT_HORIZONTAL] = 2000;
+    controls.sticks[core::AXIS_RIGHT_VERTICAL] = 2000;
+    controls.sticks[core::AXIS_RIGHT_HORIZONTAL] = 3500;
+
+    CHECK(settings::find("trim.thr") == settings::TRIM_FIRST + (int)core::AXIS_LEFT_VERTICAL);
+    CHECK(settings::find("trim.ail") == settings::TRIM_FIRST + (int)core::AXIS_RIGHT_HORIZONTAL);
+    CHECK(settings::values[settings::find("trim.ele")] == 0);
+    CHECK(!settings::set(settings::find("trim.ele"), 26));
+    CHECK(settings::set(settings::find("trim.ele"), -25));
+    settings::set(settings::find("trim.thr"), 10);
+    settings::set(settings::find("trim.rud"), 3);
+    settings::set(settings::find("trim.ail"), 5);
+
+    /* Untrimmed for joystick and Xbox. */
+    core::compute_channels(controls, settings::values, channels);
+    CHECK(channels[0] == 2012 && channels[1] == 1500 && channels[2] == 988 && channels[3] == 1500);
+
+    /* AETR: elevator -100 us, throttle +40 us, rudder +12 us, aileron limited to 2012. */
+    core::compute_channels(controls, settings::values, channels, true);
+    CHECK(channels[0] == 2012 && channels[1] == 1400 && channels[2] == 1028 && channels[3] == 1512);
+    CHECK(channels[4] == 988); /* switches are not trimmed */
+
+    /* Custom: the trim is scaled by the weight and reversed with the channel. */
+    settings::values[settings::MAP_MODE] = core::MAPPING_CUSTOM;
+    settings::values[settings::find("ch.4.weight")] = 50;
+    settings::values[settings::find("ch.4.reverse")] = 1;
+    core::compute_channels(controls, settings::values, channels, true);
+    CHECK(channels[3] == 1494);
+    settings::set_defaults();
+}
+
 static void test_joystick()
 {
     uint16_t channels[16] = { 988, 1500, 2012, 900, 2100, 1000, 1500, 1500,
@@ -597,6 +635,7 @@ int main()
     test_safe_controls();
     test_led();
     test_mapping();
+    test_trim();
     test_joystick();
 
     if (failures != 0) {

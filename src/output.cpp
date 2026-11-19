@@ -145,10 +145,13 @@ void control_thread(void *, void *, void *)
             .sf = inputs.sf,
         };
 
-        core::compute_channels(controls, settings::values, channels);
+        bool on = atomic_get(&module_on) != 0;
+
+        /* Trimmed for the module only; joystick and Xbox get the untrimmed channels. */
+        core::compute_channels(controls, settings::values, channels, on);
 
         core::ModeInputs mode_inputs = {
-            .module_on = atomic_get(&module_on) != 0,
+            .module_on = on,
             .usb_host = usb_joystick_ready(),
             .held = atomic_get(&hold_output) != 0,
             .relock = atomic_set(&relock_requested, 0) != 0,

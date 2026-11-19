@@ -15,12 +15,15 @@
  *   indicators.cpp   buzzer and status LED
  */
 
+#include <stdlib.h>
+
 #include <zephyr/device.h>
 #include <zephyr/drivers/uart.h>
 #include <zephyr/kernel.h>
 
 #include "board/board.h"
 #include "calibration.h"
+#include "core/channels.h"
 #include "core/settings.h"
 #include "host.h"
 #include "indicators.h"
@@ -43,13 +46,81 @@ constexpr int SETUP_HOLD_LOOPS = 100;  /* SETUP held for 2 s */
 static const struct device *const console = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 
 static bool radio_on;
+/* The trim was changed with the trim buttons and is not stored yet. */
+static bool trim_unsaved;
 
 static void set_radio_on(bool on)
 {
     radio_on = on;
-    board::set_power_latch(on);
     module_link::set_module_on(on);
+    /*
+     * Writing to flash holds the output, which locks it, so the trim is only
+     * stored here. The power button is still held, which keeps the radio
+     * powered until the latch is released.
+     */
+    if (!on && trim_unsaved) {
+        trim_unsaved = !storage::save_trim();
+    }
+    board::set_power_latch(on);
     indicators::beep(on ? 2700 : 1800, 150);
+}
+
+/*
+ * Trim buttons, one step per press while the radio is on: left button up and
+ * down trim the throttle, left and right the yaw; the right button pitch and
+ * roll. A high tone for a step away from the centre, a low one towards it,
+ * a long one at the centre and a long low one at ±25. The centre presses do
+ * nothing here.
+ */
+static void trim_tick(uint8_t left, uint8_t right)
+{
+    static uint8_t previous_left;
+    static uint8_t previous_right;
+    uint8_t pressed_left = left & ~previous_left;
+    uint8_t pressed_right = right & ~previous_right;
+    struct {
+        uint8_t pressed; /* newly pressed directions of the button */
+        uint8_t plus;    /* direction towards 2012 */
+        uint8_t minus;   /* direction towards 988 */
+        core::Axis axis;
+    } const keys[] = {
+        { pressed_left, board::TRIM_UP, board::TRIM_DOWN, core::AXIS_LEFT_VERTICAL },
+        { pressed_left, board::TRIM_RIGHT, board::TRIM_LEFT, core::AXIS_LEFT_HORIZONTAL },
+        { pressed_right, board::TRIM_UP, board::TRIM_DOWN, core::AXIS_RIGHT_VERTICAL },
+        { pressed_right, board::TRIM_RIGHT, board::TRIM_LEFT, core::AXIS_RIGHT_HORIZONTAL },
+    };
+
+    previous_left = left;
+    previous_right = right;
+    if (!radio_on) {
+        return;
+    }
+    for (const auto &key : keys) {
+        int step = ((key.pressed & key.plus) ? 1 : 0) - ((key.pressed & key.minus) ? 1 : 0);
+        int index = settings::TRIM_FIRST + (int)key.axis;
+
+        if (step == 0) {
+            continue;
+        }
+        int before = settings::values[index];
+
+        /* set() refuses a step beyond the end; the value then stays at the end. */
+        if (settings::set(index, before + step)) {
+            trim_unsaved = true;
+        }
+        int value = settings::values[index];
+
+        /* The stock firmware's tones, plus one for the end, which it does not have. */
+        if (value == 0) {
+            indicators::beep(989, 300); /* B5 */
+        } else if (value == settings::info(index).min || value == settings::info(index).max) {
+            indicators::beep(659, 300); /* E5, also for every press beyond the end */
+        } else if (abs(value) > abs(before)) {
+            indicators::beep(1176, 100); /* D6, away from the centre */
+        } else {
+            indicators::beep(784, 100); /* G5, towards the centre */
+        }
+    }
 }
 
 int main(void)
@@ -72,6 +143,7 @@ int main(void)
         board::Inputs &inputs = snapshot.inputs;
 
         board::read_trims(inputs);
+        trim_tick(inputs.trim_left, inputs.trim_right);
 
         /*
          * Power button: hold 1 s to switch on, 2 s to switch off. Started from

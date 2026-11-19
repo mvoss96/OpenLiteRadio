@@ -156,8 +156,11 @@ uint16_t source_value(Source source, const Controls &controls, const int16_t *se
 }
 
 void compute_channels(const Controls &controls, const int16_t *settings_values,
-                      uint16_t channels[CHANNEL_COUNT])
+                      uint16_t channels[CHANNEL_COUNT], bool trimmed)
 {
+    /* Stick axis of each source, for the trim; -1 for the others. */
+    static const int8_t TRIM_AXIS[] = { -1, AXIS_RIGHT_HORIZONTAL, AXIS_RIGHT_VERTICAL,
+                                        AXIS_LEFT_VERTICAL, AXIS_LEFT_HORIZONTAL };
     /* Sources of the fixed mappings, indexed by Mapping; web/app.js has the same tables. */
     static const uint8_t FIXED_SOURCES[2][CHANNEL_COUNT] = {
         { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0 },
@@ -173,13 +176,21 @@ void compute_channels(const Controls &controls, const int16_t *settings_values,
                                : (Source)FIXED_SOURCES[mapping][channel];
         int32_t deflection = (int32_t)source_value(source, controls, settings_values) - CHANNEL_CENTRE;
 
+        /* The trim moves the stick, so weight and reverse apply to it as well. */
+        if (trimmed && source < (int)sizeof(TRIM_AXIS) && TRIM_AXIS[source] >= 0) {
+            deflection += settings_values[settings::TRIM_FIRST + TRIM_AXIS[source]] * TRIM_STEP_US;
+        }
         if (custom) {
             deflection = deflection * fields[settings::CHANNEL_WEIGHT] / 100;
             if (fields[settings::CHANNEL_REVERSE] != 0) {
                 deflection = -deflection;
             }
         }
-        channels[channel] = (uint16_t)(CHANNEL_CENTRE + deflection);
+        int32_t value = CHANNEL_CENTRE + deflection;
+
+        channels[channel] = (uint16_t)(value < CHANNEL_MIN   ? CHANNEL_MIN
+                                       : value > CHANNEL_MAX ? CHANNEL_MAX
+                                                             : value);
     }
 }
 
