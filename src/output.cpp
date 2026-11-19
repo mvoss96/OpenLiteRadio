@@ -38,9 +38,12 @@ atomic_t hold_output;
 atomic_t relock_requested;
 /* Set once a frame from the module arrived since it was switched on. */
 atomic_t module_answered;
+/* Frames the control thread handed to the UART, and those refused because the previous one was still being sent. */
+atomic_t frames_sent;
+atomic_t frames_not_sent;
 atomic_t period_us = ATOMIC_INIT(DEFAULT_PERIOD_US);
-/* Delay in microseconds for one frame after a timing frame; 0 means none pending. */
-atomic_t next_delay_us;
+/* Microseconds to add to the next frame period after a timing frame; 0 means none pending. */
+atomic_t frame_correction_us;
 
 /*
  * Written by the control thread. The main thread copies it with the
@@ -61,7 +64,6 @@ struct {
 
 K_THREAD_STACK_DEFINE(control_stack, 1024);
 struct k_thread control_thread_data;
-K_TIMER_DEFINE(frame_timer, nullptr, nullptr);
 
 void apply_injection(board::Inputs &inputs)
 {
@@ -85,6 +87,12 @@ void apply_injection(board::Inputs &inputs)
     inputs.sf = (injected.fields & INJECT_SF) ? v.sf : inputs.sf;
 }
 
+/* Send one frame from the control thread and count it. */
+void send_frame(const uint8_t *frame, size_t size)
+{
+    atomic_inc(board::module_send(frame, size) ? &frames_sent : &frames_not_sent);
+}
+
 /* Send one channel frame with values in microseconds. */
 void send_channels(const uint16_t channels[core::CHANNEL_COUNT])
 {
@@ -95,25 +103,31 @@ void send_channels(const uint16_t channels[core::CHANNEL_COUNT])
         values[i] = crsf::from_microseconds(channels[i]);
     }
     crsf::encode_channels(values, frame);
-    board::module_send(frame, sizeof(frame));
+    send_frame(frame, sizeof(frame));
 }
 
 /* Read the controls, compute the channels and send them once per frame period. */
 void control_thread(void *, void *, void *)
 {
     core::ModeMachine machine;
-    uint32_t period = 0;
     int64_t last_ping_ms = 0;
+    int64_t next_us = k_ticks_to_us_floor64(k_uptime_ticks());
 
     while (true) {
-        uint32_t wanted_period = (uint32_t)atomic_get(&period_us);
-        uint32_t delay = (uint32_t)atomic_set(&next_delay_us, 0);
+        /*
+         * Each frame time follows from the previous one, not from the moment
+         * this loop gets here, so neither the work below nor the rounding to
+         * kernel ticks (100 us) adds up from frame to frame. A correction
+         * from the module shifts one period.
+         */
+        next_us += (int64_t)atomic_get(&period_us) + (int64_t)atomic_set(&frame_correction_us, 0);
 
-        if (wanted_period != period || delay != 0) {
-            period = wanted_period;
-            k_timer_start(&frame_timer, K_USEC(delay != 0 ? delay : period), K_USEC(period));
+        int64_t now_us = k_ticks_to_us_floor64(k_uptime_ticks());
+
+        if (next_us < now_us) {
+            next_us = now_us; /* fell behind, e.g. while the scheduler was locked */
         }
-        k_timer_status_sync(&frame_timer);
+        k_sleep(K_TIMEOUT_ABS_US(next_us));
 
         board::Inputs inputs = {};
         uint16_t channels[core::CHANNEL_COUNT];
@@ -184,7 +198,7 @@ void control_thread(void *, void *, void *)
                 uint8_t ping[crsf::PING_FRAME_SIZE];
 
                 crsf::encode_ping(ping);
-                board::module_send(ping, sizeof(ping));
+                send_frame(ping, sizeof(ping));
                 last_ping_ms = k_uptime_get();
             }
         }
@@ -215,6 +229,12 @@ void set_module_on(bool on)
     board::set_module_enabled(on);
 }
 
+void sent_counts(uint32_t &sent, uint32_t &not_sent)
+{
+    sent = (uint32_t)atomic_get(&frames_sent);
+    not_sent = (uint32_t)atomic_get(&frames_not_sent);
+}
+
 void note_module_frame()
 {
     atomic_set(&module_answered, 1);
@@ -238,7 +258,8 @@ void relock()
 void set_frame_timing(uint32_t interval_us, int32_t offset_us)
 {
     atomic_set(&period_us, interval_us);
-    atomic_set(&next_delay_us, crsf::next_frame_delay(interval_us, offset_us));
+    atomic_set(&frame_correction_us,
+               (atomic_val_t)crsf::next_frame_delay(interval_us, offset_us) - (atomic_val_t)interval_us);
 }
 
 uint32_t frame_period_us()

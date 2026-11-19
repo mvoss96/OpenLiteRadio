@@ -42,6 +42,9 @@ bool module_is_on();
 /* Called for every frame received from the module: it is running and answering. */
 void note_module_frame();
 
+/* Frames the control thread sent to the module, and those refused because the line was busy. */
+void sent_counts(uint32_t &sent, uint32_t &not_sent);
+
 /*
  * Stop or allow channel frames, e.g. for a calibration run or a flash write.
  * Returns the previous state, so that a caller can restore it. After a hold

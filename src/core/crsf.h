@@ -73,10 +73,19 @@ private:
 bool decode_timing(const uint8_t *frame, size_t size, uint32_t &interval_us, int32_t &offset_us);
 
 /*
- * Delay until the next channel frame after a timing frame. The offset says
- * how much too early (positive) or too late (negative) the last frame reached
- * the module; one frame period is stretched or shortened by it, by at most a
- * quarter of the interval.
+ * Offset the frames are held at. The module reports how much earlier than it
+ * needs a frame arrived (positive) or how late (negative), with only 100 us
+ * of margin; aiming at 0 lets small timing variations push a frame past the
+ * module's transmission, where it counts as almost a whole interval early.
+ */
+constexpr int32_t SYNC_TARGET_US = 500;
+
+/*
+ * Delay until the next channel frame after a timing frame: one frame period
+ * stretched or shortened by half the difference between the offset and
+ * SYNC_TARGET_US, by at most a quarter of the interval. Half, because the
+ * module averages over several frames and sends a second timing frame right
+ * after a late one, so the full difference would be corrected twice.
  */
 uint32_t next_frame_delay(uint32_t interval_us, int32_t offset_us);
 

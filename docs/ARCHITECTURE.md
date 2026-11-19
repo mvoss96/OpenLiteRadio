@@ -346,8 +346,13 @@ Stage 2 as built so far:
 - The control thread sends one channel frame per frame period while the
   module is on. The period starts at 4 ms and follows the interval in the
   module's timing frames. The offset in those frames says how early or late
-  the last frame arrived; one frame period is stretched or shortened by it,
-  by at most a quarter of the interval.
+  the last frame arrived. The radio holds it at +500 µs: one frame period is
+  stretched or shortened by half the difference, by at most a quarter of the
+  interval. Each frame time is carried forward from the previous one, so the
+  time the control thread spends and the rounding to 100 µs kernel ticks do
+  not add up. Measured with a bound receiver: the offset stays between +400
+  and +580 µs and the module sends only its regular timing frame every
+  200 ms.
 - Throttle lock: the radio starts locked. After every start of the module
   and after every changed setting no frame is sent until the unlock gesture
   in `unlock.mode` was made: 0 none, 1 throttle at its lower end (default),
@@ -400,7 +405,9 @@ From the radio:
   correct and with a wrong checksum), `lq` (percent) and `rssi` (dBm without
   the sign) from the receiver's link statistics, `offset` (microseconds, from
   the last timing frame), `bindpar` (number of the module's bind parameter, 0
-  until it was searched), `mode` (the mode, e.g. `usb_joystick`,
+  until it was searched), `tx` and `txbusy` (frames the control thread
+  handed to the module's UART, and those refused because the previous one
+  was still being sent), `mode` (the mode, e.g. `usb_joystick`,
   `elrs_locked`, `elrs_active`, see "Operating modes"), `calib` (1 during a
   calibration run).
 - `setting KEY TYPE MIN MAX DEFAULT VALUE`, one line per setting after `list`,

@@ -109,14 +109,15 @@ bool decode_timing(const uint8_t *frame, size_t size, uint32_t &interval_us, int
 uint32_t next_frame_delay(uint32_t interval_us, int32_t offset_us)
 {
     int32_t limit = (int32_t)(interval_us / 4);
+    int32_t correction = (offset_us - SYNC_TARGET_US) / 2;
 
-    if (offset_us > limit) {
-        offset_us = limit;
+    if (correction > limit) {
+        correction = limit;
     }
-    if (offset_us < -limit) {
-        offset_us = -limit;
+    if (correction < -limit) {
+        correction = -limit;
     }
-    return (uint32_t)((int32_t)interval_us + offset_us);
+    return (uint32_t)((int32_t)interval_us + correction);
 }
 
 namespace {

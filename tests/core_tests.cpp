@@ -120,9 +120,11 @@ static void test_parser()
 
 static void test_frame_delay()
 {
-    CHECK(crsf::next_frame_delay(4000, 0) == 4000);
-    CHECK(crsf::next_frame_delay(4000, 300) == 4300);
-    CHECK(crsf::next_frame_delay(4000, -300) == 3700);
+    /* At the target nothing changes; half of the difference is corrected. */
+    CHECK(crsf::next_frame_delay(4000, crsf::SYNC_TARGET_US) == 4000);
+    CHECK(crsf::next_frame_delay(4000, crsf::SYNC_TARGET_US + 600) == 4300);
+    CHECK(crsf::next_frame_delay(4000, crsf::SYNC_TARGET_US - 600) == 3700);
+    /* Limited to a quarter of the interval. */
     /* Limited to a quarter of the interval. */
     CHECK(crsf::next_frame_delay(4000, 3000) == 5000);
     CHECK(crsf::next_frame_delay(4000, -3000) == 3000);

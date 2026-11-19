@@ -7,7 +7,7 @@
  *   ok ... / error REASON                    answer to the other settings commands
  *   state sticks=a,b,c,d sa= sb= sc= sd= se= sf= bind= setup= power= tl= tr=
  *         keys= battery= usb= on= module= ch=c1,...,c16 lock= period= frames=
- *         crc= lq= rssi= offset= bindpar= mode= calib=
+ *         crc= lq= rssi= offset= bindpar= tx= txbusy= mode= calib=
  * To the radio:
  *   hello             ask for the hello line
  *   stream 0|1        stop or start the state lines
@@ -416,12 +416,16 @@ void print_state(const output::Snapshot &snapshot, bool radio_on)
     for (int channel = 0; channel < core::CHANNEL_COUNT; channel++) {
         printk(channel == 0 ? "%u" : ",%u", snapshot.channels[channel]);
     }
+    uint32_t sent = 0;
+    uint32_t not_sent = 0;
+
+    output::sent_counts(sent, not_sent);
     printk(" lock=%u period=%u frames=%u crc=%u lq=%u rssi=%u offset=%d bindpar=%u "
-           "mode=%s calib=%u\n",
+           "tx=%u txbusy=%u mode=%s calib=%u\n",
            snapshot.locked, (unsigned int)output::frame_period_us(), (unsigned int)link.frames,
            (unsigned int)link.crc_errors, link.link_quality, link.rssi,
-           (int)link.timing_offset_us, link.bind_parameter, core::mode_name(snapshot.mode),
-           calibration::running());
+           (int)link.timing_offset_us, link.bind_parameter, (unsigned int)sent,
+           (unsigned int)not_sent, core::mode_name(snapshot.mode), calibration::running());
 }
 
 } // namespace host
