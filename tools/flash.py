@@ -76,12 +76,18 @@ def find_port(usb_ids):
     return None
 
 
-def wait_port(usb_ids, timeout):
+def ports_with(usb_ids):
+    """Return the names of all serial ports with one of these (VID, PID) pairs."""
+    return {port.device for port in list_ports.comports() if (port.vid, port.pid) in usb_ids}
+
+
+def wait_port(usb_ids, timeout, ignore=()):
+    """Wait for a port with one of these IDs that is not in ignore."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        device = find_port(usb_ids)
-        if device:
-            return device
+        new = ports_with(usb_ids) - set(ignore)
+        if new:
+            return sorted(new)[0]
         time.sleep(0.2)
     return None
 
@@ -147,6 +153,7 @@ def send_image(device, image):
 def main():
     parser = argparse.ArgumentParser(description="Load an application image onto the LiteRadio 4.")
     parser.add_argument("image", type=Path, help="application binary linked at 0x08008000")
+    parser.add_argument("--port", help="port of a radio already in update mode, e.g. COM7")
     args = parser.parse_args()
 
     image = args.image.read_bytes()
@@ -154,19 +161,26 @@ def main():
         sys.exit("image must fit into the 96 KiB application area")
     print(f"{args.image}: {len(image)} bytes, SHA-256 {hashlib.sha256(image).hexdigest()}")
 
-    updater = find_port(UPDATER_IDS)
-    if updater is None:
-        console = find_port(CONSOLE_IDS)
-        if console is None:
-            sys.exit("no controller found; unplug USB, hold SETUP and power until "
-                     "the double beep, then plug USB in")
+    # Other STM32 devices, e.g. a Betaflight flight controller, use the updater's IDs
+    # too. Only a port that appears after the update request is taken for the updater.
+    present = ports_with(UPDATER_IDS)
+    console = find_port(CONSOLE_IDS)
+    if console is not None:
         request_update_mode(console)
-        updater = wait_port(UPDATER_IDS, 15)
+        updater = wait_port(UPDATER_IDS, 15, ignore=present)
         if updater is None:
             if find_port(CONSOLE_IDS):
                 sys.exit("the updater did not appear; is another program using the console port?")
             sys.exit("the updater did not appear")
         time.sleep(1.0)
+    elif args.port:
+        updater = args.port
+    elif present:
+        sys.exit(f"no controller console found; ports with the updater's IDs: {', '.join(sorted(present))}. "
+                 "If the radio is in update mode, name its port with --port")
+    else:
+        sys.exit("no controller found; unplug USB, hold SETUP and power until "
+                 "the double beep, then plug USB in")
 
     print(f"{updater}: sending image")
     error = send_image(updater, image)
