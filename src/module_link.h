@@ -33,4 +33,7 @@ void tick();
 
 Status status();
 
+/* True while link statistics with a link quality above 0 arrived within the last second. */
+bool receiver_connected();
+
 } // namespace module_link

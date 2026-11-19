@@ -6,6 +6,7 @@
 #include "core/channels.h"
 #include "core/crsf.h"
 #include "core/joystick.h"
+#include "core/led.h"
 #include "core/mode.h"
 #include "core/settings.h"
 
@@ -365,6 +366,39 @@ static void test_channels()
     CHECK(core::source_value(core::SOURCE_THROTTLE, controls, settings::values) == 2012);
 }
 
+static void test_led()
+{
+    using core::Mode;
+    core::LedInputs in = { Mode::OFF, false, false };
+
+    CHECK(core::led_colour(in, 0) == 0);
+    in.mode = Mode::USB_JOYSTICK;
+    CHECK(core::led_colour(in, 0) == 0x300500);
+    in.mode = Mode::ELRS_LOCKED;
+    CHECK(core::led_colour(in, 0) == 0x300000);
+
+    /* Sending with a receiver: blue, steady. */
+    in.mode = Mode::ELRS_ACTIVE;
+    in.receiver_connected = true;
+    CHECK(core::led_colour(in, 0) == 0x000030 && core::led_colour(in, 1000) == 0x000030);
+
+    /* Without a receiver: blue pulsing, a fifth of the brightness at 0 ms, full at 1 s, never off. */
+    in.receiver_connected = false;
+    CHECK(core::led_colour(in, 0) == 0x000009);
+    CHECK(core::led_colour(in, 1000) == 0x000030);
+    CHECK(core::led_colour(in, 500) != core::led_colour(in, 1000));
+    for (uint32_t ms = 0; ms < 2000; ms += 20) {
+        CHECK(core::led_colour(in, ms) != 0 && (core::led_colour(in, ms) & 0xffff00u) == 0);
+    }
+
+    /* Calibration wins over every mode: yellow and white, half a second each. */
+    in.calibrating = true;
+    CHECK(core::led_colour(in, 0) == 0x302000);
+    CHECK(core::led_colour(in, 499) == 0x302000);
+    CHECK(core::led_colour(in, 500) == 0x202020);
+    CHECK(core::led_colour(in, 1000) == 0x302000);
+}
+
 static void test_safe_controls()
 {
     uint16_t channels[core::CHANNEL_COUNT];
@@ -560,6 +594,7 @@ int main()
     test_throttle_lock();
     test_mode();
     test_safe_controls();
+    test_led();
     test_mapping();
     test_joystick();
 

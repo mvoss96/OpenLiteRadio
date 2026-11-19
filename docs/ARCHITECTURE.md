@@ -306,7 +306,7 @@ upper row wins.
 | State | Status LED |
 |-------|------------|
 | Error (storage, module does not answer) | red, fast blinking |
-| Calibration | yellow and white alternating (today yellow) |
+| Calibration | yellow and white alternating |
 | Binding | cyan and white alternating |
 | Module in WiFi mode | green and white alternating |
 | On, Bluetooth joystick | purple |
@@ -317,6 +317,15 @@ upper row wins.
 | Off, at a PC as joystick | orange |
 | Off, at a PC as Xbox controller | yellow |
 | Off, on a charger or without USB | off |
+
+Built in `src/core/led.cpp` (with tests) for every row; the rows of modes
+that have no transitions yet (error, binding, WiFi, Bluetooth, PC, Xbox)
+show once those modes exist. A notice pulses between a fifth and full
+brightness in 2 s. The colours are driven at about a fifth of the LED's
+range; orange is 0x300500, since with more green it looks yellow on this
+LED. "Receiver connected" means link statistics with a link quality above
+0 arrived within the last second. The host command `led` still overrides
+the LED until `led auto`.
 
 The four battery LEDs show the charge, four to one; below one the last LED
 blinks, with a warning tone if enabled. Still to be observed on the device:
@@ -334,7 +343,7 @@ what the vendor bootloader shows on these LEDs.
 | 6 | Bluetooth, WiFi, battery display, remaining features | open |
 
 Stage 1 as built: the power button switches the radio on after 1 s and off
-after 2 s. The status LED is blue while the radio is on.
+after 2 s. The status LED follows the codes in "LEDs".
 
 Stage 2 as built so far:
 
@@ -371,7 +380,7 @@ Stage 2 as built so far:
   low one that the search failed.
 - Stick calibration, taken from stage 3 because the factory calibration does
   not fit the readings (docs/HARDWARE.md): SETUP held for 2 s starts a run,
-  the status LED turns yellow and no channel frames are sent. The sticks are
+  the status LED alternates yellow and white and no channel frames are sent. The sticks are
   moved to all ends. A short press of SETUP ends the run with the right stick
   released and the throttle left at its lower end. The released readings
   become the centres and the throttle's lower end, the other ends are the
@@ -407,7 +416,8 @@ From the radio:
   throttle lock holds the output back), `period` (frame period in
   microseconds), `frames` and `crc` (frames received from the module with a
   correct and with a wrong checksum), `lq` (percent) and `rssi` (dBm without
-  the sign) from the receiver's link statistics, `offset` (microseconds, from
+  the sign) from the receiver's link statistics, both 0 when none arrived
+  within the last second, `offset` (microseconds, from
   the last timing frame), `bindpar` (number of the module's bind parameter, 0
   until it was searched), `tx` and `txbusy` (frames the control thread
   handed to the module's UART, and those refused because the previous one

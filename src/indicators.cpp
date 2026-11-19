@@ -31,13 +31,13 @@ void set_led_from_host(bool from_host, uint8_t red, uint8_t green, uint8_t blue)
     }
 }
 
-void tick(bool radio_on, bool module_on, bool locked, bool calibrating)
+void tick(const core::LedInputs &state)
 {
     /* Colour as 0xRRGGBB; sent to the LED only when it changes. */
     static uint32_t shown = UINT32_MAX;
-    uint32_t colour = 0;
+    int64_t now = k_uptime_get();
 
-    if (beep_until != 0 && k_uptime_get() >= beep_until) {
+    if (beep_until != 0 && now >= beep_until) {
         beep_until = 0;
         board::set_buzzer(0);
     }
@@ -45,13 +45,9 @@ void tick(bool radio_on, bool module_on, bool locked, bool calibrating)
         shown = UINT32_MAX;
         return;
     }
-    if (calibrating) {
-        colour = 0x302000; /* yellow: calibration run */
-    } else if (module_on && locked) {
-        colour = 0x300000; /* red: waiting for throttle down */
-    } else if (radio_on) {
-        colour = 0x000030; /* blue: working */
-    }
+
+    uint32_t colour = core::led_colour(state, (uint32_t)now);
+
     if (colour != shown) {
         shown = colour;
         board::set_status_led((uint8_t)(colour >> 16), (uint8_t)(colour >> 8), (uint8_t)colour);

@@ -15,6 +15,7 @@ target_sources(app PRIVATE
   src/core/channels.cpp
   src/core/crsf.cpp
   src/core/joystick.cpp
+  src/core/led.cpp
   src/core/mode.cpp
   src/usb_device.c
   src/core/settings.cpp

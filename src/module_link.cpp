@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+#include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
 #include "board/board.h"
@@ -36,6 +37,8 @@ int bind_attempts;
 crsf::Parser parser;
 uint32_t frames;
 crsf::LinkStatistics link_statistics;
+/* Uptime of the last link statistics frame; the module sends them only while a receiver answers. */
+int64_t link_statistics_ms = -1;
 int32_t timing_offset_us;
 bool show_frames;
 
@@ -135,7 +138,9 @@ void poll()
                 output::set_frame_timing(interval, timing_offset_us);
             }
             bind_handle_frame(parser.frame(), parser.size());
-            crsf::decode_link_statistics(parser.frame(), parser.size(), link_statistics);
+            if (crsf::decode_link_statistics(parser.frame(), parser.size(), link_statistics)) {
+                link_statistics_ms = k_uptime_get();
+            }
         }
     }
 }
@@ -173,10 +178,21 @@ void tick()
     bind_tick();
 }
 
+bool receiver_connected()
+{
+    constexpr int64_t STALE_MS = 1000;
+
+    return link_statistics_ms >= 0 && k_uptime_get() - link_statistics_ms < STALE_MS &&
+           link_statistics.uplink_quality > 0;
+}
+
 Status status()
 {
-    return { frames, parser.crc_errors(), link_statistics.uplink_quality,
-             link_statistics.uplink_rssi, timing_offset_us, bind_parameter };
+    /* Without fresh link statistics there is no receiver, whatever the last ones said. */
+    bool fresh = receiver_connected();
+
+    return { frames, parser.crc_errors(), fresh ? link_statistics.uplink_quality : (uint8_t)0,
+             fresh ? link_statistics.uplink_rssi : (uint8_t)0, timing_offset_us, bind_parameter };
 }
 
 } // namespace module_link

@@ -92,7 +92,7 @@ int main(void)
             power_handled = false;
         }
 
-        /* One tone when the throttle lock is released; the LED is red until then. */
+        /* One tone when the throttle lock is released. */
         bool module_is_on = output::module_is_on();
 
         if (module_is_on && was_locked && !snapshot.locked &&
@@ -100,7 +100,7 @@ int main(void)
             indicators::beep(2700, 100);
         }
         was_locked = snapshot.locked;
-        indicators::tick(radio_on, module_is_on, snapshot.locked, calibration::running());
+        indicators::tick({ snapshot.mode, calibration::running(), module_link::receiver_connected() });
 
         /* BIND held for 1 s starts binding. */
         if (inputs.bind) {
