@@ -62,7 +62,7 @@ analysis kept outside this repository.
 | S | Stick mode selection (mode 2 by default) | code: mode flag, meaning open | missing |
 | S | Response curve per stick (expo) | code: 512-entry table | missing |
 | C | Dual rates | no | missing |
-| C | Several model memories | no | four named channel-assignment profiles (0.6.0); not yet in the configurator |
+| C | Several model memories | no | dropped: without a display the radio cannot show which one is active; one Custom assignment beside the fixed AETR and TAER (0.9.0), export and import as a file planned |
 | C | Free mixes beyond the assignment table | no | missing |
 
 ## Link to the ELRS module

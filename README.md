@@ -64,9 +64,10 @@ Open `web/index.html` in Chrome or Edge, plug the radio in and press
 "Verbinden". Press "Trennen" before loading firmware; the serial port can only
 be open in one program. The page is in German.
 
-- "Belegung" shows the profile and a drawing of the radio. The profile menu
-  loads, creates, renames and deletes up to four own profiles stored on the
-  radio and applies the templates AETR and TAER. Each control carries a label
+- "Belegung" shows the assignment in use and a drawing of the radio. The
+  assignment is AETR or TAER, both fixed, or Custom, the own one stored on the
+  radio; changing anything while AETR or TAER is chosen turns it into Custom,
+  after asking if that replaces a different Custom assignment. Each control carries a label
   with its channel and live value; clicking a label opens a card with its
   channel, dead zone or switch positions, response curve, and under
   "Erweitert" weight and reverse. Choosing a taken channel asks whether to
@@ -77,8 +78,7 @@ be open in one program. The page is in German.
   module and binding, the fixed button combinations, and every setting the
   radio reports in raw form.
 
-Every change is stored on the radio at once, in the active own profile if
-there is one. The page needs no installation; the browser reaches the
+Every change is stored on the radio at once. The page needs no installation; the browser reaches the
 radio's USB serial port through the Web Serial API.
 
 ## USB joystick

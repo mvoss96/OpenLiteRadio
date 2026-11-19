@@ -23,7 +23,7 @@ in [WIRING.md](WIRING.md).
 The app layer is one file per task: `output.cpp` (control thread, holds,
 throttle lock, test inputs), `module_link.cpp` (frames from the module, link
 statistics, binding), `host.cpp` (line protocol and state lines),
-`storage.cpp` (settings and profiles in flash), `calibration.cpp` (stick
+`storage.cpp` (settings in flash), `calibration.cpp` (stick
 calibration run), `indicators.cpp` (buzzer and status LED), `usb_device.c`
 (USB serial port and joystick) and `main.cpp` (start, power button, BIND and
 SETUP, the main loop). Only `output.cpp` touches the state shared between the
@@ -282,10 +282,14 @@ radio on.
   mapping (channels, weight, reverse). The choice and the Custom mapping are
   stored and changed only from the PC. Changing AETR or TAER turns it into
   Custom with the template as starting point; an existing Custom mapping is
-  replaced after a question. There are no profiles; the current profile code
-  (`profile ...`, NVS 0x400 to 0x410) is to be removed. Custom is stored in the
-  format of one profile slot, so that more slots can be added later.
-  Export and import of the mapping as a file follow in the configurator.
+  replaced after a question. There are no profiles. Built in 0.9.0: the
+  setting `map.mode` (0 AETR, 1 TAER, 2 Custom, default AETR) chooses the
+  mapping; `core::compute_channels()` takes AETR and TAER from fixed tables
+  (weight 100, no reverse) and Custom from the settings `ch.N.*`, which keep
+  their values while a fixed mapping is chosen. Custom is stored as the
+  `ch.N.*` settings, which the configurator writes anyway; several Custom
+  mappings would need slots of their own. Export and import of the mapping
+  as a file follow in the configurator.
 - Trim shifts the centre of the four stick axes, 4 µs per step, at most ±25
   steps. It is stored apart from the mapping and changed with the trim
   buttons, a short tone per step and another at the centre. It applies only to
@@ -436,20 +440,10 @@ To the radio:
 | `defaults` | set all settings except the stick calibration (`cal.N.*`) to their defaults without storing them |
 | `calibrate start` / `calibrate end` | stick calibration run, as SETUP on the radio |
 | `calibrate cancel` | end the run and keep the previous calibration |
-| `profiles` | report `profile N NAME` for each used slot, then `active N` (0: none) |
-| `profile save N NAME` | store the current `ch.N.*` settings as profile N (1 to 4) and make it the active one |
-| `profile load N` | put profile N into the `ch.N.*` settings, store all settings and make it the active one |
-| `profile name N NAME` | rename profile N |
-| `profile delete N` | remove profile N |
-| `profile none` | make no profile the active one, e.g. after the configurator wrote a template |
 | `inject KEY=VALUE ...` | test inputs: replace the readings of `sticks` (four raw values, comma-separated) and `sa` to `sf`, with the keys of the state line. Keys add up over several lines; the replacement ends 10 s after the last `inject` line, with `inject off`, or when the ELRS module starts. Refused with `error module on` while the module is on |
 
-Profiles (`src/core/profiles.cpp`) are saved channel assignments: a name of 1
-to 15 bytes of UTF-8 and source, weight and reverse of all 16 channels, one
-NVS record per slot (ids 0x400 to 0x403) plus the active slot (0x410). The
-running assignment is always the settings `ch.N.*`; a profile is a copy that
-`profile load` puts back. Templates such as AETR are not stored on the radio;
-the configurator writes their values with `set`.
+The assignment in use is the setting `map.mode`: AETR and TAER are fixed in
+the firmware, Custom is the settings `ch.N.*` (see "Mapping and trim").
 
 The protocol number in the hello line changes when a message changes meaning.
 New keys and new commands do not change it; a reader ignores what it does not

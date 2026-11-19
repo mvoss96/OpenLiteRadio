@@ -7,7 +7,6 @@
 #include "core/crsf.h"
 #include "core/joystick.h"
 #include "core/mode.h"
-#include "core/profiles.h"
 #include "core/settings.h"
 
 static int failures;
@@ -354,7 +353,8 @@ static void test_channels()
     CHECK(channels[4] == 2012 && channels[5] == 1500 && channels[6] == 2012);
     CHECK(channels[7] == 2012 && channels[8] == 2012 && channels[9] == 988);
 
-    /* Another source, half weight and reverse on channel 1; a switch on channel 12. */
+    /* Custom: another source, half weight and reverse on channel 1; a switch on channel 12. */
+    settings::values[settings::MAP_MODE] = core::MAPPING_CUSTOM;
     settings::values[settings::find("ch.1.source")] = core::SOURCE_THROTTLE;
     settings::values[settings::find("ch.1.weight")] = 50;
     settings::values[settings::find("ch.1.reverse")] = 1;
@@ -380,7 +380,8 @@ static void test_safe_controls()
     /* Channels without a source stay at the centre. */
     CHECK(channels[10] == 1500);
 
-    /* TAER with the throttle reversed: the safe value follows the mapping. */
+    /* A Custom TAER with the throttle reversed: the safe value follows the mapping. */
+    settings::values[settings::MAP_MODE] = core::MAPPING_CUSTOM;
     settings::values[settings::find("ch.1.source")] = core::SOURCE_THROTTLE;
     settings::values[settings::find("ch.1.reverse")] = 1;
     settings::values[settings::find("ch.3.source")] = core::SOURCE_AILERON;
@@ -485,42 +486,43 @@ static void test_throttle_lock()
     CHECK(!lock.update(1700, 0));
 }
 
-static void test_profiles()
+static void test_mapping()
 {
-    profiles::Profile profile;
-    profiles::Profile out_of_range;
+    uint16_t channels[core::CHANNEL_COUNT];
+    /* Throttle up, aileron right, SA on; the other controls at rest. */
+    core::Controls controls = {};
 
-    CHECK(profiles::name_valid("Mein Quad"));
-    CHECK(profiles::name_valid("Übung 15 Bytes"));
-    CHECK(!profiles::name_valid(""));
-    CHECK(!profiles::name_valid("sechzehn Zeichen"));
-    CHECK(!profiles::name_valid("Tab\there"));
+    controls.sticks[core::AXIS_LEFT_VERTICAL] = 3500;
+    controls.sticks[core::AXIS_LEFT_HORIZONTAL] = 2048;
+    controls.sticks[core::AXIS_RIGHT_VERTICAL] = 2048;
+    controls.sticks[core::AXIS_RIGHT_HORIZONTAL] = 3500;
+    controls.sa = 1;
 
-    /* Capture a changed assignment, reset to the defaults, apply it again. */
+    /* AETR is the default, and the default ch.N.* settings are AETR as well. */
     settings::set_defaults();
-    settings::set(settings::find("ch.1.source"), 4);
-    settings::set(settings::find("ch.4.source"), 1);
-    settings::set(settings::find("ch.4.weight"), 80);
-    settings::set(settings::find("ch.16.reverse"), 1);
-    profiles::capture(settings::values, "Mein Quad", profile);
-    CHECK(std::strcmp(profile.name, "Mein Quad") == 0);
-    CHECK(profile.source[0] == 4 && profile.source[3] == 1 && profile.weight[3] == 80);
-    CHECK(profile.reverse == 0x8000);
+    CHECK(settings::values[settings::MAP_MODE] == core::MAPPING_AETR);
+    CHECK(settings::find("map.mode") == settings::MAP_MODE);
+    core::compute_channels(controls, settings::values, channels);
+    CHECK(channels[0] == 2012 && channels[2] == 2012 && channels[4] == 2012);
 
-    settings::set_defaults();
-    CHECK(profiles::apply(profile));
-    CHECK(settings::values[settings::find("ch.1.source")] == 4);
-    CHECK(settings::values[settings::find("ch.4.source")] == 1);
-    CHECK(settings::values[settings::find("ch.4.weight")] == 80);
-    CHECK(settings::values[settings::find("ch.16.reverse")] == 1);
-    CHECK(settings::values[settings::find("ch.15.reverse")] == 0);
+    /* A Custom assignment is ignored while AETR or TAER is chosen and kept for later. */
+    settings::set(settings::find("ch.1.source"), core::SOURCE_RUDDER);
+    settings::set(settings::find("ch.3.reverse"), 1);
+    core::compute_channels(controls, settings::values, channels);
+    CHECK(channels[0] == 2012 && channels[2] == 2012);
 
-    /* A damaged record changes nothing. */
-    out_of_range = profile;
-    out_of_range.source[0] = 11;
-    out_of_range.source[1] = 9;
-    CHECK(!profiles::apply(out_of_range));
-    CHECK(settings::values[settings::find("ch.2.source")] == 2);
+    settings::set(settings::MAP_MODE, core::MAPPING_TAER);
+    core::compute_channels(controls, settings::values, channels);
+    CHECK(channels[0] == 2012); /* throttle */
+    CHECK(channels[1] == 2012); /* aileron */
+    CHECK(channels[2] == 1500); /* elevator */
+    CHECK(channels[4] == 2012); /* SA */
+
+    settings::set(settings::MAP_MODE, core::MAPPING_CUSTOM);
+    core::compute_channels(controls, settings::values, channels);
+    CHECK(channels[0] == 1500); /* rudder at rest */
+    CHECK(channels[2] == 988);  /* throttle reversed */
+    CHECK(!settings::set(settings::MAP_MODE, 3));
     settings::set_defaults();
 }
 
@@ -558,7 +560,7 @@ int main()
     test_throttle_lock();
     test_mode();
     test_safe_controls();
-    test_profiles();
+    test_mapping();
     test_joystick();
 
     if (failures != 0) {

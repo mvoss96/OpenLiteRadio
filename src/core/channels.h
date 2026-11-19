@@ -41,6 +41,13 @@ enum Source {
     SOURCE_SF = 10,
 };
 
+/* The assignment in use; the value of the setting map.mode. web/app.js uses the same numbers. */
+enum Mapping {
+    MAPPING_AETR = 0,   /* fixed: aileron, elevator, throttle, rudder, then SA to SF */
+    MAPPING_TAER = 1,   /* fixed: throttle, aileron, elevator, rudder, then SA to SF */
+    MAPPING_CUSTOM = 2, /* the settings ch.N.source, ch.N.weight and ch.N.reverse */
+};
+
 /* Raw 12-bit readings of one axis at its two ends and at rest. */
 struct AxisCalibration {
     uint16_t low;
@@ -101,7 +108,9 @@ uint16_t source_value(Source source, const Controls &controls, const int16_t *se
 
 /*
  * Compute all channels from the settings: each channel follows its source,
- * scaled by its weight around the centre and reversed if set.
+ * scaled by its weight around the centre and reversed if set. With a fixed
+ * mapping (map.mode AETR or TAER) the sources come from that mapping, with
+ * weight 100 and no reverse, and the ch.N.* settings are not used.
  */
 void compute_channels(const Controls &controls, const int16_t *settings_values,
                       uint16_t channels[CHANNEL_COUNT]);

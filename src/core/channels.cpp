@@ -158,16 +158,26 @@ uint16_t source_value(Source source, const Controls &controls, const int16_t *se
 void compute_channels(const Controls &controls, const int16_t *settings_values,
                       uint16_t channels[CHANNEL_COUNT])
 {
+    /* Sources of the fixed mappings, indexed by Mapping; web/app.js has the same tables. */
+    static const uint8_t FIXED_SOURCES[2][CHANNEL_COUNT] = {
+        { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0 },
+        { 3, 1, 2, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0 },
+    };
+    int mapping = settings_values[settings::MAP_MODE];
+
     for (int channel = 0; channel < CHANNEL_COUNT; channel++) {
         const int16_t *fields =
             &settings_values[settings::CHANNEL_FIRST + settings::CHANNEL_FIELDS * channel];
-        int32_t deflection =
-            (int32_t)source_value((Source)fields[settings::CHANNEL_SOURCE], controls,
-                                  settings_values) - CHANNEL_CENTRE;
+        bool custom = mapping == MAPPING_CUSTOM;
+        Source source = custom ? (Source)fields[settings::CHANNEL_SOURCE]
+                               : (Source)FIXED_SOURCES[mapping][channel];
+        int32_t deflection = (int32_t)source_value(source, controls, settings_values) - CHANNEL_CENTRE;
 
-        deflection = deflection * fields[settings::CHANNEL_WEIGHT] / 100;
-        if (fields[settings::CHANNEL_REVERSE] != 0) {
-            deflection = -deflection;
+        if (custom) {
+            deflection = deflection * fields[settings::CHANNEL_WEIGHT] / 100;
+            if (fields[settings::CHANNEL_REVERSE] != 0) {
+                deflection = -deflection;
+            }
         }
         channels[channel] = (uint16_t)(CHANNEL_CENTRE + deflection);
     }

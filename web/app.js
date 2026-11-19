@@ -3,17 +3,15 @@
 // protocol is described in docs/ARCHITECTURE.md.
 //
 // The radio reports its settings (key, type, range, default, value) after
-// "list" and its profiles after "profiles". This page adds labels and layout.
-// The radio stores, per channel, which control it follows (ch.N.source); the
-// assignment view shows the same thing from the control's side.
+// "list". This page adds labels and layout. The assignment is one of three
+// (map.mode): the fixed AETR and TAER, or Custom, where the radio stores per
+// channel which control it follows (ch.N.source). The assignment view shows
+// the same thing from the control's side.
 //
-// Every change is stored at once: settings with "save", a change of the
-// assignment with "profile save" when an own profile is active.
+// Every change is stored at once with "save".
 
 const USB_VENDOR_ID = 0x2fe3;
 const CHANNEL_COUNT = 16;
-const PROFILE_SLOTS = 4;
-const NAME_BYTES = 15;
 const BATTERY_THRESHOLDS = [3232, 3298, 3391, 3552];   // stock firmware: 1, 2, 3, 4 LEDs
 const ACCENT = "#5aa2ff", LEVER = "#4f535a", CAP = "#6b6f76", SURFACE = "#17181b", HAIR = "#2b2e34",
       STROKE = "#3a3e45", FG1 = "#f2f3f5", FG3 = "#8b9099", WARN = "#f2a655", RAISED = "#202227";
@@ -38,20 +36,18 @@ const CONTROLS = [
 const STATE_KEY = { 5: "sa", 6: "sb", 7: "sc", 8: "sd", 9: "se", 10: "sf" };
 const LIST_ORDER = [3, 4, 2, 1, 5, 6, 7, 8, 9, 10];   // list that replaces the labels in a narrow window
 
-// Templates are written with "set"; the radio does not store them. AETR is
-// also the firmware's default assignment (src/core/settings.cpp).
-const TEMPLATES = [
-  { name: "Betaflight-Standard (AETR)", sources: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0] },
+// The fixed assignments, indexed by map.mode; the same tables as FIXED_SOURCES
+// in src/core/channels.cpp. Weight is 100 and nothing is reversed.
+const MAPPINGS = [
+  { name: "AETR", sources: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0] },
   { name: "TAER", sources: [3, 1, 2, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0] },
 ];
+const MAPPING_CUSTOM = 2;
+const MAPPING_NAMES = ["AETR", "TAER", "Custom"];
 
 const $ = (id) => document.getElementById(id);
-const ICON = {
-  check: "m5 12 5 5 9-10", pen: "M4 20h4L19 9l-4-4L4 16v4z", plus: "M12 5v14M5 12h14",
-  delete: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13",
-};
+const ICON = { check: "m5 12 5 5 9-10" };
 const icon = (name) => `<svg class="i" viewBox="0 0 24 24"><path d="${ICON[name]}"/></svg>`;
-const escape = (text) => text.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 let writer = null;
 let reader = null;
@@ -62,17 +58,24 @@ let lastChannels = [];
 let selected = 0;                  // source of the control open in the detail card, 0 = none
 let advancedOpen = false;
 let asking = 0;                    // channel the open control wants while the question is shown
-let profiles = [];                 // { slot, name } of the used slots
-let incomingProfiles = [];
-let activeProfile = 0;
-let menu = null;                   // null closed; "list"; { edit: slot }; { create: slot }; { remove: slot }
+let pendingChange = null;          // change waiting for "replace the Custom assignment?"
+let menuOpen = false;
 let calibrating = false;
 let calStage = 1;                  // 1: move the sticks, 2: release them
 let seen = null;                   // per stick [minX, maxX, minY, maxY] as fractions, during a run
 
 const setting = (key) => (settings.has(key) ? settings.get(key).value : undefined);
+
+// The assignment in effect for channel n: that of the fixed mapping chosen,
+// or the Custom settings ch.N.*. field is "source", "weight" or "reverse".
+function chValue(n, field) {
+  const fixed = MAPPINGS[setting("map.mode")];
+  if (!fixed) return setting(`ch.${n}.${field}`);
+  return field === "source" ? fixed.sources[n - 1] : field === "weight" ? 100 : 0;
+}
+
 const channelsOf = (source) =>
-  [...Array(CHANNEL_COUNT).keys()].map((i) => i + 1).filter((n) => setting(`ch.${n}.source`) === source);
+  [...Array(CHANNEL_COUNT).keys()].map((i) => i + 1).filter((n) => chValue(n, "source") === source);
 const controlOf = (source) => CONTROLS.find((control) => control.source === source);
 
 // ---- Storing changes
@@ -81,124 +84,55 @@ async function send(text) {
   if (writer) await writer.write(new TextEncoder().encode(text + "\n"));
 }
 
-// Store the assignment: into the active own profile, or as the plain settings.
-function storeAssignment() {
-  const own = profiles.find((p) => p.slot === activeProfile);
-  send(own ? `profile save ${own.slot} ${own.name}` : "save");
-}
+// True if the stored Custom assignment differs from a fixed one, so that copying it would lose something.
+const customDiffers = (fixed) => fixed.sources.some((source, i) =>
+  setting(`ch.${i + 1}.source`) !== source || setting(`ch.${i + 1}.weight`) !== 100 || setting(`ch.${i + 1}.reverse`) !== 0);
 
-// ---- Profile selector and its menu
-
-function currentTemplate() {
-  return TEMPLATES.find((t) => t.sources.every((source, i) =>
-    setting(`ch.${i + 1}.source`) === source && setting(`ch.${i + 1}.weight`) === 100 && setting(`ch.${i + 1}.reverse`) === 0));
-}
-
-function profileTitle() {
-  const own = profiles.find((p) => p.slot === activeProfile);
-  if (own) return own.name;
-  const template = settings.size ? currentTemplate() : null;
-  return template ? template.name : "Ohne Profil";
-}
-
-const nameBytes = (text) => new TextEncoder().encode(text).length;
-const nameValid = (text) => text.trim().length > 0 && nameBytes(text.trim()) <= NAME_BYTES;
-
-function freeSlot() {
-  for (let slot = 1; slot <= PROFILE_SLOTS; slot++) if (!profiles.some((p) => p.slot === slot)) return slot;
-  return 0;
-}
-
-function showProfiles() {
-  $("profileButton").textContent = profileTitle();
-  $("profileButton").setAttribute("aria-expanded", menu !== null);
-  $("profileMenu").hidden = menu === null;
-  if (menu === null) return;
-
-  const editing = menu.edit || menu.create;
-  const editRow = (value) => `<div class="medit"><input class="field" id="menuName" value="${escape(value)}" aria-label="Name"></div>`;
-  let rows = "";
-  if (profiles.length || menu.create) rows += `<div class="mhead">Eigene Profile</div>`;
-  for (const p of profiles) {
-    if (menu.edit === p.slot) { rows += editRow(p.name); continue; }
-    const active = p.slot === activeProfile;
-    // While a name is edited the other rows stay as they are but do nothing.
-    rows += `<div class="mitem${active ? " sel" : ""}" data-act="${editing ? "" : "load"}" data-slot="${p.slot}"><span>${escape(p.name)}</span>` +
-            (active ? `<span class="slot check">${icon("check")}</span>` : "") +
-            `<button class="icon" data-act="${editing ? "" : "edit"}" data-slot="${p.slot}" aria-label="${escape(p.name)} umbenennen">${icon("pen")}</button></div>`;
+// Change the assignment with apply(), which sends "set ch.N.*" lines. With
+// AETR or TAER chosen, the change turns it into Custom, starting from that
+// mapping; a different Custom assignment is only replaced after a question.
+function changeAssignment(apply, confirmed = false) {
+  const fixed = MAPPINGS[setting("map.mode")];
+  if (fixed && customDiffers(fixed) && !confirmed) {
+    pendingChange = apply;
+    showDetail();
+    return;
   }
-  if (menu.create) rows += editRow(`Profil ${menu.create}`);
-  rows += `<div class="mhead">Vorlagen</div>`;
-  TEMPLATES.forEach((t, i) => {
-    rows += `<div class="mitem" data-act="${editing ? "" : "template"}" data-index="${i}"><span>${t.name}</span></div>`;
-  });
-
-  let footer = "";
-  if (editing) {
-    const left = menu.edit ? `<button class="icon" data-act="remove" aria-label="Profil löschen">${icon("delete")}</button>` : "";
-    footer = `<div class="actions">${left}<span></span><button class="btn" data-act="cancel">Abbrechen</button>` +
-             `<button class="btn primary" data-act="${menu.edit ? "rename" : "create"}" id="menuSave">${menu.edit ? "Speichern" : "Anlegen"}</button></div>`;
-  } else if (menu.remove) {
-    const p = profiles.find((item) => item.slot === menu.remove);
-    footer = `<div class="actions"><span>${escape(p.name)} löschen?</span><button class="btn" data-act="cancel">Abbrechen</button>` +
-             `<button class="btn primary" data-act="delete">Löschen</button></div>`;
-  } else {
-    const slot = freeSlot();
-    rows += `<div class="mgap"></div><div class="mitem${slot ? "" : " off"}" data-act="new"><span>Neues Profil</span>` +
-            `<span class="sec">${profiles.length} von ${PROFILE_SLOTS}</span><span class="slot">${icon("plus")}</span></div>`;
+  pendingChange = null;
+  if (fixed) {
+    fixed.sources.forEach((source, i) => {
+      const n = i + 1;
+      if (setting(`ch.${n}.source`) !== source) send(`set ch.${n}.source ${source}`);
+      if (setting(`ch.${n}.weight`) !== 100) send(`set ch.${n}.weight 100`);
+      if (setting(`ch.${n}.reverse`) !== 0) send(`set ch.${n}.reverse 0`);
+    });
+    send(`set map.mode ${MAPPING_CUSTOM}`);
   }
-  $("profileMenu").innerHTML = rows + footer;
-
-  const field = $("menuName");
-  if (field) {
-    field.focus();
-    field.select();
-    const check = () => { $("menuSave").disabled = !nameValid(field.value); };
-    field.addEventListener("input", check);
-    check();
-  }
-}
-
-function applyTemplate(template) {
-  template.sources.forEach((source, i) => {
-    const n = i + 1;
-    if (setting(`ch.${n}.source`) !== source) send(`set ch.${n}.source ${source}`);
-    if (setting(`ch.${n}.weight`) !== 100) send(`set ch.${n}.weight 100`);
-    if (setting(`ch.${n}.reverse`) !== 0) send(`set ch.${n}.reverse 0`);
-  });
+  // apply() reads chValue(), which still gives the fixed mapping until the radio confirms; that is what was copied.
+  apply();
   send("save");
-  send("profile none");
 }
 
-function menuAction(act, target) {
-  if (menu === null) return;
-  const slot = Number(target.dataset.slot || 0);
-  const name = $("menuName") ? $("menuName").value.trim() : "";
-  if (act === "load" && !(menu.edit || menu.create)) {
-    if (slot !== activeProfile) send(`profile load ${slot}`);
-    menu = null;
-  } else if (act === "template" && !(menu.edit || menu.create)) {
-    applyTemplate(TEMPLATES[Number(target.dataset.index)]);
-    menu = null;
-  } else if (act === "edit") {
-    menu = { edit: slot };
-  } else if (act === "new" && freeSlot()) {
-    menu = { create: freeSlot() };
-  } else if (act === "cancel") {
-    menu = "list";
-  } else if (act === "rename" && nameValid(name)) {
-    send(`profile name ${menu.edit} ${name}`);
-    menu = "list";
-  } else if (act === "create" && nameValid(name)) {
-    send(`profile save ${menu.create} ${name}`);
-    menu = null;
-  } else if (act === "remove") {
-    menu = { remove: menu.edit };
-  } else if (act === "delete") {
-    send(`profile delete ${menu.remove}`);
-    menu = "list";
+// ---- Choice of the assignment
+
+function showMapping() {
+  const mode = setting("map.mode");
+  $("mapButton").textContent = mode === undefined ? "–" : MAPPING_NAMES[mode];
+  $("mapButton").setAttribute("aria-expanded", menuOpen);
+  $("mapMenu").hidden = !menuOpen;
+  if (!menuOpen) return;
+  $("mapMenu").innerHTML = MAPPING_NAMES.map((name, i) =>
+    `<div class="mitem${i === mode ? " sel" : ""}" data-mode="${i}"><span>${name}</span>` +
+    (i === mode ? `<span class="slot check">${icon("check")}</span>` : "") + `</div>`).join("");
+}
+
+function chooseMapping(mode) {
+  if (mode !== setting("map.mode")) {
+    send(`set map.mode ${mode}`);
+    send("save");
   }
-  showProfiles();
+  menuOpen = false;
+  showMapping();
 }
 
 // ---- Labels in the drawing, and the list for narrow windows
@@ -251,6 +185,7 @@ function showLabels() {
 function openDetail(source) {
   selected = source;
   asking = 0;
+  pendingChange = null;
   for (const element of document.querySelectorAll("[data-source]")) {
     element.classList.toggle("selected", Number(element.dataset.source) === source);
   }
@@ -260,7 +195,7 @@ function openDetail(source) {
 // Weight and reverse of the open control: those of its first channel.
 function channelShape() {
   const channel = channelsOf(selected)[0];
-  return channel ? { weight: setting(`ch.${channel}.weight`), reverse: setting(`ch.${channel}.reverse`) !== 0 }
+  return channel ? { weight: chValue(channel, "weight"), reverse: chValue(channel, "reverse") !== 0 }
                  : { weight: 100, reverse: false };
 }
 
@@ -278,7 +213,7 @@ function showDetail() {
 
   // Chips: while asking, they preview the swap.
   const names = {};
-  for (let n = 1; n <= CHANNEL_COUNT; n++) names[n] = controlOf(setting(`ch.${n}.source`));
+  for (let n = 1; n <= CHANNEL_COUNT; n++) names[n] = controlOf(chValue(n, "source"));
   const own = channelsOf(selected);
   let target = 0;
   if (asking) {
@@ -315,16 +250,22 @@ function showDetail() {
   $("dReverse").checked = shape.reverse;
   $("dWeight").disabled = $("dReverse").disabled = own.length === 0;
 
-  $("dToggle").hidden = asking !== 0;
+  const question = asking !== 0 || pendingChange !== null;
+  $("dToggle").hidden = question;
   $("dToggle").classList.toggle("open", advancedOpen);
   $("dAdvanced").setAttribute("aria-expanded", advancedOpen);
   $("dAdvancedRow").hidden = !advancedOpen;
   // Open, the toggle heads the section; closed, it sits at the bottom.
   $("detail").insertBefore($("dToggle"), advancedOpen ? $("dAdvancedRow") : $("dAsk"));
-  $("dAsk").hidden = asking === 0;
-  if (asking) {
-    const occupant = controlOf(setting(`ch.${asking}.source`));
+  $("dAsk").hidden = !question;
+  if (pendingChange) {
+    $("dAskText").textContent = "Custom-Belegung ersetzen?";
+    $("askReplace").classList.add("primary");
+    $("askSwap").hidden = true;
+  } else if (asking) {
+    const occupant = controlOf(chValue(asking, "source"));
     $("dAskText").innerHTML = `Kanal ${asking} ist belegt von <b>${occupant.name}</b>`;
+    $("askReplace").classList.remove("primary");
     $("askSwap").hidden = own.length === 0;
   }
   drawCurve();
@@ -387,27 +328,28 @@ function drawCurve() {
 // Put the open control on a channel. Weight and reverse move with it.
 // swap: the control on that channel takes over the open control's channel.
 function moveTo(channel, swap) {
-  const own = channelsOf(selected);
-  const from = own[0];
-  const shapeOf = (n) => n ? [setting(`ch.${n}.weight`), setting(`ch.${n}.reverse`)] : [100, 0];
-  const [weight, reverse] = shapeOf(from);
-  if (swap && from) {
-    const occupant = setting(`ch.${channel}.source`);
-    const [otherWeight, otherReverse] = shapeOf(channel);
-    send(`set ch.${from}.source ${occupant}`);
-    send(`set ch.${from}.weight ${otherWeight}`);
-    send(`set ch.${from}.reverse ${otherReverse}`);
-  } else if (from) {
-    send(`set ch.${from}.source 0`);
-    send(`set ch.${from}.weight 100`);
-    send(`set ch.${from}.reverse 0`);
-  }
-  for (const other of own.slice(1)) send(`set ch.${other}.source 0`);
-  send(`set ch.${channel}.source ${selected}`);
-  send(`set ch.${channel}.weight ${weight}`);
-  send(`set ch.${channel}.reverse ${reverse}`);
-  storeAssignment();
   asking = 0;
+  changeAssignment(() => {
+    const own = channelsOf(selected);
+    const from = own[0];
+    const shapeOf = (n) => n ? [chValue(n, "weight"), chValue(n, "reverse")] : [100, 0];
+    const [weight, reverse] = shapeOf(from);
+    if (swap && from) {
+      const occupant = chValue(channel, "source");
+      const [otherWeight, otherReverse] = shapeOf(channel);
+      send(`set ch.${from}.source ${occupant}`);
+      send(`set ch.${from}.weight ${otherWeight}`);
+      send(`set ch.${from}.reverse ${otherReverse}`);
+    } else if (from) {
+      send(`set ch.${from}.source 0`);
+      send(`set ch.${from}.weight 100`);
+      send(`set ch.${from}.reverse 0`);
+    }
+    for (const other of own.slice(1)) send(`set ch.${other}.source 0`);
+    send(`set ch.${channel}.source ${selected}`);
+    send(`set ch.${channel}.weight ${weight}`);
+    send(`set ch.${channel}.reverse ${reverse}`);
+  });
   showDetail();
 }
 
@@ -611,14 +553,7 @@ function handleLine(line) {
     buildRawTable();
     showLabels();
     showDetail();
-    showProfiles();
-  } else if (kind === "profile") {
-    incomingProfiles.push({ slot: Number(rest[0]), name: rest.slice(1).join(" ") });
-  } else if (kind === "active") {
-    profiles = incomingProfiles;
-    incomingProfiles = [];
-    activeProfile = Number(rest[0]);
-    showProfiles();
+    showMapping();
   } else if (kind === "ok") {
     handleOk(rest);
   } else if (kind === "error") {
@@ -631,23 +566,18 @@ function handleLine(line) {
 }
 
 function handleOk(words) {
-  if (words[0] === "profile") {
-    // A loaded profile changed the ch.N.* settings; every profile command may change the list.
-    if (words[1] === "load") send("list");
-    send("profiles");
-  } else if (words[0] === "defaults") {
+  if (words[0] === "defaults") {
     send("save");
-    send("profile none");
     send("list");
   } else if (words[0] === "calibrate" && words[1] === "end") {
     showMessage("Kalibrierung übernommen und gespeichert.");
   } else if (settings.has(words[0])) {
     settings.get(words[0]).value = Number(words[1]);
     showSetting(words[0]);
-    if (words[0].startsWith("ch.") || words[0].startsWith("cal.")) {
+    if (words[0].startsWith("ch.") || words[0].startsWith("cal.") || words[0] === "map.mode") {
       showLabels();
       if (document.activeElement !== $("dWeight") && document.activeElement !== $("dDead")) showDetail();
-      showProfiles();
+      showMapping();
     }
   }
 }
@@ -659,9 +589,8 @@ function setConnected(connected) {
   if (!connected) {
     resetDrawing();
     settings.clear();
-    profiles = [];
-    activeProfile = 0;
-    menu = null;
+    menuOpen = false;
+    showMapping();
     openDetail(0);
     showView("assign");
   }
@@ -680,7 +609,6 @@ async function connect() {
   await send("hello");
   await send("stream 1");
   await send("list");
-  await send("profiles");
 
   const decoder = new TextDecoder();
   let pending = "";
@@ -723,7 +651,6 @@ buildLabels();
 fitStage();
 narrow.addEventListener("change", fitStage);
 setConnected(false);
-showProfiles();
 
 $("connectBig").addEventListener("click", () => connect().catch((error) => showMessage(error.message)));
 $("connect").addEventListener("click", () => { if (writer) reader.cancel(); });
@@ -731,16 +658,13 @@ $("nav").addEventListener("click", (event) => {
   if (event.target.dataset.view && !calibrating) showView(event.target.dataset.view);
 });
 
-$("profileButton").addEventListener("click", () => { menu = menu === null ? "list" : null; showProfiles(); });
-$("profileMenu").addEventListener("click", (event) => {
-  const target = event.target.closest("[data-act]");
-  if (target) { event.stopPropagation(); menuAction(target.dataset.act, target); }
-});
-$("profileMenu").addEventListener("keydown", (event) => {
-  if (event.key === "Enter" && event.target.id === "menuName") menuAction(menu.edit ? "rename" : "create", event.target);
+$("mapButton").addEventListener("click", () => { menuOpen = !menuOpen; showMapping(); });
+$("mapMenu").addEventListener("click", (event) => {
+  const item = event.target.closest("[data-mode]");
+  if (item) { event.stopPropagation(); chooseMapping(Number(item.dataset.mode)); }
 });
 document.addEventListener("click", (event) => {
-  if (menu !== null && !event.target.closest(".pop")) { menu = null; showProfiles(); }
+  if (menuOpen && !event.target.closest(".pop")) { menuOpen = false; showMapping(); }
   const control = event.target.closest("[data-source]");
   if (control) openDetail(Number(control.dataset.source));
 });
@@ -751,7 +675,7 @@ document.addEventListener("keydown", (event) => {
     openDetail(Number(label.dataset.source));
   }
   if (event.key === "Escape") {
-    if (menu !== null) { menu = null; showProfiles(); } else openDetail(0);
+    if (menuOpen) { menuOpen = false; showMapping(); } else openDetail(0);
   }
 });
 
@@ -759,13 +683,16 @@ $("dClose").addEventListener("click", () => openDetail(0));
 $("dAdvanced").addEventListener("click", () => { advancedOpen = !advancedOpen; showDetail(); });
 $("dChips").addEventListener("click", (event) => {
   const chip = event.target.closest(".chip");
-  if (!chip || chip.classList.contains("own") || asking) return;
+  if (!chip || chip.classList.contains("own") || asking || pendingChange) return;
   const channel = Number(chip.dataset.channel);
   if (chip.classList.contains("free")) moveTo(channel, false);
   else { asking = channel; showDetail(); }
 });
-$("askCancel").addEventListener("click", () => { asking = 0; showDetail(); });
-$("askReplace").addEventListener("click", () => moveTo(asking, false));
+// Cancelling the Custom question also puts weight and reverse back to what is in effect.
+$("askCancel").addEventListener("click", () => { asking = 0; pendingChange = null; showDetail(); drawCurve(); });
+$("askReplace").addEventListener("click", () => {
+  if (pendingChange) { changeAssignment(pendingChange, true); showDetail(); } else moveTo(asking, false);
+});
 $("askSwap").addEventListener("click", () => moveTo(asking, true));
 
 // Sliders follow while dragging; the radio gets the value on release.
@@ -782,12 +709,12 @@ $("dMiddle").addEventListener("change", (event) => {
   send("save");
 });
 $("dWeight").addEventListener("change", () => {
-  for (const channel of channelsOf(selected)) send(`set ch.${channel}.weight ${$("dWeight").value}`);
-  storeAssignment();
+  const weight = $("dWeight").value;
+  changeAssignment(() => { for (const channel of channelsOf(selected)) send(`set ch.${channel}.weight ${weight}`); });
 });
 $("dReverse").addEventListener("change", () => {
-  for (const channel of channelsOf(selected)) send(`set ch.${channel}.reverse ${Number($("dReverse").checked)}`);
-  storeAssignment();
+  const reverse = Number($("dReverse").checked);
+  changeAssignment(() => { for (const channel of channelsOf(selected)) send(`set ch.${channel}.reverse ${reverse}`); });
   drawCurve();
 });
 
@@ -797,7 +724,7 @@ document.addEventListener("change", (event) => {
   if (!key) return;
   const value = event.target.type === "checkbox" ? Number(event.target.checked) : event.target.value;
   send(`set ${key} ${value}`);
-  if (key.startsWith("ch.")) storeAssignment(); else send("save");
+  send("save");
 });
 $("defaults").addEventListener("click", () => send("defaults"));
 

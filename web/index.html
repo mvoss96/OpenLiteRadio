@@ -68,17 +68,13 @@
   .pop { position: relative; }
   .menu { position: absolute; left: 0; top: 48px; z-index: 5; width: 400px; padding: 6px; border-radius: var(--r-menu);
           background: var(--raised); box-shadow: 0 16px 40px rgba(0, 0, 0, .5); }
-  .mhead { padding: 8px 0 4px 12px; font-size: 13px; line-height: 18px; font-weight: 500; color: var(--fg3); }
   .mitem { display: flex; align-items: center; height: var(--h); padding: 0 2px 0 12px; border-radius: var(--r-row);
            font-weight: 500; cursor: pointer; }
   .mitem > span:first-child { flex: 1; }
   .mitem:hover, .mitem.sel { background: var(--hover); }
-  .mitem.off { opacity: .4; cursor: default; }
   .mitem .slot { flex: none; width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; color: var(--fg2); }
   .mitem .slot.check { color: var(--accent); }
   .mitem .sec { padding: 0 8px; font-size: 13px; font-weight: 400; color: var(--fg3); }
-  .mgap { height: 8px; }
-  .medit { height: var(--h); display: flex; align-items: center; }
   .actions { display: flex; align-items: center; gap: 8px; padding: 12px 6px 6px; }
   .actions > span { flex: 1; padding-left: 6px; white-space: nowrap; }
 
@@ -100,8 +96,9 @@
   .view { flex: 1; display: flex; flex-direction: column; }
 
   /* Assignment view. */
-  .profilerow { display: flex; align-items: center; gap: 12px; padding: 16px 24px 0; }
-  .profilerow .dropdown { width: 280px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .maprow { display: flex; align-items: center; gap: 12px; padding: 16px 24px 0; }
+  .maprow .dropdown { width: 240px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .maprow .menu { width: 240px; }
   .stage { flex: 1; display: flex; align-items: center; justify-content: center; padding: 0 24px; min-height: 0; }
   .stage svg { display: block; width: 100%; max-width: 1300px; height: auto; }
   body.has-detail .stage { flex: none; padding-top: 16px; }
@@ -194,7 +191,7 @@
   /* Not connected: the drawing keeps its place, everything that needs the radio is hidden. */
   body.offline nav, body.offline .device, body.offline #connect, body.offline .statusbar,
   body.offline .detail { display: none !important; }
-  body.offline .profilerow { visibility: hidden; }
+  body.offline .maprow { visibility: hidden; }
   body.offline .stage svg { opacity: .35; }
   body.offline .offlinebar { display: flex; }
   body.calibrating header.top, body.calibrating .statusbar, body.has-detail .statusbar { display: none; }
@@ -235,13 +232,13 @@
 </header>
 
 <main>
-  <!-- Assignment: profile, the drawing with one label per control, the detail card of one control. -->
+  <!-- Assignment: AETR, TAER or Custom, the drawing with one label per control, the detail card of one control. -->
   <section class="view" id="view-assign">
-    <div class="profilerow">
-      <span class="muted">Profil</span>
+    <div class="maprow">
+      <span class="muted">Belegung</span>
       <div class="pop">
-        <button class="dropdown" id="profileButton" aria-haspopup="menu" aria-expanded="false"></button>
-        <div class="menu" id="profileMenu" role="menu" hidden></div>
+        <button class="dropdown" id="mapButton" aria-haspopup="menu" aria-expanded="false"></button>
+        <div class="menu" id="mapMenu" role="menu" hidden></div>
       </div>
     </div>
     <div class="stage">

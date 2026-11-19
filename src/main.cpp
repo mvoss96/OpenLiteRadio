@@ -10,7 +10,7 @@
  *   output.cpp       control thread, holds, throttle lock, test inputs
  *   module_link.cpp  frames from the module, link statistics, binding
  *   host.cpp         line protocol to the PC, state lines
- *   storage.cpp      settings and profiles in flash
+ *   storage.cpp      settings in flash
  *   calibration.cpp  stick calibration run
  *   indicators.cpp   buzzer and status LED
  */
@@ -64,7 +64,6 @@ int main(void)
 
     board::init();
     storage::load_settings();
-    storage::load_active_profile();
     host::print_hello();
     output::start();
 

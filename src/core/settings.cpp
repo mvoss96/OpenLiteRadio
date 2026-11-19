@@ -29,6 +29,7 @@ constexpr uint16_t IDS_PER_INSTANCE = 8;
 
 const Field UNLOCK_FIELDS[] = { { "mode", 0, 2, 1 }, { "beep", 0, 1, 1 } };
 const Field BUZZER_FIELDS[] = { { "on", 0, 1, 1 } };
+const Field MAP_FIELDS[] = { { "mode", 0, 2, 0 } };
 /* The default source depends on the channel, see info(). */
 const Field CHANNEL_FIELD_LIST[] = { { "source", 0, 10, 0 }, { "weight", 0, 100, 100 },
                                      { "reverse", 0, 1, 0 } };
@@ -38,6 +39,7 @@ const Field CALIBRATION_FIELD_LIST[] = { { "low", 0, 4095, 600 }, { "centre", 0,
 const Group GROUPS[] = {
     { "unlock", 0, 0, 2, UNLOCK_FIELDS, 0x100 },
     { "buzzer", 0, 0, 1, BUZZER_FIELDS, 0x110 },
+    { "map", 0, 0, 1, MAP_FIELDS, 0x120 },
     { "ch", 16, 1, 3, CHANNEL_FIELD_LIST, 0x200 },
     { "cal", 4, 0, 4, CALIBRATION_FIELD_LIST, 0x300 },
 };
@@ -72,8 +74,9 @@ Info info(int index)
     int16_t default_value = field.default_value;
 
     /*
-     * Channels 1 to 10 take sources 1 to 10: AETR, then SA to SF. The same
-     * assignment is the AETR template in web/app.js.
+     * Channels 1 to 10 take sources 1 to 10: AETR, then SA to SF, the same
+     * as the fixed AETR mapping (core/channels.cpp), so that a new Custom
+     * assignment starts from it.
      */
     if (index >= CHANNEL_FIRST && index < CALIBRATION_FIRST && position.field == CHANNEL_SOURCE &&
         position.instance < 10) {
