@@ -12,7 +12,7 @@
 // elrs.js, which is loaded first and uses send() and $() from here.
 
 // The project's version from the file VERSION; test.ps1 checks that both agree.
-const WEB_VERSION = "0.12.0";
+const WEB_VERSION = "0.12.1";
 const USB_VENDOR_ID = 0x2fe3;
 const CHANNEL_COUNT = 16;
 const BATTERY_THRESHOLDS = [3232, 3298, 3391, 3552];   // stock firmware: 1, 2, 3, 4 LEDs
@@ -823,7 +823,5 @@ $("calNext").addEventListener("click", () => {
 });
 
 $("testBeep").addEventListener("click", () => send("beep 2700 200"));
-$("testModuleOn").addEventListener("click", () => send("module 1"));
-$("testModuleOff").addEventListener("click", () => send("module 0"));
 $("testBind").addEventListener("click", () => send("bind"));
 setInterval(() => { $("sysRate").textContent = linesThisSecond; linesThisSecond = 0; }, 1000);
