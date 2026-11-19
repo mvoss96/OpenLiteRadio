@@ -12,29 +12,14 @@ constexpr uint32_t YELLOW = 0x302000;
 constexpr uint32_t ORANGE = 0x300500; /* with more green it looks yellow on this LED */
 constexpr uint32_t CYAN = 0x002424;
 constexpr uint32_t PURPLE = 0x200030;
-constexpr uint32_t WHITE = 0x202020;
 
-constexpr uint32_t ALTERNATE_MS = 500; /* each colour of a special mode */
-constexpr uint32_t PULSE_MS = 2000;    /* one rise and fall of a notice */
+constexpr uint32_t SLOW_MS = 500; /* on and off of slow blinking */
+constexpr uint32_t FAST_MS = 100; /* on and off of fast blinking */
 
-/* A special mode: the colour and white, half a second each. */
-uint32_t alternate(uint32_t colour, uint32_t ms)
+/* The colour on for half_period_ms, then off as long. */
+uint32_t blink(uint32_t colour, uint32_t ms, uint32_t half_period_ms)
 {
-    return (ms / ALTERNATE_MS) % 2 == 0 ? colour : WHITE;
-}
-
-/* A notice: the colour rises and falls between a fifth and full brightness. */
-uint32_t pulse(uint32_t colour, uint32_t ms)
-{
-    uint32_t phase = ms % PULSE_MS;
-    uint32_t level = phase < PULSE_MS / 2 ? phase : PULSE_MS - phase; /* 0 .. PULSE_MS / 2 */
-    uint32_t scale = 200 + 800 * level / (PULSE_MS / 2);              /* per mille */
-    uint32_t out = 0;
-
-    for (int shift = 0; shift <= 16; shift += 8) {
-        out |= (((colour >> shift) & 0xffu) * scale / 1000) << shift;
-    }
-    return out;
+    return (ms / half_period_ms) % 2 == 0 ? colour : 0;
 }
 
 } // namespace
@@ -43,22 +28,22 @@ uint32_t led_colour(const LedInputs &in, uint32_t ms)
 {
     /* Ordered by priority: the first state that applies is shown. */
     if (in.calibrating) {
-        return alternate(YELLOW, ms);
+        return blink(YELLOW, ms, SLOW_MS);
     }
     switch (in.mode) {
     case Mode::ELRS_BINDING:
-        return alternate(CYAN, ms);
+        return blink(CYAN, ms, SLOW_MS);
     case Mode::WIFI:
-        return alternate(GREEN, ms);
+        return blink(GREEN, ms, SLOW_MS);
     case Mode::BLUETOOTH:
         return PURPLE;
     case Mode::ELRS_LOCKED:
         return RED;
     case Mode::ELRS_HOST_READY:
     case Mode::ELRS_HOST:
-        return alternate(BLUE, ms);
+        return blink(BLUE, ms, FAST_MS);
     case Mode::ELRS_ACTIVE:
-        return in.receiver_connected ? BLUE : pulse(BLUE, ms);
+        return in.receiver_connected ? BLUE : blink(BLUE, ms, SLOW_MS);
     case Mode::USB_JOYSTICK:
         return ORANGE;
     case Mode::USB_XBOX:

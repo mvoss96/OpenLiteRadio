@@ -207,12 +207,16 @@ uint8_t three_positions(uint32_t levels, uint32_t end0, uint32_t end2)
  * Status LED of WS2812 type on PB3, TIM2 channel 2. The timer runs at
  * 800 kHz (90 counts at 72 MHz); DMA writes one duty value per bit into the
  * compare register on each timer update: 60 counts for a 1, 30 for a 0. Two
- * trailing zeros leave the line low, which latches the colour.
+ * trailing zeros leave the line low, which latches the colour. One leading
+ * zero takes the first transfer, which happens at once when the channel is
+ * enabled, in the middle of a timer period; without it the first bit was
+ * sometimes cut and the colour shifted by one bit.
  */
 constexpr uint16_t LED_PERIOD = 90;
 constexpr uint16_t LED_DUTY_ONE = 60;
 constexpr uint16_t LED_DUTY_ZERO = 30;
-uint16_t led_duty[26];
+constexpr int LED_LEAD = 1;
+uint16_t led_duty[LED_LEAD + 24 + 2];
 
 void status_led_init()
 {
@@ -493,11 +497,12 @@ void set_status_led(uint8_t red, uint8_t green, uint8_t blue)
 
     uint32_t bits = ((uint32_t)green << 16) | ((uint32_t)red << 8) | blue;
 
+    led_duty[0] = 0;
     for (int i = 0; i < 24; i++) {
-        led_duty[i] = (bits & BIT(23 - i)) ? LED_DUTY_ONE : LED_DUTY_ZERO;
+        led_duty[LED_LEAD + i] = (bits & BIT(23 - i)) ? LED_DUTY_ONE : LED_DUTY_ZERO;
     }
-    led_duty[24] = 0;
-    led_duty[25] = 0;
+    led_duty[LED_LEAD + 24] = 0;
+    led_duty[LED_LEAD + 25] = 0;
 
     /* TIM2 update requests are served by DMA1 channel 2. */
     DMA1_Channel2->CCR = 0;

@@ -1,8 +1,8 @@
 /*
  * Colour of the status LED from the radio's state, see "LEDs" in
- * docs/ARCHITECTURE.md: one colour steady is a normal state, pulsing a
- * notice, two colours alternating (with white) a special mode, fast red
- * blinking an error. No hardware access.
+ * docs/ARCHITECTURE.md: one colour steady is a normal state, slow blinking
+ * a special mode or a notice, fast blinking an error (red) or PC control
+ * (blue). No hardware access.
  */
 
 #pragma once

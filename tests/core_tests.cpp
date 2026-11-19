@@ -382,20 +382,21 @@ static void test_led()
     in.receiver_connected = true;
     CHECK(core::led_colour(in, 0) == 0x000030 && core::led_colour(in, 1000) == 0x000030);
 
-    /* Without a receiver: blue pulsing, a fifth of the brightness at 0 ms, full at 1 s, never off. */
+    /* Without a receiver: blue blinking slowly, half a second on and off. */
     in.receiver_connected = false;
-    CHECK(core::led_colour(in, 0) == 0x000009);
-    CHECK(core::led_colour(in, 1000) == 0x000030);
-    CHECK(core::led_colour(in, 500) != core::led_colour(in, 1000));
-    for (uint32_t ms = 0; ms < 2000; ms += 20) {
-        CHECK(core::led_colour(in, ms) != 0 && (core::led_colour(in, ms) & 0xffff00u) == 0);
-    }
+    CHECK(core::led_colour(in, 0) == 0x000030 && core::led_colour(in, 499) == 0x000030);
+    CHECK(core::led_colour(in, 500) == 0 && core::led_colour(in, 1000) == 0x000030);
 
-    /* Calibration wins over every mode: yellow and white, half a second each. */
+    /* PC control: blue blinking fast, a tenth of a second on and off. */
+    in.mode = Mode::ELRS_HOST;
+    CHECK(core::led_colour(in, 0) == 0x000030 && core::led_colour(in, 100) == 0);
+    CHECK(core::led_colour(in, 200) == 0x000030);
+
+    /* Calibration wins over every mode: yellow blinking slowly. */
     in.calibrating = true;
     CHECK(core::led_colour(in, 0) == 0x302000);
     CHECK(core::led_colour(in, 499) == 0x302000);
-    CHECK(core::led_colour(in, 500) == 0x202020);
+    CHECK(core::led_colour(in, 500) == 0);
     CHECK(core::led_colour(in, 1000) == 0x302000);
 }
 

@@ -298,32 +298,33 @@ radio on.
 
 ### LEDs
 
-One colour per state. One colour steady is a normal state, pulsing is a
-notice, two colours alternating slowly (about 0.5 s, always with white) is a
-special mode, fast red blinking is an error. When several states apply, the
-upper row wins.
+One colour per state. One colour steady is a normal state, slow blinking
+(0.5 s on, 0.5 s off) a special mode or a notice, fast blinking (0.1 s on,
+0.1 s off) an error in red or PC control in blue. When several states
+apply, the upper row wins. Each code was looked at on the radio and chosen
+there: alternating with white was hard to read and pulsing hard to see at
+this brightness.
 
 | State | Status LED |
 |-------|------------|
 | Error (storage, module does not answer) | red, fast blinking |
-| Calibration | yellow and white alternating |
-| Binding | cyan and white alternating |
-| Module in WiFi mode | green and white alternating |
+| Calibration | yellow, slow blinking |
+| Binding | cyan, slow blinking |
+| Module in WiFi mode | green, slow blinking |
 | On, Bluetooth joystick | purple |
 | On, locked | red |
-| On, PC in control | blue and white alternating |
+| On, PC in control | blue, fast blinking |
 | On, sending, receiver connected | blue |
-| On, sending, no receiver | blue, pulsing |
+| On, sending, no receiver | blue, slow blinking |
 | Off, at a PC as joystick | orange |
 | Off, at a PC as Xbox controller | yellow |
 | Off, on a charger or without USB | off |
 
 Built in `src/core/led.cpp` (with tests) for every row; the rows of modes
 that have no transitions yet (error, binding, WiFi, Bluetooth, PC, Xbox)
-show once those modes exist. A notice pulses between a fifth and full
-brightness in 2 s. The colours are driven at about a fifth of the LED's
-range; orange is 0x300500, since with more green it looks yellow on this
-LED. "Receiver connected" means link statistics with a link quality above
+show once those modes exist. The colours are driven at about a fifth of the
+LED's range; orange is 0x300500, since with more green it looks yellow on
+this LED. "Receiver connected" means link statistics with a link quality above
 0 arrived within the last second. The host command `led` still overrides
 the LED until `led auto`.
 
@@ -380,7 +381,7 @@ Stage 2 as built so far:
   low one that the search failed.
 - Stick calibration, taken from stage 3 because the factory calibration does
   not fit the readings (docs/HARDWARE.md): SETUP held for 2 s starts a run,
-  the status LED alternates yellow and white and no channel frames are sent. The sticks are
+  the status LED blinks yellow and no channel frames are sent. The sticks are
   moved to all ends. A short press of SETUP ends the run with the right stick
   released and the throttle left at its lower end. The released readings
   become the centres and the throttle's lower end, the other ends are the
