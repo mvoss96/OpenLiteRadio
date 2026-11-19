@@ -27,7 +27,7 @@ struct Group {
 /* Each instance has room for this many fields in the storage numbers. */
 constexpr uint16_t IDS_PER_INSTANCE = 8;
 
-const Field UNLOCK_FIELDS[] = { { "mode", 0, 2, 1 }, { "beep", 0, 1, 1 } };
+const Field UNLOCK_FIELDS[] = { { "mode", 1, 2, 1 }, { "beep", 0, 1, 1 } };
 const Field BUZZER_FIELDS[] = { { "on", 0, 1, 1 } };
 const Field MAP_FIELDS[] = { { "mode", 0, 2, 0 } };
 /* In the order of core::Axis; steps of core::TRIM_STEP_US. */

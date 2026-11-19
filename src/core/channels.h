@@ -125,9 +125,9 @@ void compute_channels(const Controls &controls, const int16_t *settings_values,
 class ThrottleLock {
 public:
     /*
-     * throttle: value of SOURCE_THROTTLE. mode: the setting unlock.mode, 0
-     * unlocks at once, 1 with the throttle at its lower end, 2 with the
-     * throttle at its upper and then at its lower end.
+     * throttle: value of SOURCE_THROTTLE. mode: the setting unlock.mode, 1
+     * unlocks with the throttle at its lower end, 2 with the throttle at its
+     * upper and then at its lower end.
      * Returns true while the output has to stay off.
      */
     bool update(uint16_t throttle, int mode)
@@ -135,7 +135,7 @@ public:
         if (throttle >= CHANNEL_MAX - END_ZONE) {
             seen_high_ = true;
         }
-        if (mode == 0 || (throttle <= CHANNEL_MIN + END_ZONE && (mode == 1 || seen_high_))) {
+        if (throttle <= CHANNEL_MIN + END_ZONE && (mode == 1 || seen_high_)) {
             locked_ = false;
         }
         return locked_;

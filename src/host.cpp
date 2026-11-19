@@ -15,8 +15,7 @@
  *   beep HZ MS        tone
  *   batleds MASK      battery LEDs, bit 0 is the leftmost
  *   module 0|1        ELRS module off or on
- *   bind              start binding, as a long press of BIND does
- *   frames 0|1        print every frame received from the module as "rx" plus hex bytes
+ *   bind              start binding, as a long press of BIND does *   frames 0|1        print every frame received from the module as "rx" plus hex bytes
  *   crsf HEX          send one complete CRSF frame (hex, CRC included) to the module
  *   list              report all settings
  *   get KEY           report one setting
@@ -193,7 +192,16 @@ void handle_command(char *line)
             frame[i] = (uint8_t)strtoul(pair, &end, 16);
             valid = end == pair + 2;
         }
-        printk(valid && output::send_to_module(frame, size) ? "ok crsf\n" : "error crsf\n");
+        /* The control thread's frame may still be on the line; it takes less than 1 ms. */
+        bool sent = false;
+
+        for (int attempt = 0; valid && !sent && attempt < 10; attempt++) {
+            sent = output::send_to_module(frame, size);
+            if (!sent) {
+                k_usleep(200);
+            }
+        }
+        printk(sent ? "ok crsf\n" : "error crsf\n");
     } else if (strcmp(command, "bind") == 0) {
         module_link::bind_start();
     } else if (strcmp(command, "list") == 0) {

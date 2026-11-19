@@ -166,6 +166,15 @@
   .rawrow input { font: inherit; font-weight: 500; color: var(--fg1); width: 96px; height: 32px; padding: 0 8px; border: 0;
                   border-radius: 8px; background: var(--raised); text-align: right; }
   .rawfoot { display: flex; justify-content: flex-end; padding-top: 8px; }
+  .pagehead { display: flex; align-items: baseline; gap: 16px; }
+  .pagehead h1 { margin-left: 20px; }
+  .empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 120px 0; color: var(--fg3); }
+  .empty svg { width: 40px; height: 40px; }
+  .empty b { font-size: 16px; font-weight: 500; }
+  .mono { font-variant-numeric: tabular-nums; }
+  .band { display: flex; align-items: center; gap: 12px; flex: none; height: 56px; padding: 0 24px; background: rgba(90, 162, 255, .14); }
+  .band[hidden] { display: none; }
+  .band svg { color: var(--accent); }
 
   /* Calibration run. */
   .calhead { display: flex; align-items: center; gap: 16px; height: 64px; padding: 0 24px; }
@@ -225,6 +234,7 @@
   <div class="brand">OpenLiteRadio</div>
   <nav id="nav" aria-label="Bereiche">
     <button data-view="assign" class="active">Belegung</button>
+    <button data-view="elrs">ELRS-Modul</button>
     <button data-view="settings">Einstellungen</button>
     <button data-view="system">System</button>
   </nav>
@@ -232,6 +242,12 @@
   <div class="device"><i></i><span id="deviceText"></span></div>
   <button id="connect" class="btn subtle">Trennen</button>
 </header>
+
+<!-- While the radio sends to a receiver: every change reaches the model at once. -->
+<div class="band" id="band" hidden>
+  <svg class="i" viewBox="0 0 24 24"><path d="M12 12v9M8.5 8.5a5 5 0 0 1 7 0M5.6 5.6a9 9 0 0 1 12.8 0"/></svg>
+  <b>Sendet an den Empfänger</b><span class="muted">Änderungen wirken sofort auf das Modell.</span>
+</div>
 
 <main>
   <!-- Assignment: AETR, TAER or Custom, the drawing with one label per control, the detail card of one control. -->
@@ -330,6 +346,18 @@
     </section>
   </section>
 
+  <!-- ELRS module: its parameters as the module lists them (web/elrs.js). -->
+  <section class="view" id="view-elrs" hidden>
+    <div class="page">
+      <div class="pagehead"><h1>ELRS-Modul</h1><span class="muted" id="elrsState"></span></div>
+      <div class="empty" id="elrsOff">
+        <svg class="i" viewBox="0 0 24 24"><path d="M12 12v9M8.5 8.5a5 5 0 0 1 7 0M5.6 5.6a9 9 0 0 1 12.8 0"/></svg>
+        <b id="elrsNoteTitle"></b><span id="elrsNoteText"></span>
+      </div>
+      <div class="cols2" id="elrsGroups" hidden></div>
+    </div>
+  </section>
+
   <!-- Settings: every change is stored at once. -->
   <section class="view" id="view-settings" hidden>
     <div class="page">
@@ -339,7 +367,7 @@
           <h2><svg class="i" viewBox="0 0 24 24"><path d="M4 7h9m4 0h3M15 5v4M4 17h3m4 0h9M9 15v4"/></svg>Bedienung</h2>
           <div class="tiles">
             <label class="tile"><span>Entsperren mit</span>
-              <select data-key="unlock.mode"><option value="0">Sofort</option><option value="1">Gas unten</option><option value="2">Gas hoch, dann runter</option></select></label>
+              <select data-key="unlock.mode"><option value="1">Gas unten</option><option value="2">Gas hoch, dann runter</option></select></label>
           </div>
         </section>
         <section class="group">
@@ -419,6 +447,7 @@
 </footer>
 <div class="toast" id="message" role="status" hidden></div>
 
+<script src="elrs.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

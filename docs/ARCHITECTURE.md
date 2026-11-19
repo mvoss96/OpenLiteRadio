@@ -276,6 +276,24 @@ change. The module is configured with the radio switched on, also while
 locked; with the radio off the tab shows no values and asks to switch the
 radio on.
 
+Built in `web/elrs.js`: while the tab is open the page sends `frames 1`,
+pings the module, reads the device information and every entry with all its
+chunks (`crsf` with 0x28 and 0x2C, answers 0x29 and 0x2B in `rx` lines), and
+reads the list again every 2 s and after every change. A choice is written
+with 0x2D; a command is started by writing 1, and while the module asks for
+confirmation (status 3) its button sends 4. Known ELRS 3.6 names get German
+labels and fixed groups (Funk, Sendeleistung, Videosender, Empfänger,
+Modul); any other entry appears under its folder's name or in Modul. Hidden
+entries and folders themselves are not shown. The receiver's link comes
+from the state line. Starting Bind, WiFi or the Bluetooth joystick from the
+tab does not yet change the radio's mode. Next to the title the tab says
+whether the radio sends ("sendet", mode `elrs_active`) or is locked.
+
+While the radio sends to a receiver, every page shows a band "Sendet an den
+Empfänger – Änderungen wirken sofort auf das Modell". Nothing is disabled:
+with `unlock.mode` 1 and the throttle down a lock is released in the next
+frame, so greying out until a lock would leave nothing changeable.
+
 ### Mapping and trim
 
 - The mapping is one of three: AETR and TAER are fixed, Custom is the own
@@ -383,8 +401,10 @@ Stage 2 as built so far:
   200 ms.
 - Throttle lock: the radio starts locked. After every start of the module
   and after every changed setting no frame is sent until the unlock gesture
-  in `unlock.mode` was made: 0 none, 1 throttle at its lower end (default),
-  2 throttle at its upper and then its lower end. The status LED is red while
+  in `unlock.mode` was made: 1 throttle at its lower end (default), 2
+  throttle at its upper and then its lower end. With 1 and the throttle
+  already down, a lock from a changed setting or from `lock` is released in
+  the next frame. The status LED is red while
   locked; one tone marks the release unless `unlock.beep` is 0. `buzzer.on`
   0 silences all tones.
 - Switching the radio on starts the module, switching it off stops it.

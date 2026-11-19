@@ -300,7 +300,7 @@ static void test_settings()
     /* Values outside the range are refused. */
     CHECK(settings::set(settings::UNLOCK_MODE, 2));
     CHECK(!settings::set(settings::UNLOCK_MODE, 3));
-    CHECK(!settings::set(settings::UNLOCK_MODE, -1));
+    CHECK(!settings::set(settings::UNLOCK_MODE, 0));
     CHECK(settings::values[settings::UNLOCK_MODE] == 2);
     CHECK(!settings::set(settings::COUNT, 0));
 }
@@ -486,9 +486,6 @@ static void test_mode()
     in.module_on = true;
     in.throttle = 2012;
     CHECK(machine.update(in) == Mode::ELRS_LOCKED);
-    /* Mode 0 opens wherever the throttle is. */
-    in.unlock_mode = 0;
-    CHECK(machine.update(in) == Mode::ELRS_ACTIVE);
 
     CHECK(std::strcmp(core::mode_name(Mode::ELRS_ACTIVE), "elrs_active") == 0);
 }
@@ -516,9 +513,6 @@ static void test_throttle_lock()
     /* Locking again forgets the upper end. */
     lock.lock();
     CHECK(lock.update(988, 2));
-
-    /* Mode 0: unlocked wherever the throttle is. */
-    CHECK(!lock.update(1700, 0));
 }
 
 static void test_mapping()

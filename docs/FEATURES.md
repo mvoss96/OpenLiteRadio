@@ -28,8 +28,8 @@ analysis kept outside this repository.
 - Not configurable: power on/off on the power button, and a fixed button
   combination at power-on that ignores all own settings.
 - The radio starts locked and sends no channel data until it is unlocked. How
-  it unlocks is a setting: unlocked at once, throttle at its lower end (the
-  default), or throttle up and down again. Further gestures may follow.
+  it unlocks is a setting: throttle at its lower end (the default), or
+  throttle up and down again. Further gestures may follow.
 - Flash below 0x08008000 is not written. The factory calibration there is
   not used because it does not fit the stick readings (docs/HARDWARE.md); own
   settings are stored in the application area. The stock firmware therefore
@@ -84,7 +84,7 @@ analysis kept outside this repository.
 | Prio | Feature | Stock | Status |
 |---|---|---|---|
 | M | No output while the throttle is not at its lower end at power-on | manual | lock seen held and released in the state lines, hw; not seen with the module on |
-| S | Unlock gesture selectable: at once, throttle down, throttle up and down | - | setting unlock.mode; modes 0 and 2 only in the PC tests |
+| S | Unlock gesture selectable: throttle down, throttle up and down | - | setting unlock.mode; mode 2 only in the PC tests |
 | M | Power on/off: short press, then long press | manual; latch on PC15, measured | latch set and released by the test build, hw |
 | M | Battery voltage measurement and low-battery warning | manual; PB0 with the stock thresholds in raw counts, code | raw value read, hw; not checked on a discharged battery |
 | S | Battery level on the four-LED indicator on a short power press | manual; LEDs on shift register 0x0f, measured | LEDs switched by the test build, hw |

@@ -8,7 +8,8 @@
 // channel which control it follows (ch.N.source). The assignment view shows
 // the same thing from the control's side.
 //
-// Every change is stored at once with "save".
+// Every change is stored at once with "save". The tab "ELRS-Modul" is in
+// elrs.js, which is loaded first and uses send() and $() from here.
 
 const USB_VENDOR_ID = 0x2fe3;
 const CHANNEL_COUNT = 16;
@@ -462,6 +463,9 @@ function showState(fields) {
     drawCurve();
   }
   showCalibration(fractions, fields.calib === "1");
+  elrsState(fields);
+  // A band on every page while the radio sends to a receiver: changes reach the model at once.
+  $("band").hidden = fields.mode !== "elrs_active";
 }
 
 // Grey drawing without live values, as shown before connecting.
@@ -577,6 +581,8 @@ function handleLine(line) {
   if (kind === "state") {
     showState(Object.fromEntries(rest.map((pair) => pair.split("="))));
     linesThisSecond++;
+  } else if (kind === "rx") {
+    elrsReceived(rest);
   } else if (kind === "hello") {
     $("deviceText").textContent = `LiteRadio 4 · Firmware ${rest[1]}`;
     $("sysFirmware").textContent = rest[1];
@@ -592,6 +598,8 @@ function handleLine(line) {
     handleOk(rest);
   } else if (kind === "error") {
     const reason = rest.join(" ");
+    // A module frame the radio could not pass on; the ELRS tab asks again by itself.
+    if (reason === "crsf") return;
     showMessage(reason === "calibration rejected"
       ? "Kalibrierung verworfen: Ein Knüppel war nicht an allen Enden oder am Schluss nicht losgelassen."
       : "Die Fernsteuerung hat abgelehnt: " + reason);
@@ -627,6 +635,8 @@ function setConnected(connected) {
     showMapping();
     openDetail(0);
     showView("assign");
+    elrsState({ module: "0", lq: "0" });
+    $("band").hidden = true;
   }
 }
 
@@ -673,6 +683,7 @@ function showView(name) {
   for (const view of document.querySelectorAll(".view")) view.hidden = view.id !== "view-" + name;
   for (const button of $("nav").children) button.classList.toggle("active", button.dataset.view === name);
   $("statusbar").hidden = name !== "assign";
+  elrsShow(name === "elrs");
 }
 
 // The drawing alone when there is no room for the labels beside it.

@@ -15,7 +15,7 @@ namespace settings {
 
 /* Positions of the values, in the order the list is reported. */
 enum Index {
-    UNLOCK_MODE = 0,   /* 0 at once, 1 throttle down, 2 throttle up and down */
+    UNLOCK_MODE = 0,   /* 1 throttle down, 2 throttle up and down */
     UNLOCK_BEEP = 1,   /* tone when the output is released */
     BUZZER_ON = 2,     /* 0 silences all tones */
     MAP_MODE = 3,      /* the assignment in use, a core::Mapping */
