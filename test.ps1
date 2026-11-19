@@ -9,4 +9,15 @@ g++ -std=c++20 -Wall -Wextra -Werror -Isrc `
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 & build-tests/core_tests.exe
-exit $LASTEXITCODE
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+# The configurator shows the project's version; it must be the one in VERSION.
+$v = @{}
+Get-Content VERSION | ForEach-Object { if ($_ -match '^(\w+)\s*=\s*(\S*)') { $v[$Matches[1]] = $Matches[2] } }
+$version = "$($v.VERSION_MAJOR).$($v.VERSION_MINOR).$($v.PATCHLEVEL)"
+if (-not (Select-String -Path web/app.js -SimpleMatch "const WEB_VERSION = `"$version`";" -Quiet)) {
+    Write-Output "web/app.js: WEB_VERSION is not $version from VERSION"
+    exit 1
+}
+Write-Output "web version matches VERSION ($version)"
+exit 0

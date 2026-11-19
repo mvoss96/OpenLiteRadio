@@ -373,7 +373,7 @@ static void test_led()
 
     CHECK(core::led_colour(in, 0) == 0);
     in.mode = Mode::USB_JOYSTICK;
-    CHECK(core::led_colour(in, 0) == 0x300500);
+    CHECK(core::led_colour(in, 0) == 0x181818);
     in.mode = Mode::ELRS_LOCKED;
     CHECK(core::led_colour(in, 0) == 0x300000);
 

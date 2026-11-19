@@ -9,7 +9,7 @@ constexpr uint32_t RED = 0x300000;
 constexpr uint32_t GREEN = 0x003000;
 constexpr uint32_t BLUE = 0x000030;
 constexpr uint32_t YELLOW = 0x302000;
-constexpr uint32_t ORANGE = 0x300500; /* with more green it looks yellow on this LED */
+constexpr uint32_t WHITE = 0x181818; /* half of each part, about as bright as one colour */
 constexpr uint32_t CYAN = 0x002424;
 constexpr uint32_t PURPLE = 0x200030;
 
@@ -45,7 +45,7 @@ uint32_t led_colour(const LedInputs &in, uint32_t ms)
     case Mode::ELRS_ACTIVE:
         return in.receiver_connected ? BLUE : blink(BLUE, ms, SLOW_MS);
     case Mode::USB_JOYSTICK:
-        return ORANGE;
+        return WHITE;
     case Mode::USB_XBOX:
         return YELLOW;
     case Mode::OFF:

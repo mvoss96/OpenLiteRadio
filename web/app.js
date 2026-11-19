@@ -11,6 +11,8 @@
 // Every change is stored at once with "save". The tab "ELRS-Modul" is in
 // elrs.js, which is loaded first and uses send() and $() from here.
 
+// The project's version from the file VERSION; test.ps1 checks that both agree.
+const WEB_VERSION = "0.11.2";
 const USB_VENDOR_ID = 0x2fe3;
 const CHANNEL_COUNT = 16;
 const BATTERY_THRESHOLDS = [3232, 3298, 3391, 3552];   // stock firmware: 1, 2, 3, 4 LEDs
@@ -57,6 +59,7 @@ const icon = (name) => `<svg class="i" viewBox="0 0 24 24"><path d="${ICON[name]
 
 let writer = null;
 let reader = null;
+let opening = false;               // a port is being chosen or opened
 let linesThisSecond = 0;
 const settings = new Map();        // key -> { type, min, max, def, value }
 let lastFields = null;             // fields of the last state line
@@ -443,9 +446,9 @@ function showState(fields) {
 
   $("lockNote").hidden = !(moduleOn && locked);
   $("lockNote").textContent = setting("unlock.mode") === 2 ? "Gesperrt: Gas hoch, dann runter" : "Gesperrt: Gas nach unten";
-  $("stModule").textContent = !moduleOn ? "aus" : locked ? "läuft" : "sendet";
-  $("stRate").textContent = Math.round(1e6 / Number(fields.period)) + " Hz";
-  $("stLink").textContent = fields.lq === "0" ? "nicht verbunden" : `${fields.lq} %, -${fields.rssi} dBm`;
+  const link = fields.lq === "0" ? "kein Empfänger" : `Empfänger ${fields.lq} %, -${fields.rssi} dBm`;
+  $("stModule").textContent = !moduleOn ? "aus"
+    : `${locked ? "gesperrt" : "aktiv"} · ${Math.round(1e6 / Number(fields.period))} Hz · ${link}`;
   $("stBattery").textContent = `${level} von 4`;
   $("sysBattery").textContent = battery;
   $("sysUsb").textContent = fields.usb === "1" ? "vorhanden" : "fehlt";
@@ -584,7 +587,7 @@ function handleLine(line) {
   } else if (kind === "rx") {
     elrsReceived(rest);
   } else if (kind === "hello") {
-    $("deviceText").textContent = `LiteRadio 4 · Firmware ${rest[1]}`;
+    $("deviceText").textContent = `LiteRadio 4 · Firmware ${rest[1]} · Konfigurator ${WEB_VERSION}`;
     $("sysFirmware").textContent = rest[1];
   } else if (kind === "setting") {
     const [key, type, min, max, def, value] = rest;
@@ -640,13 +643,21 @@ function setConnected(connected) {
   }
 }
 
-async function connect() {
+// Connect to known, a port this page may already use, or let the user pick one.
+async function connect(known) {
   if (!("serial" in navigator)) {
     showMessage("Dieser Browser kann keine seriellen Geräte ansprechen. Bitte Chrome oder Edge verwenden.");
     return;
   }
-  const port = await navigator.serial.requestPort({ filters: [{ usbVendorId: USB_VENDOR_ID }] });
-  await port.open({ baudRate: 115200 });
+  if (opening || writer) return;
+  opening = true;
+  let port;
+  try {
+    port = known || await navigator.serial.requestPort({ filters: [{ usbVendorId: USB_VENDOR_ID }] });
+    await port.open({ baudRate: 115200 });
+  } finally {
+    opening = false;
+  }
   writer = port.writable.getWriter();
   reader = port.readable.getReader();
   setConnected(true);
@@ -677,6 +688,17 @@ async function connect() {
   setConnected(false);
 }
 
+// With "Automatisch verbinden" on, connect without the port picker to a radio
+// this page was allowed to use before: when the page opens, when the switch is
+// turned on and whenever such a radio is plugged in. After "Trennen" it stays
+// disconnected until the radio is plugged in again.
+async function autoConnect() {
+  if (writer || !("serial" in navigator) || !$("autoConnect").checked) return;
+  const ports = await navigator.serial.getPorts();
+  const port = ports.find((p) => p.getInfo().usbVendorId === USB_VENDOR_ID);
+  if (port) connect(port).catch((error) => showMessage(error.message));
+}
+
 // ---- Views and events
 
 function showView(name) {
@@ -692,12 +714,25 @@ function fitStage() {
   $("stageSvg").setAttribute("viewBox", narrow.matches ? "0 44 640 440" : "-360 20 1360 470");
 }
 
+for (const element of document.querySelectorAll(".webVersion")) element.textContent = WEB_VERSION;
 buildLabels();
 fitStage();
 narrow.addEventListener("change", fitStage);
 setConnected(false);
 
-$("connectBig").addEventListener("click", () => connect().catch((error) => showMessage(error.message)));
+// Closing the port picker without a choice is no error.
+$("connectBig").addEventListener("click", () => connect().catch((error) => {
+  if (error.name !== "NotFoundError") showMessage(error.message);
+}));
+// Automatic connecting is off by default, since the open page keeps the port
+// from other programs; the choice is kept in this browser only.
+try { $("autoConnect").checked = localStorage.getItem("autoConnect") === "1"; } catch {}
+$("autoConnect").addEventListener("change", () => {
+  try { localStorage.setItem("autoConnect", $("autoConnect").checked ? "1" : "0"); } catch {}
+  autoConnect();
+});
+if ("serial" in navigator) navigator.serial.addEventListener("connect", autoConnect);
+autoConnect();
 $("connect").addEventListener("click", () => { if (writer) reader.cancel(); });
 $("nav").addEventListener("click", (event) => {
   if (event.target.dataset.view && !calibrating) showView(event.target.dataset.view);

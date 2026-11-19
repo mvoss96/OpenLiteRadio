@@ -287,10 +287,10 @@ Modul); any other entry appears under its folder's name or in Modul. Hidden
 entries and folders themselves are not shown. The receiver's link comes
 from the state line. Starting Bind, WiFi or the Bluetooth joystick from the
 tab does not yet change the radio's mode. Next to the title the tab says
-whether the radio sends ("sendet", mode `elrs_active`) or is locked.
+"TX aktiv" (mode `elrs_active`) or "TX gesperrt"; the status bar says
+TX aus, gesperrt or aktiv.
 
-While the radio sends to a receiver, every page shows a band "Sendet an den
-Empfänger – Änderungen wirken sofort auf das Modell". Nothing is disabled:
+While the radio sends to a receiver, every page shows a band "TX aktiv"; changes reach the model at once. Nothing is disabled:
 with `unlock.mode` 1 and the throttle down a lock is released in the next
 frame, so greying out until a lock would leave nothing changeable.
 
@@ -348,15 +348,15 @@ this brightness.
 | On, PC in control | blue, fast blinking |
 | On, sending, receiver connected | blue |
 | On, sending, no receiver | blue, slow blinking |
-| Off, at a PC as joystick | orange |
+| Off, at a PC as joystick | white |
 | Off, at a PC as Xbox controller | yellow |
 | Off, on a charger or without USB | off |
 
 Built in `src/core/led.cpp` (with tests) for every row; the rows of modes
 that have no transitions yet (error, binding, WiFi, Bluetooth, PC, Xbox)
 show once those modes exist. The colours are driven at about a fifth of the
-LED's range; orange is 0x300500, since with more green it looks yellow on
-this LED. "Receiver connected" means link statistics with a link quality above
+LED's range; white is 0x181818. Orange (0x300500) for the joystick was
+too close to red on the radio. "Receiver connected" means link statistics with a link quality above
 0 arrived within the last second. The host command `led` still overrides
 the LED until `led auto`.
 

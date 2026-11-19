@@ -195,7 +195,7 @@ function elrsHeader() {
   const mode = lastFields ? lastFields.mode : "";
   const shown = !$("elrsGroups").hidden;
   $("elrsState").textContent = !shown ? ""
-    : mode === "elrs_active" ? "sendet" : mode === "elrs_locked" ? "gesperrt, sendet nicht" : "";
+    : mode === "elrs_active" ? "TX aktiv" : mode === "elrs_locked" ? "TX gesperrt" : "";
   // The same colours as the status LED in the drawing: blue while sending, orange while locked.
   $("elrsState").style.color = mode === "elrs_active" ? ACCENT : mode === "elrs_locked" ? WARN : "";
 }
@@ -207,8 +207,8 @@ function showElrs() {
   const shown = on && elrs.device !== null && elrs.entries.length > 0 && !silent;
   $("elrsGroups").hidden = !shown;
   $("elrsOff").hidden = shown;
-  $("elrsNoteTitle").textContent = !on ? "Funke ist aus" : silent ? "Modul antwortet nicht" : "Modul wird gelesen …";
-  $("elrsNoteText").textContent = !on ? "Zum Einstellen die Funke einschalten." : silent ? "Es wird weiter gefragt." : "";
+  $("elrsNoteTitle").textContent = !on ? "Fernsteuerung ist aus" : silent ? "Modul antwortet nicht" : "Modul wird gelesen …";
+  $("elrsNoteText").textContent = !on ? "Zum Einstellen die Fernsteuerung einschalten." : silent ? "Es wird weiter gefragt." : "";
   elrsHeader();
   if (!shown) return;
 

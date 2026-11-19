@@ -172,6 +172,7 @@
   .empty svg { width: 40px; height: 40px; }
   .empty b { font-size: 16px; font-weight: 500; }
   .mono { font-variant-numeric: tabular-nums; }
+  .statusright { display: flex; align-items: center; gap: 24px; margin-left: auto; }
   .band { display: flex; align-items: center; gap: 12px; flex: none; height: 56px; padding: 0 24px; background: rgba(90, 162, 255, .14); }
   .band[hidden] { display: none; }
   .band svg { color: var(--accent); }
@@ -205,6 +206,7 @@
   body.offline .maprow { visibility: hidden; }
   body.offline .stage svg { opacity: .35; }
   body.offline .offlinebar { display: flex; }
+  .autoconnect { display: flex; align-items: center; gap: 12px; cursor: pointer; }
   body.calibrating header.top, body.calibrating .statusbar, body.has-detail .statusbar { display: none; }
 
   /* Narrower windows: fewer columns; below 1000 px the labels become a list. */
@@ -246,7 +248,7 @@
 <!-- While the radio sends to a receiver: every change reaches the model at once. -->
 <div class="band" id="band" hidden>
   <svg class="i" viewBox="0 0 24 24"><path d="M12 12v9M8.5 8.5a5 5 0 0 1 7 0M5.6 5.6a9 9 0 0 1 12.8 0"/></svg>
-  <b>Sendet an den Empfänger</b><span class="muted">Änderungen wirken sofort auf das Modell.</span>
+  <b>TX aktiv</b>
 </div>
 
 <main>
@@ -390,6 +392,7 @@
           <section class="group"><h2>Gerät</h2>
             <div class="tiles">
               <div class="tile"><span>Firmware</span><span class="value" id="sysFirmware">–</span></div>
+              <div class="tile"><span>Konfigurator</span><span class="value webVersion"></span></div>
               <div class="tile"><span>Akku-Eingang</span><span class="value" id="sysBattery">–</span></div>
               <div class="tile"><span>USB-Versorgung</span><span class="value" id="sysUsb">–</span></div>
               <div class="tile"><span>Zustandszeilen pro Sekunde</span><span class="value" id="sysRate">–</span></div>
@@ -434,16 +437,20 @@
 </main>
 
 <footer class="statusbar" id="statusbar">
-  <span class="lock" id="lockNote" hidden></span>
-  <span>ELRS-Modul <b id="stModule">–</b></span>
-  <span>Paketrate <b id="stRate">–</b></span>
-  <span>Empfänger <b id="stLink">–</b></span>
+  <!-- TX state, with packet rate and receiver while the TX is on. -->
+  <span>TX <b id="stModule">–</b></span>
   <span>Akku <b id="stBattery">–</b></span>
-  <span class="spacer"></span>
-  <button class="btn" id="calOpen">Knüppel kalibrieren</button>
+  <!-- Kept together on the right, so that the note does not move the items on
+       the left and a narrow window wraps both as one. -->
+  <div class="statusright">
+    <span class="lock" id="lockNote" hidden></span>
+    <button class="btn" id="calOpen">Knüppel kalibrieren</button>
+  </div>
 </footer>
 <footer class="offlinebar">
-  <span>Nicht verbunden</span><span class="spacer"></span><button class="btn primary" id="connectBig">Verbinden</button>
+  <span>Nicht verbunden</span><span>Konfigurator <span class="webVersion"></span></span><span class="spacer"></span>
+  <label class="autoconnect">Automatisch verbinden<input type="checkbox" class="switch" id="autoConnect"></label>
+  <button class="btn primary" id="connectBig">Verbinden</button>
 </footer>
 <div class="toast" id="message" role="status" hidden></div>
 
