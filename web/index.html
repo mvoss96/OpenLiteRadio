@@ -355,7 +355,7 @@
     </section>
   </section>
 
-  <!-- ELRS module: its parameters as the module lists them (web/elrs.js). -->
+  <!-- ELRS module: its parameters as the module lists them (the first script block). -->
   <section class="view" id="view-elrs" hidden>
     <div class="page">
       <div class="pagehead"><h1>ELRS-Modul</h1><span class="muted" id="elrsState"></span></div>
@@ -487,7 +487,1265 @@
 </footer>
 <div class="toast" id="message" role="status" hidden></div>
 
-<script src="elrs.js"></script>
-<script src="app.js"></script>
+<script>
+// The tab "ELRS-Modul": everything the ELRS module offers, read from the
+// module itself. The radio only passes frames on: "crsf HEX" sends one CRSF
+// frame to the module, and with "frames 1" every frame from the module comes
+// back as an "rx" line. The list of parameters is the module's own, so
+// another ELRS version with other parameters needs no change here; only the
+// labels and the grouping of known names are added.
+//
+// CRSF parameter protocol, extended frames between radio (0xEA) and module (0xEE):
+//   0x28 ping                     -> 0x29 device info: name, serial, versions, parameter count
+//   0x2C read index, chunk        -> 0x2B entry: index, chunks left, then a part of the entry
+//   0x2D write index, value          no answer; the entry is read again afterwards
+// An entry is: parent folder, type (bit 7: hidden), name, then data by type.
+
+const ELRS_MODULE = 0xEE, ELRS_RADIO = 0xEA;
+const ELRS_TIMEOUT_MS = 400, ELRS_TRIES = 4;
+const ELRS_START_MS = 5000;   // "antwortet nicht" only once the module has been on this long
+const ELRS_TYPE = { UINT8: 0, SELECT: 9, STRING: 10, FOLDER: 11, INFO: 12, COMMAND: 13 };
+const COMMAND = { READY: 0, START: 1, PROGRESS: 2, CONFIRM_NEEDED: 3, CONFIRM: 4 };
+
+// German labels and groups of the names ELRS 3.6 uses; other names are shown as the module sends them.
+const ELRS_LABELS = {
+  "Packet Rate": ["Paketrate", "Funk"], "Telem Ratio": ["Telemetrie", "Funk"], "Switch Mode": ["Schaltermodus", "Funk"],
+  "Link Mode": ["Verbindung", "Funk"], "Model Match": ["Modell-Abgleich", "Funk"],
+  "Max Power": ["Höchstens", "Sendeleistung"], "Dynamic": ["Dynamisch", "Sendeleistung"],
+  "Band": ["Band", "Videosender"], "Channel": ["Kanal", "Videosender"], "Pwr Lvl": ["Leistung", "Videosender"],
+  "Send VTx": ["An den Videosender", "Videosender"],
+  "Bad/Good": ["Verloren / gut", "Empfänger"], "Bind": ["Neuen Empfänger binden", "Empfänger"],
+  "Enable WiFi": ["WiFi für Modul-Update", "Modul"], "Enable Rx WiFi": ["WiFi für Empfänger-Update", "Modul"],
+  "BLE Joystick": ["Bluetooth-Joystick", "Modul"],
+};
+const ELRS_BUTTONS = { "Bind": "Binden", "Send VTx": "Senden" };
+// Commands the radio starts itself through its own host commands, because they change its mode.
+const ELRS_RADIO_COMMANDS = { "Bind": "bind", "Enable WiFi": "wifi", "BLE Joystick": "ble" };
+// Groups in two columns, with the icon of each; a group of an unknown folder goes to the left.
+const ELRS_COLUMNS = [["Funk", "Sendeleistung", "Videosender"], ["Empfänger", "Modul"]];
+const ELRS_ICONS = {
+  "Funk": "M12 12v9M8.5 8.5a5 5 0 0 1 7 0M5.6 5.6a9 9 0 0 1 12.8 0", "Sendeleistung": "M13 3 5 14h6l-1 7 8-11h-6z",
+  "Videosender": "M3 7h12v10H3zM15 10l6-3v10l-6-3", "Empfänger": "M9 15l6-6M10 6l1-1a4 4 0 0 1 6 6l-1 1M14 18l-1 1a4 4 0 0 1-6-6l1-1",
+  "Modul": "M7 7h10v10H7zM10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4",
+};
+
+const elrs = {
+  open: false,       // the tab is shown
+  moduleOn: false,   // from the last state line
+  device: null,      // { name, count } from the device info
+  entries: [],       // index -> parsed entry
+  failed: false,     // the module did not answer
+  waiting: null,     // the request that waits for its answer: { accept, done }
+  chain: Promise.resolve(),   // requests run one after the other
+  queued: 0,         // readings queued or running
+  onSince: 0,        // Date.now() when the module was last seen switching on or off
+};
+
+function crc8(bytes) {
+  let crc = 0;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let i = 0; i < 8; i++) crc = crc & 0x80 ? ((crc << 1) ^ 0xD5) & 0xFF : (crc << 1) & 0xFF;
+  }
+  return crc;
+}
+
+// One extended frame from the radio to the module, as hex for "crsf".
+function elrsFrame(type, payload) {
+  const body = [type, ELRS_MODULE, ELRS_RADIO, ...payload];
+  return [ELRS_MODULE, body.length + 1, ...body, crc8(body)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// Send a frame and wait for the first frame from the module that accept() takes; null after the last try.
+function elrsRequest(type, payload, accept) {
+  return new Promise((resolve) => {
+    const attempt = (left) => {
+      const timer = setTimeout(() => {
+        elrs.waiting = null;
+        if (left > 1) attempt(left - 1); else resolve(null);
+      }, ELRS_TIMEOUT_MS);
+      elrs.waiting = { accept, done: (frame) => { clearTimeout(timer); elrs.waiting = null; resolve(frame); } };
+      send("crsf " + elrsFrame(type, payload));
+    };
+    attempt(ELRS_TRIES);
+  });
+}
+
+// Run fn after every request already queued; fn is an async function.
+function elrsQueue(fn) {
+  elrs.queued++;
+  elrs.chain = elrs.chain.then(fn).catch((error) => console.error(error)).finally(() => elrs.queued--);
+  return elrs.chain;
+}
+
+// A line "rx aa bb ..." from the radio: one frame from the module, sync byte to CRC.
+function elrsReceived(words) {
+  const frame = Uint8Array.from(words, (word) => parseInt(word, 16));
+  if (elrs.waiting && elrs.waiting.accept(frame)) elrs.waiting.done(frame);
+}
+
+// Zero-terminated UTF-8 string at offset; returns [text, offset after the zero].
+function elrsString(data, offset) {
+  let end = data.indexOf(0, offset);
+  if (end < 0) end = data.length;
+  return [new TextDecoder().decode(data.subarray(offset, end)), end + 1];
+}
+
+function parseEntry(index, data) {
+  const type = data[1] & 0x7F;
+  const [name, at] = elrsString(data, 2);
+  const entry = { index, parent: data[0], type, hidden: (data[1] & 0x80) !== 0, name };
+  if (type === ELRS_TYPE.SELECT) {
+    const [options, next] = elrsString(data, at);
+    entry.options = options.split(";");
+    entry.value = data[next];
+    entry.unit = elrsString(data, next + 4)[0].trim();
+  } else if (type === ELRS_TYPE.UINT8) {
+    [entry.value, entry.min, entry.max] = data.subarray(at, at + 3);
+    entry.unit = elrsString(data, at + 4)[0].trim();
+  } else if (type === ELRS_TYPE.INFO || type === ELRS_TYPE.STRING) {
+    entry.text = elrsString(data, at)[0];
+  } else if (type === ELRS_TYPE.COMMAND) {
+    entry.status = data[at];
+    entry.text = elrsString(data, at + 2)[0];
+  }
+  return entry;
+}
+
+// Read one entry, all its chunks; null if the module does not answer.
+async function readEntry(index) {
+  const parts = [];
+  for (let chunk = 0; chunk < 16; chunk++) {
+    const frame = await elrsRequest(0x2C, [index, chunk], (f) => f[2] === 0x2B && f[5] === index);
+    if (!frame) return null;
+    parts.push(...frame.subarray(7, frame.length - 1));
+    if (frame[6] === 0) return parseEntry(index, Uint8Array.from(parts));
+  }
+  return null;
+}
+
+// Read the device info and every entry, then show them.
+async function readModule() {
+  if (!elrs.open || !elrs.moduleOn) return;
+  const info = await elrsRequest(0x28, [], (f) => f[2] === 0x29);
+  if (!info) { elrs.failed = true; showElrs(); return; }
+  const [name, at] = elrsString(info, 5);
+  elrs.device = { name, count: info[at + 12] };
+  const entries = [];
+  for (let index = 1; index <= elrs.device.count; index++) {
+    const entry = await readEntry(index);
+    if (!entry) { elrs.failed = true; showElrs(); return; }
+    entries[index] = entry;
+  }
+  // Redrawing would close a list that is open for choosing; the next reading shows the news.
+  const choosing = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.elrs;
+  if (choosing || (JSON.stringify(entries) === JSON.stringify(elrs.entries) && !elrs.failed)) return;
+  elrs.entries = entries;
+  elrs.failed = false;
+  showElrs();
+}
+
+function elrsWrite(index, value) {
+  send("crsf " + elrsFrame(0x2D, [index, value]));
+}
+
+// ---- View
+
+const escapeHtml = (text) => text.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+// Label and group of an entry; an unknown entry goes to its folder's group, or to "Modul".
+function elrsPlace(entry) {
+  if (ELRS_LABELS[entry.name]) return ELRS_LABELS[entry.name];
+  const folder = elrs.entries[entry.parent];
+  return [entry.name, folder ? (ELRS_LABELS[folder.name] || [folder.name.replace(/ \(.*\)$/, "")])[0] : "Modul"];
+}
+
+function elrsTile(entry, label) {
+  const name = escapeHtml(label);
+  if (entry.type === ELRS_TYPE.SELECT || entry.type === ELRS_TYPE.UINT8) {
+    // A unit in brackets, such as "(78bps)", describes the current value only.
+    const note = entry.unit.startsWith("(");
+    const unit = (value) => (!entry.unit || (note && value !== entry.value) ? "" : " " + entry.unit);
+    const choices = entry.type === ELRS_TYPE.SELECT
+      ? entry.options.map((text, i) => [i, text])
+      : Array.from({ length: entry.max - entry.min + 1 }, (_, i) => [entry.min + i, String(entry.min + i)]);
+    const options = choices.filter(([, text]) => text !== "").map(([value, text]) =>
+      `<option value="${value}"${value === entry.value ? " selected" : ""}>${escapeHtml(text + unit(value))}</option>`).join("");
+    return `<label class="tile"><span>${name}</span><select data-elrs="${entry.index}">${options}</select></label>`;
+  }
+  if (entry.type === ELRS_TYPE.COMMAND) {
+    const confirm = entry.status === COMMAND.CONFIRM_NEEDED;
+    const text = entry.text && entry.status !== COMMAND.READY ? `<span class="value">${escapeHtml(entry.text)}</span>` : "";
+    return `<div class="tile"><span>${name}</span>${text}<button class="btn" data-command="${entry.index}" data-confirm="${confirm}">` +
+           `${confirm ? "Bestätigen" : ELRS_BUTTONS[entry.name] || "Starten"}</button></div>`;
+  }
+  return `<div class="tile"><span>${name}</span><span class="value mono">${escapeHtml(entry.text || "")}</span></div>`;
+}
+
+// Next to the title: whether the radio sends to a receiver right now, from the mode in the state line.
+function elrsHeader() {
+  const mode = lastFields ? lastFields.mode : "";
+  const shown = !$("elrsGroups").hidden;
+  const texts = { elrs_active: "TX aktiv", elrs_locked: "TX gesperrt", elrs_binding: "bindet",
+                  wifi: "WiFi läuft – zum Beenden ausschalten", bluetooth: "Bluetooth-Joystick – zum Beenden ausschalten" };
+  $("elrsState").textContent = shown ? texts[mode] || "" : "";
+  // The same colours as the status LED in the drawing: blue while sending, orange while locked.
+  $("elrsState").style.color = mode === "elrs_active" ? ACCENT : mode === "elrs_locked" ? WARN : "";
+}
+
+function showElrs() {
+  const on = elrs.moduleOn;
+  // The module answers about 1.8 s after it is switched on; silence before that is no fault.
+  const silent = elrs.failed && Date.now() - elrs.onSince >= ELRS_START_MS;
+  const shown = on && elrs.device !== null && elrs.entries.length > 0 && !silent;
+  $("elrsGroups").hidden = !shown;
+  $("elrsOff").hidden = shown;
+  $("elrsNoteTitle").textContent = !on ? "Fernsteuerung ist aus" : silent ? "Modul antwortet nicht" : "Modul wird gelesen …";
+  $("elrsNoteText").textContent = !on ? "Zum Einstellen die Fernsteuerung einschalten." : silent ? "Es wird weiter gefragt." : "";
+  elrsHeader();
+  if (!shown) return;
+
+  const groups = new Map([...ELRS_COLUMNS.flat()].map((g) => [g, []]));
+  // Within a group, values first and commands last.
+  const ordered = elrs.entries.filter(Boolean).sort((a, b) =>
+    (a.type === ELRS_TYPE.COMMAND) - (b.type === ELRS_TYPE.COMMAND) || a.index - b.index);
+  for (const entry of ordered) {
+    if (entry.hidden || entry.type === ELRS_TYPE.FOLDER) continue;
+    // The version entry carries the version as its name and the commit as its text.
+    if (entry.type === ELRS_TYPE.INFO && /^\d+\.\d+/.test(entry.name)) continue;
+    const [label, group] = elrsPlace(entry);
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group).push(elrsTile(entry, label));
+  }
+  // The receiver's link from the state line, above what the module lists.
+  groups.get("Empfänger").unshift(
+    `<div class="tile"><span>Verbunden</span><span class="value" id="elrsLinked">–</span></div>`,
+    `<div class="tile"><span>Qualität</span><span class="value" id="elrsQuality">–</span></div>`);
+  const version = elrs.entries.find((e) => e && e.type === ELRS_TYPE.INFO && /^\d+\.\d+/.test(e.name));
+  if (version) groups.get("Modul").push(`<div class="tile"><span>Version</span><span class="value mono">${escapeHtml(version.name)}</span></div>`);
+
+  const known = ELRS_COLUMNS.flat();
+  const columns = [ELRS_COLUMNS[0].concat([...groups.keys()].filter((g) => !known.includes(g))), ELRS_COLUMNS[1]];
+  $("elrsGroups").innerHTML = columns.map((names) => `<div class="stack">` + names.filter((g) => groups.get(g).length).map((g) =>
+    `<section class="group"><h2><svg class="i" viewBox="0 0 24 24"><path d="${ELRS_ICONS[g] || ELRS_ICONS.Modul}"/></svg>${escapeHtml(g)}</h2>` +
+    `<div class="tiles">${groups.get(g).join("")}</div></section>`).join("") + `</div>`).join("");
+  if (lastFields) elrsState(lastFields);
+}
+
+// Called with every state line.
+function elrsState(fields) {
+  const on = fields.module === "1";
+  if (on !== elrs.moduleOn) {
+    elrs.moduleOn = on;
+    elrs.onSince = Date.now();
+    elrs.device = null;
+    elrs.entries = [];
+    elrs.failed = false;
+    if (elrs.open) { showElrs(); elrsQueue(readModule); }
+  }
+  if (!elrs.open) return;
+  elrsHeader();
+  if (!$("elrsLinked")) return;
+  $("elrsLinked").textContent = fields.lq === "0" ? "nein" : "ja";
+  $("elrsQuality").textContent = fields.lq + " %";
+}
+
+// Open or leave the tab; the radio prints module frames only while it is open.
+function elrsShow(open) {
+  if (open === elrs.open) return;
+  elrs.open = open;
+  send(open ? "frames 1" : "frames 0");
+  if (open) { showElrs(); elrsQueue(readModule); }
+}
+
+document.getElementById("elrsGroups").addEventListener("change", (event) => {
+  const index = Number(event.target.dataset.elrs);
+  if (!index) return;
+  elrsWrite(index, Number(event.target.value));
+  elrsQueue(readModule);
+});
+document.getElementById("elrsGroups").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-command]");
+  if (!button) return;
+  const index = Number(button.dataset.command);
+  // Binding, WiFi and Bluetooth change the radio's mode, so the radio starts them itself.
+  const own = ELRS_RADIO_COMMANDS[elrs.entries[index].name];
+  if (own) send(own);
+  else elrsWrite(index, button.dataset.confirm === "true" ? COMMAND.CONFIRM : COMMAND.START);
+  // The module reports progress in the entry; read again once it had time to start.
+  setTimeout(() => elrsQueue(readModule), 500);
+});
+// Read the list again every 2 s: the receiver's bad/good count changes all the
+// time, and a module that did not answer yet (about 1.8 s after switching on) is asked again.
+setInterval(() => { if (elrs.open && elrs.moduleOn && elrs.queued === 0) elrsQueue(readModule); }, 2000);
+</script>
+<script>
+// OpenLiteRadio configurator. The page talks to the radio through the Web
+// Serial API (Chrome, Edge). Both sides send one text line per message; the
+// protocol is described in docs/ARCHITECTURE.md.
+//
+// The radio reports its settings (key, type, range, default, value) after
+// "list". This page adds labels and layout. The assignment is one of three
+// (map.mode): the fixed AETR and TAER, or Custom, where the radio stores per
+// channel which control it follows (ch.N.source). The assignment view shows
+// the same thing from the control's side.
+//
+// Every change is stored at once with "save". The tab "ELRS-Modul" is the
+// script block before this one, which uses send() and $() from here.
+//
+// Page, styles and scripts are one file, so that a browser can never combine
+// an older page with newer code.
+
+// The project's version from the file VERSION; test.ps1 checks that both agree.
+const WEB_VERSION = "0.15.1";
+// Protocol number of the hello line this page speaks; test.ps1 checks it against src/host.cpp.
+const PROTOCOL = 2;
+const USB_VENDOR_ID = 0x2fe3;
+const CHANNEL_COUNT = 16;
+const BATTERY_THRESHOLDS = [3232, 3298, 3391, 3552];   // stock firmware: 1, 2, 3, 4 LEDs
+const ACCENT = "#5aa2ff", LEVER = "#4f535a", CAP = "#6b6f76", SURFACE = "#17181b", HAIR = "#2b2e34",
+      STROKE = "#3a3e45", FG1 = "#f2f3f5", FG3 = "#8b9099", WARN = "#f2a655", RAISED = "#202227";
+
+// One entry per control. source is the value of ch.N.source in the firmware
+// (core::Source). side, y and target place the label in the drawing.
+// axis is the stick axis (cal.N.*) of a self-centring stick, which has a dead zone.
+// stick: axis, self-centring, raw value falls towards the high end.
+// positions: words of a switch's positions, in the order of its state value.
+const CONTROLS = [
+  { source: 6, name: "SB", hint: "Hebel links", side: "L", y: 58, target: [213, 64], positions: ["oben", "Mitte", "unten"] },
+  { source: 9, name: "SE", hint: "Taste links", side: "L", y: 112, target: [166, 72], positions: ["losgelassen", "gedrückt"] },
+  { source: 5, name: "SA", hint: "Wippe links", side: "L", y: 166, target: [114, 103], positions: ["unten", "oben"] },
+  { source: 3, name: "Throttle", hint: "Linker Knüppel, senkrecht", side: "L", y: 232, target: [110, 196], stick: [0, false, false] },
+  { source: 4, name: "Yaw", hint: "Linker Knüppel, waagerecht", side: "L", y: 286, target: [110, 204], axis: 1, stick: [1, true, true] },
+  { source: 7, name: "SC", hint: "Hebel rechts", side: "R", y: 58, target: [427, 64], positions: ["oben", "Mitte", "unten"] },
+  { source: 10, name: "SF", hint: "Taste rechts", side: "R", y: 112, target: [474, 72], positions: ["losgelassen", "gedrückt"] },
+  { source: 8, name: "SD", hint: "Wippe rechts", side: "R", y: 166, target: [526, 103], positions: ["unten", "oben"] },
+  { source: 2, name: "Pitch", hint: "Rechter Knüppel, senkrecht", side: "R", y: 232, target: [530, 196], axis: 2, stick: [2, true, true] },
+  { source: 1, name: "Roll", hint: "Rechter Knüppel, waagerecht", side: "R", y: 286, target: [530, 204], axis: 3, stick: [3, true, false] },
+];
+const STATE_KEY = { 5: "sa", 6: "sb", 7: "sc", 8: "sd", 9: "se", 10: "sf" };
+const LIST_ORDER = [3, 4, 2, 1, 5, 6, 7, 8, 9, 10];   // list that replaces the labels in a narrow window
+
+// The fixed assignments, indexed by map.mode; the same tables as FIXED_SOURCES
+// in src/core/channels.cpp. Weight is 100 and nothing is reversed.
+const MAPPINGS = [
+  { sources: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0] },
+  { sources: [3, 1, 2, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0] },
+];
+const MAPPING_CUSTOM = 2;
+
+// Texts for the keys of the radio's option lists ("option LIST VALUE KEY"), per list.
+// A key without a text here is shown as it is.
+const OPTION_TEXTS = {
+  unlock: { throttle_low: "Gas unten", throttle_up_down: "Gas hoch, dann runter" },
+  trimtone: { none: "Aus", stock: "Original", edgetx: "EdgeTX" },
+  tune: { none: "Aus", beep: "Piep", double_beep: "Doppelpiep", short_high: "Kurz hoch", low: "Tief",
+    low_long: "Tief lang", rising: "Aufsteigend", falling: "Absteigend", triad: "Dreiklang" },
+  map: { aetr: "AETR", taer: "TAER", custom: "Custom" },
+  usb: { joystick: "Joystick", xbox: "Xbox-Controller" },
+};
+
+// Trim of the stick axes (settings trim.thr to trim.ail), in the order of the
+// axes and of "trim=" in the state line. One step is TRIM_STEP_US.
+const TRIM_KEYS = ["trim.thr", "trim.rud", "trim.ele", "trim.ail"];
+const TRIM_STEP_US = 4;
+
+const $ = (id) => document.getElementById(id);
+const ICON = { check: "m5 12 5 5 9-10" };
+const icon = (name) => `<svg class="i" viewBox="0 0 24 24"><path d="${ICON[name]}"/></svg>`;
+
+let writer = null;
+let reader = null;
+let opening = false;               // a port is being chosen or opened
+let linesThisSecond = 0;
+const settings = new Map();        // key -> { type, min, max, def, value }
+const optionLists = new Map();     // option list name -> Map(value -> key), from "option" lines
+let lastFields = null;             // fields of the last state line
+let lastChannels = [];
+let selected = 0;                  // source of the control open in the detail card, 0 = none
+let advancedOpen = false;
+let asking = 0;                    // channel the open control wants while the question is shown
+let pendingChange = null;          // change waiting for "replace the Custom assignment?"
+let menuOpen = false;
+let calibrating = false;
+let calStage = 1;                  // 1: move the sticks, 2: release them
+let seen = null;                   // per stick [minX, maxX, minY, maxY] as fractions, during a run
+let shownTrim = 0;                 // trim of the open control as the detail card shows it
+
+const setting = (key) => (settings.has(key) ? settings.get(key).value : undefined);
+
+// The assignment in effect for channel n: that of the fixed mapping chosen,
+// or the Custom settings ch.N.*. field is "source", "weight" or "reverse".
+function chValue(n, field) {
+  const fixed = MAPPINGS[setting("map.mode")];
+  if (!fixed) return setting(`ch.${n}.${field}`);
+  return field === "source" ? fixed.sources[n - 1] : field === "weight" ? 100 : 0;
+}
+
+const channelsOf = (source) =>
+  [...Array(CHANNEL_COUNT).keys()].map((i) => i + 1).filter((n) => chValue(n, "source") === source);
+const controlOf = (source) => CONTROLS.find((control) => control.source === source);
+
+// Trim of a control in steps, from the last state line; 0 for a switch.
+function trimOf(control) {
+  if (!control.stick || !lastFields || !lastFields.trim) return 0;
+  return Number(lastFields.trim.split(",")[control.stick[0]]);
+}
+const trimText = (steps) => (steps > 0 ? "+" : steps < 0 ? "−" : "") + Math.abs(steps);
+
+// ---- Storing changes
+
+async function send(text) {
+  if (writer) await writer.write(new TextEncoder().encode(text + "\n"));
+}
+
+// True if the stored Custom assignment differs from a fixed one, so that copying it would lose something.
+const customDiffers = (fixed) => fixed.sources.some((source, i) =>
+  setting(`ch.${i + 1}.source`) !== source || setting(`ch.${i + 1}.weight`) !== 100 || setting(`ch.${i + 1}.reverse`) !== 0);
+
+// Change the assignment with apply(), which sends "set ch.N.*" lines. With
+// AETR or TAER chosen, the change turns it into Custom, starting from that
+// mapping; a different Custom assignment is only replaced after a question.
+function changeAssignment(apply, confirmed = false) {
+  const fixed = MAPPINGS[setting("map.mode")];
+  if (fixed && customDiffers(fixed) && !confirmed) {
+    pendingChange = apply;
+    showDetail();
+    return;
+  }
+  pendingChange = null;
+  if (fixed) {
+    fixed.sources.forEach((source, i) => {
+      const n = i + 1;
+      if (setting(`ch.${n}.source`) !== source) send(`set ch.${n}.source ${source}`);
+      if (setting(`ch.${n}.weight`) !== 100) send(`set ch.${n}.weight 100`);
+      if (setting(`ch.${n}.reverse`) !== 0) send(`set ch.${n}.reverse 0`);
+    });
+    send(`set map.mode ${MAPPING_CUSTOM}`);
+  }
+  // apply() reads chValue(), which still gives the fixed mapping until the radio confirms; that is what was copied.
+  apply();
+  send("save");
+}
+
+// ---- Choice of the assignment
+
+function showMapping() {
+  const mode = setting("map.mode");
+  const names = new Map(optionsOf("map.mode"));
+  $("mapButton").textContent = names.get(mode) ?? "–";
+  $("mapButton").setAttribute("aria-expanded", menuOpen);
+  $("mapMenu").hidden = !menuOpen;
+  if (!menuOpen) return;
+  $("mapMenu").innerHTML = [...names].map(([i, name]) =>
+    `<div class="mitem${i === mode ? " sel" : ""}" data-mode="${i}"><span>${name}</span>` +
+    (i === mode ? `<span class="slot check">${icon("check")}</span>` : "") + `</div>`).join("");
+}
+
+function chooseMapping(mode) {
+  if (mode !== setting("map.mode")) {
+    send(`set map.mode ${mode}`);
+    send("save");
+  }
+  menuOpen = false;
+  showMapping();
+}
+
+// ---- Labels in the drawing, and the list for narrow windows
+
+function buildLabels() {
+  $("callouts").innerHTML = CONTROLS.map((c) => {
+    const [x0, x1] = c.side === "L" ? [-350, -90] : [730, 990];
+    const near = c.side === "L" ? x1 : x0;
+    return `<g class="callout" tabindex="0" role="button" data-source="${c.source}" aria-label="${c.name} einstellen">
+      <rect class="hit" id="coHit${c.source}" x="${x0 - 14}" y="${c.y - 34}" width="${x1 - x0 + 28}" height="46" rx="10"></rect>
+      <text id="coName${c.source}" x="${x0}" y="${c.y - 10}" font-size="17" font-weight="600" fill="${FG1}">${c.name}</text>
+      <text id="coChannel${c.source}" x="${x0 + 14 + 10 * c.name.length}" y="${c.y - 10}" font-size="14" fill="${FG3}"></text>
+      <text id="coValue${c.source}" x="${x1}" y="${c.y - 10}" text-anchor="end" font-size="16" fill="${FG1}"></text>
+      <path d="M ${x0} ${c.y} H ${x1}" stroke="${HAIR}" stroke-width="3" stroke-linecap="round"></path>
+      <path id="coMeter${c.source}" data-x0="${x0}" data-x1="${x1}" data-y="${c.y}" d="" stroke="${ACCENT}" stroke-width="3" stroke-linecap="round"></path>
+      ${c.stick ? `<rect id="coTrim${c.source}" y="${c.y - 7}" width="2" height="14" rx="1" fill="${FG1}" visibility="hidden"></rect>
+      <text id="coTrimText${c.source}" x="${x1}" y="${c.y + 20}" text-anchor="end" font-size="13" fill="${FG3}"></text>` : ""}
+      <path d="M ${near} ${c.y} L ${c.target[0]} ${c.target[1]}" fill="none" stroke="${LEVER}"></path>
+      <circle cx="${c.target[0]}" cy="${c.target[1]}" r="3.5" fill="${FG3}"></circle>
+    </g>`;
+  }).join("");
+  $("list").innerHTML = LIST_ORDER.map((source) => {
+    const c = controlOf(source);
+    return `<div class="lrow" data-source="${source}"><b>${c.name}</b><span id="liChannel${source}"></span><b id="liValue${source}"></b></div>`;
+  }).join("");
+}
+
+function channelText(source) {
+  const channels = channelsOf(source);
+  return channels.length ? "Kanal " + channels.join(", ") : "kein Kanal";
+}
+
+// Live value of each control: the output of the first channel that follows it.
+function showLabels() {
+  for (const c of CONTROLS) {
+    const text = channelText(c.source);
+    $("coChannel" + c.source).textContent = text;
+    $("liChannel" + c.source).textContent = text;
+    const channel = channelsOf(c.source)[0];
+    const value = channel ? lastChannels[channel - 1] : undefined;
+    const part = value === undefined ? 0 : Math.max(0, Math.min(1, (value - 988) / 1024));
+    $("coValue" + c.source).textContent = value === undefined ? "–" : value;
+    $("liValue" + c.source).textContent = value === undefined ? "–" : value;
+    const meter = $("coMeter" + c.source);
+    const x0 = Number(meter.dataset.x0), x1 = Number(meter.dataset.x1);
+    meter.setAttribute("d", part > 0 ? `M ${x0} ${meter.dataset.y} H ${x0 + (x1 - x0) * part}` : "");
+    if (!c.stick) continue;
+    // A trimmed axis: a mark where the centre now lies, and the trim below the line.
+    const steps = trimOf(c);
+    const centre = output(1500 + steps * TRIM_STEP_US, shapeOf(c.source));
+    $("coTrim" + c.source).setAttribute("x", x0 + (x1 - x0) * (centre - 988) / 1024 - 1);
+    $("coTrim" + c.source).setAttribute("visibility", steps ? "visible" : "hidden");
+    $("coTrimText" + c.source).textContent = steps ? "Trimm " + trimText(steps) : "";
+    $("coHit" + c.source).setAttribute("height", steps ? 64 : 46);
+  }
+}
+
+// ---- Detail card of one control
+
+function openDetail(source) {
+  selected = source;
+  asking = 0;
+  pendingChange = null;
+  for (const element of document.querySelectorAll("[data-source]")) {
+    element.classList.toggle("selected", Number(element.dataset.source) === source);
+  }
+  showDetail();
+}
+
+// Weight and reverse of a control: those of its first channel.
+function shapeOf(source) {
+  const channel = channelsOf(source)[0];
+  return channel ? { weight: chValue(channel, "weight"), reverse: chValue(channel, "reverse") !== 0 }
+                 : { weight: 100, reverse: false };
+}
+const channelShape = () => shapeOf(selected);
+
+// Channel value for a source value, limited to 988..2012 as in the firmware.
+const output = (raw, shape) =>
+  Math.max(988, Math.min(2012, Math.round(1500 + (shape.reverse ? -1 : 1) * (raw - 1500) * shape.weight / 100)));
+
+function showDetail() {
+  const control = controlOf(selected);
+  const open = Boolean(control) && settings.size > 0;
+  $("detail").hidden = !open;
+  document.body.classList.toggle("has-detail", open);
+  if (!open) return;
+
+  $("dName").textContent = control.name;
+  $("dHint").textContent = control.hint;
+
+  // Chips: while asking, they preview the swap.
+  const names = {};
+  for (let n = 1; n <= CHANNEL_COUNT; n++) names[n] = controlOf(chValue(n, "source"));
+  const own = channelsOf(selected);
+  let target = 0;
+  if (asking) {
+    const occupant = names[asking];
+    if (own[0]) { names[own[0]] = occupant; target = own[0]; }
+    names[asking] = control;
+  }
+  let chips = "";
+  for (let n = 1; n <= CHANNEL_COUNT; n++) {
+    const c = names[n];
+    const state = c === control ? "own" : n === target ? "taken target" : c ? "taken" : "free";
+    chips += `<button class="chip ${state}" data-channel="${n}">${n}<small>${c ? c.name : "frei"}</small></button>`;
+  }
+  $("dChips").innerHTML = chips;
+
+  const shape = channelShape();
+  let middle = "";
+  if (control.axis) {
+    const dead = setting(`cal.${control.axis}.deadzone`);
+    middle = `<div class="cap">Totzone</div><div class="big" id="dDeadOut">${dead} %</div>` +
+             `<input type="range" id="dDead" min="0" max="10" value="${dead}" aria-label="Totzone">`;
+  } else if (control.positions) {
+    const now = lastFields ? Number(lastFields[STATE_KEY[control.source]]) : -1;
+    const raw = control.positions.length === 3 ? [988, 1500, 2012] : [988, 2012];
+    middle = `<div class="cap">Stellungen</div><div class="positions">` + control.positions.map((word, i) =>
+      `<div class="mitem${i === now ? " sel" : ""}"><span>${word}</span><span class="sec">${output(raw[i], shape)}</span></div>`).join("") + `</div>`;
+  }
+  const steps = trimOf(control);
+  shownTrim = steps;
+  if (steps) {
+    middle += `<div class="trimblock"><div class="cap">Trimmung</div><div class="weightrow">` +
+              `<div class="big">${trimText(steps)}</div><button class="btn subtle" id="dTrimReset">Zurücksetzen</button></div></div>`;
+  }
+  $("dMiddle").innerHTML = middle;
+  if ($("dDead")) fill($("dDead"));
+
+  if (document.activeElement !== $("dWeight")) $("dWeight").value = shape.weight;
+  $("dWeightOut").textContent = $("dWeight").value + " %";
+  fill($("dWeight"));
+  $("dReverse").checked = shape.reverse;
+  $("dWeight").disabled = $("dReverse").disabled = own.length === 0;
+
+  const question = asking !== 0 || pendingChange !== null;
+  $("dToggle").hidden = question;
+  $("dToggle").classList.toggle("open", advancedOpen);
+  $("dAdvanced").setAttribute("aria-expanded", advancedOpen);
+  $("dAdvancedRow").hidden = !advancedOpen;
+  // Open, the toggle heads the section; closed, it sits at the bottom.
+  $("detail").insertBefore($("dToggle"), advancedOpen ? $("dAdvancedRow") : $("dAsk"));
+  $("dAsk").hidden = !question;
+  if (pendingChange) {
+    $("dAskText").textContent = "Custom-Belegung ersetzen?";
+    $("askReplace").classList.add("primary");
+    $("askSwap").hidden = true;
+  } else if (asking) {
+    const occupant = controlOf(chValue(asking, "source"));
+    $("dAskText").innerHTML = `Kanal ${asking} ist belegt von <b>${occupant.name}</b>`;
+    $("askReplace").classList.remove("primary");
+    $("askSwap").hidden = own.length === 0;
+  }
+  drawCurve();
+}
+
+// Filled part of a slider.
+function fill(input) {
+  input.style.setProperty("--fill", (input.value - input.min) / (input.max - input.min) * 100 + "%");
+}
+
+// Stick position of the open control in percent, -100 to 100, from the raw reading.
+function stickPercent(control) {
+  const [axis, centred, inverted] = control.stick;
+  const raw = lastFields ? Number(lastFields.sticks.split(",")[axis]) : undefined;
+  const low = setting(`cal.${axis}.low`), centre = setting(`cal.${axis}.centre`), high = setting(`cal.${axis}.high`);
+  if (raw === undefined || low === undefined) return 0;
+  let percent;
+  if (!centred) percent = ((raw - low) / (high - low)) * 200 - 100;
+  else if (raw >= centre) percent = ((raw - centre) / (high - centre)) * 100;
+  else percent = -((centre - raw) / (centre - low)) * 100;
+  percent = Math.max(-100, Math.min(100, percent));
+  return inverted ? -percent : percent;
+}
+
+// Response of the open control: no axes and no labels; dead band, curve and live dot.
+function drawCurve() {
+  const control = controlOf(selected);
+  if (!control) return;
+  const W = 340, H = 200, pad = 16;
+  const shape = { weight: Number($("dWeight").value), reverse: $("dReverse").checked };
+  const Y = (v) => pad + (1 - (v - 988) / 1024) * (H - 2 * pad);
+  let grid = "";
+  for (const x of [W / 4, 3 * W / 4]) grid += `<path d="M ${x} 0 V ${H}" stroke="${FG1}" stroke-opacity=".05"></path>`;
+  for (const y of [H / 4, 3 * H / 4]) grid += `<path d="M 0 ${y} H ${W}" stroke="${FG1}" stroke-opacity=".05"></path>`;
+  grid += `<path d="M 0 ${H / 2} H ${W} M ${W / 2} 0 V ${H}" stroke="${FG1}" stroke-opacity=".16"></path>`;
+  const dot = (x, y) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="7" fill="#fff" stroke="${RAISED}" stroke-width="2"></circle>`;
+  let inner = "";
+  if (control.stick) {
+    const dead = control.axis ? Number($("dDead") ? $("dDead").value : 0) : 0;
+    const X = (p) => pad + (p + 100) / 200 * (W - 2 * pad);
+    const offset = trimOf(control) * TRIM_STEP_US;
+    const out = (p) => output((Math.abs(p) <= dead ? 1500 : 1500 + 512 * p / 100) + offset, shape);
+    const points = dead ? [-100, -dead, dead, 100] : [-100, 100];
+    const line = points.map((p, i) => `${i ? "L" : "M"} ${X(p).toFixed(1)} ${Y(out(p)).toFixed(1)}`).join(" ");
+    if (dead) inner += `<rect x="${X(-dead)}" y="0" width="${X(dead) - X(-dead)}" height="${H}" fill="${ACCENT}" fill-opacity=".14"></rect>`;
+    inner += `<path d="${line}" fill="none" stroke="${ACCENT}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"></path>`;
+    const live = stickPercent(control);
+    inner += dot(X(live), Y(out(live)));
+  } else {
+    const raw = control.positions.length === 3 ? [988, 1500, 2012] : [988, 2012];
+    const seg = (W - 2 * pad) / raw.length;
+    raw.forEach((value, i) => {
+      inner += `<path d="M ${pad + i * seg + 8} ${Y(output(value, shape))} H ${pad + (i + 1) * seg - 8}" stroke="${ACCENT}" stroke-width="3" stroke-linecap="round"></path>`;
+    });
+    const now = lastFields ? Number(lastFields[STATE_KEY[control.source]]) : 0;
+    inner += dot(pad + (now + 0.5) * seg, Y(output(raw[now] ?? 1500, shape)));
+  }
+  $("dCurve").innerHTML = `<rect width="${W}" height="${H}" rx="12" fill="${RAISED}"></rect>${grid}${inner}`;
+}
+
+// Put the open control on a channel. Weight and reverse move with it.
+// swap: the control on that channel takes over the open control's channel.
+function moveTo(channel, swap) {
+  asking = 0;
+  changeAssignment(() => {
+    const own = channelsOf(selected);
+    const from = own[0];
+    const shapeOf = (n) => n ? [chValue(n, "weight"), chValue(n, "reverse")] : [100, 0];
+    const [weight, reverse] = shapeOf(from);
+    if (swap && from) {
+      const occupant = chValue(channel, "source");
+      const [otherWeight, otherReverse] = shapeOf(channel);
+      send(`set ch.${from}.source ${occupant}`);
+      send(`set ch.${from}.weight ${otherWeight}`);
+      send(`set ch.${from}.reverse ${otherReverse}`);
+    } else if (from) {
+      send(`set ch.${from}.source 0`);
+      send(`set ch.${from}.weight 100`);
+      send(`set ch.${from}.reverse 0`);
+    }
+    for (const other of own.slice(1)) send(`set ch.${other}.source 0`);
+    send(`set ch.${channel}.source ${selected}`);
+    send(`set ch.${channel}.weight ${weight}`);
+    send(`set ch.${channel}.reverse ${reverse}`);
+  });
+  showDetail();
+}
+
+// ---- Live state
+
+function setFill(id, colour) { $(id).setAttribute("fill", colour); }
+
+const TRIM_PARTS = [["Up", 1], ["Down", 2], ["Left", 4], ["Right", 8], ["Centre", 16]];
+function showTrim(prefix, bits) {
+  for (const [part, bit] of TRIM_PARTS) setFill(prefix + part, bits & bit ? ACCENT : STROKE);
+}
+
+// Stick position as fractions: x from 0 (left) to 1 (right), y from 0 (top) to 1 (bottom).
+function stickFractions(sticks) {
+  return [[1 - sticks[1] / 4095, 1 - sticks[0] / 4095], [sticks[3] / 4095, sticks[2] / 4095]];
+}
+
+// The status LED as the radio reports it (led=RRGGBB, as sent to the LED, blinking
+// included). The LED is driven at about a fifth of its range, so the colour is
+// brightened to full scale for the drawing; off is drawn as the unlit LED.
+function ledColour(fields) {
+  const value = parseInt(fields.led || "0", 16);
+  const parts = [value >> 16, (value >> 8) & 255, value & 255];
+  const top = Math.max(...parts);
+  if (!top) return HAIR;
+  return "#" + parts.map((p) => Math.round(p * 255 / top).toString(16).padStart(2, "0")).join("");
+}
+
+function showState(fields) {
+  lastFields = fields;
+  const sticks = fields.sticks.split(",").map(Number);
+  const fractions = stickFractions(sticks);
+  [["capLeft", 173], ["capRight", 467]].forEach(([id, centre], index) => {
+    const [x, y] = fractions[index];
+    $(id).setAttribute("cx", centre + (x - 0.5) * 64);
+    $(id).setAttribute("cy", 200 + (y - 0.5) * 44);
+    setFill(id, Math.abs(x - 0.5) > 0.06 || Math.abs(y - 0.5) > 0.06 ? ACCENT : CAP);
+  });
+  $("rockSA").setAttribute("stroke", ACCENT);
+  $("rockSD").setAttribute("stroke", ACCENT);
+  $("rockSA").setAttribute("d", fields.sa === "1" ? "M 130 92.2 L 150 80" : "M 110 104.5 L 130 92.2");
+  $("rockSD").setAttribute("d", fields.sd === "1" ? "M 510 92.2 L 490 80" : "M 530 104.5 L 510 92.2");
+  for (const [id, key] of [["knobSB", "sb"], ["knobSC", "sc"]]) {
+    $(id).setAttribute("cy", 95 + Number(fields[key]) * 9);
+    setFill(id, ACCENT);
+    setFill(id.replace("knob", "lever"), ACCENT);
+  }
+  setFill("keySE", fields.se === "1" ? ACCENT : LEVER);
+  setFill("keySF", fields.sf === "1" ? ACCENT : LEVER);
+  setFill("keyPower", fields.power === "1" ? ACCENT : SURFACE);
+  showTrim("trimL", Number(fields.tl));
+  showTrim("trimR", Number(fields.tr));
+  for (const [key, button, text] of [["bind", "keyBind", "txtBind"], ["setup", "keySetup", "txtSetup"]]) {
+    const pressed = fields[key] === "1";
+    setFill(button, pressed ? ACCENT : HAIR);
+    setFill(text, pressed ? ACCENT : FG3);
+  }
+  for (const source of [9, 10]) {
+    setFill("coName" + source, fields[STATE_KEY[source]] === "1" ? ACCENT : FG1);
+  }
+
+  const moduleOn = fields.module === "1";
+  const locked = fields.lock === "1";
+  const battery = Number(fields.battery);
+  const level = BATTERY_THRESHOLDS.filter((threshold) => battery >= threshold).length;
+  document.querySelectorAll(".batLed").forEach((led, index) => led.setAttribute("fill", index < level ? FG1 : HAIR));
+  setFill("statusLed", ledColour(fields));
+
+  $("lockNote").hidden = fields.mode !== "elrs_locked";
+  $("lockNote").textContent = setting("unlock.mode") === 2 ? "Gesperrt: Gas hoch, dann runter" : "Gesperrt: Gas nach unten";
+  const link = fields.lq === "0" ? "kein Empfänger" : `Empfänger ${fields.lq} %, -${fields.rssi} dBm`;
+  const rate = `${Math.round(1e6 / Number(fields.period))} Hz`;
+  // The module's own modes need no rate or receiver: it does not send to a model then.
+  const special = { elrs_binding: "bindet", wifi: "WiFi", bluetooth: "Bluetooth-Joystick" }[fields.mode];
+  $("stModule").textContent = !moduleOn ? "aus" : special
+    || `${locked ? "gesperrt" : "aktiv"} · ${rate} · ${link}`;
+  $("stBattery").textContent = `${level} von 4`;
+  // Named with the keys of the setting usb.mode, so the texts exist once.
+  const usbForm = { usb_joystick: "joystick", usb_xbox: "xbox" }[fields.mode];
+  $("stUsbItem").hidden = !usbForm;
+  if (usbForm) $("stUsb").textContent = OPTION_TEXTS.usb[usbForm];
+  $("sysBattery").textContent = battery;
+  $("sysUsb").textContent = fields.usb === "1" ? "vorhanden" : "fehlt";
+
+  lastChannels = fields.ch.split(",").map(Number);
+  showLabels();
+  if (selected) {
+    // Only the live parts; a full redraw would reset a slider being dragged.
+    const control = controlOf(selected);
+    if (trimOf(control) !== shownTrim && document.activeElement !== $("dDead")) showDetail();
+    if (control.positions) {
+      const now = Number(fields[STATE_KEY[control.source]]);
+      document.querySelectorAll(".positions .mitem").forEach((row, i) => row.classList.toggle("sel", i === now));
+    }
+    drawCurve();
+  }
+  showCalibration(fractions, fields.calib === "1");
+  elrsState(fields);
+  // A band on every page while the radio sends to a receiver: changes reach the model at once.
+  $("band").hidden = fields.mode !== "elrs_active";
+}
+
+// Grey drawing without live values, as shown before connecting.
+function resetDrawing() {
+  for (const id of ["knobSB", "knobSC", "leverSB", "leverSC", "keySE", "keySF"]) setFill(id, LEVER);
+  for (const id of ["knobSB", "knobSC"]) $(id).setAttribute("cy", 104);
+  setFill("keyPower", SURFACE);
+  showTrim("trimL", 0);
+  showTrim("trimR", 0);
+  for (const id of ["keyBind", "keySetup"]) setFill(id, HAIR);
+  for (const id of ["txtBind", "txtSetup"]) setFill(id, FG3);
+  for (const id of ["capLeft", "capRight"]) setFill(id, CAP);
+  $("capLeft").setAttribute("cx", 173); $("capLeft").setAttribute("cy", 200);
+  $("capRight").setAttribute("cx", 467); $("capRight").setAttribute("cy", 200);
+  for (const id of ["rockSA", "rockSD"]) $(id).setAttribute("stroke", LEVER);
+  setFill("statusLed", HAIR);
+  document.querySelectorAll(".batLed").forEach((led) => led.setAttribute("fill", HAIR));
+  lastFields = null;
+  lastChannels = [];
+  showLabels();
+}
+
+// ---- Calibration run
+
+// Which end of a stick has not been reached yet, or "" when all four were.
+function missingEnd([minX, maxX, minY, maxY]) {
+  if (minX > 0.2) return "links fehlt";
+  if (maxX < 0.8) return "rechts fehlt";
+  if (minY > 0.2) return "oben fehlt";
+  if (maxY < 0.8) return "unten fehlt";
+  return "";
+}
+
+function showCalStage() {
+  $("calStep").textContent = `Schritt ${calStage} von 2`;
+  $("calTitle").textContent = calStage === 1 ? "In alle Ecken bewegen" : "Rechts loslassen, Gas ganz nach unten";
+  $("calNext").textContent = calStage === 1 ? "Weiter" : "Fertig";
+  for (const pad of ["padLeft", "padRight"]) $(pad).querySelector(".seen").hidden = calStage === 2;
+}
+
+// The run can start here or with SETUP on the radio; either way the state line says so.
+function showCalibration(fractions, running) {
+  if (running && !calibrating) {
+    seen = fractions.map(([x, y]) => [x, x, y, y]);
+    calStage = 1;
+    showCalStage();
+    showView("calibration");
+  }
+  if (!running && calibrating) {
+    send("list");
+    showView("assign");
+  }
+  calibrating = running;
+  document.body.classList.toggle("calibrating", running);
+  if (!running) return;
+
+  let complete = true;
+  [["padLeft", "padLeftNote"], ["padRight", "padRightNote"]].forEach(([padId, noteId], index) => {
+    const [x, y] = fractions[index];
+    const range = seen[index];
+    range[0] = Math.min(range[0], x); range[1] = Math.max(range[1], x);
+    range[2] = Math.min(range[2], y); range[3] = Math.max(range[3], y);
+    const pad = $(padId);
+    Object.assign(pad.querySelector(".dot").style, { left: x * 100 + "%", top: y * 100 + "%" });
+    Object.assign(pad.querySelector(".seen").style, {
+      left: range[0] * 100 + "%", top: range[2] * 100 + "%",
+      width: (range[1] - range[0]) * 100 + "%", height: (range[3] - range[2]) * 100 + "%",
+    });
+    const note = $(noteId);
+    if (calStage === 1) {
+      const missing = missingEnd(range);
+      complete = complete && !missing;
+      note.textContent = missing || "fertig";
+      note.className = missing ? "missing" : "ok";
+    } else {
+      const centred = Math.abs(x - 0.5) < 0.1 && Math.abs(y - 0.5) < 0.1;
+      note.textContent = index === 0 ? (y > 0.85 ? "Gas unten" : "Gas nach unten") : centred ? "Mitte" : "loslassen";
+      note.className = "";
+    }
+  });
+  $("calNext").disabled = calStage === 1 && !complete;
+}
+
+// ---- Settings and system views
+
+// Put a setting's value into every element bound to it with data-key.
+function showSetting(key) {
+  const value = settings.get(key).value;
+  for (const element of document.querySelectorAll(`[data-key="${key}"]`)) {
+    if (element.type === "checkbox") element.checked = value !== 0;
+    else if (document.activeElement !== element) element.value = value;
+  }
+}
+
+// Named values of a setting as [value, text] pairs, from the option list its type names; [] for a number.
+function optionsOf(key) {
+  const s = settings.get(key);
+  const list = s && optionLists.get(s.type);
+  if (!list) return [];
+  const texts = OPTION_TEXTS[s.type] || {};
+  return [...list].map(([value, optionKey]) => [value, texts[optionKey] ?? optionKey]);
+}
+
+// Every list bound to a setting with named values gets them as the radio reports them.
+function fillOptionLists() {
+  for (const key of settings.keys()) {
+    const options = optionsOf(key).map(([value, text]) => `<option value="${value}">${text}</option>`).join("");
+    if (!options) continue;
+    for (const select of document.querySelectorAll(`select[data-key="${key}"]`)) select.innerHTML = options;
+  }
+}
+
+function buildRawTable() {
+  $("rawRows").innerHTML = [...settings].map(([key, s]) =>
+    `<div class="rawrow"><b>${key}</b><span><input type="number" min="${s.min}" max="${s.max}" data-key="${key}" aria-label="${key}"></span>` +
+    `<span>${s.min}–${s.max}</span><span>${s.def}</span></div>`).join("");
+  for (const key of settings.keys()) showSetting(key);
+}
+
+function showMessage(text) {
+  $("message").textContent = text;
+  $("message").hidden = false;
+  clearTimeout(showMessage.timer);
+  showMessage.timer = setTimeout(() => { $("message").hidden = true; }, 8000);
+}
+
+// ---- Lines from the radio
+
+// The radio's hello line arrived on this connection; lines before it may be cut off and are not checked.
+let helloSeen = false;
+
+// The radio sent something this page does not know: show the band that asks to reload the page.
+function warnMismatch(what) {
+  console.warn("Konfigurator passt nicht zur Firmware:", what);
+  $("mismatch").hidden = false;
+}
+
+// After "end": every setting type must be a number or a known option list, and every key must have a text.
+function checkOptionLists() {
+  for (const [key, s] of settings) {
+    if (s.type !== "bool" && s.type !== "int" && !optionLists.has(s.type)) warnMismatch(`${key}: Typ ${s.type}`);
+  }
+  for (const [list, values] of optionLists) {
+    for (const optionKey of values.values()) {
+      if (!OPTION_TEXTS[list]?.[optionKey]) warnMismatch(`option ${list} ${optionKey}`);
+    }
+  }
+}
+
+function handleLine(line) {
+  const [kind, ...rest] = line.trim().split(" ");
+  if (kind === "state") {
+    showState(Object.fromEntries(rest.map((pair) => pair.split("="))));
+    linesThisSecond++;
+  } else if (kind === "rx") {
+    elrsReceived(rest);
+  } else if (kind === "hello") {
+    helloSeen = true;
+    $("deviceText").textContent = `LiteRadio 4 · Firmware ${rest[1]} · Konfigurator ${WEB_VERSION}`;
+    $("sysFirmware").textContent = rest[1];
+    if (rest[2] !== `proto=${PROTOCOL}`) warnMismatch(rest[2]);
+  } else if (kind === "setting") {
+    const [key, type, min, max, def, value] = rest;
+    settings.set(key, { type, min: Number(min), max: Number(max), def: Number(def), value: Number(value) });
+  } else if (kind === "option") {
+    const [list, value, optionKey] = rest;
+    if (!optionLists.has(list)) optionLists.set(list, new Map());
+    optionLists.get(list).set(Number(value), optionKey);
+  } else if (kind === "end") {
+    checkOptionLists();
+    fillOptionLists();
+    buildRawTable();
+    showLabels();
+    showDetail();
+    showMapping();
+  } else if (kind === "ok") {
+    handleOk(rest);
+  } else if (kind === "error") {
+    const reason = rest.join(" ");
+    // A module frame the radio could not pass on; the ELRS tab asks again by itself.
+    if (reason === "crsf") return;
+    showMessage(reason === "calibration rejected"
+      ? "Kalibrierung verworfen: Ein Knüppel war nicht an allen Enden oder am Schluss nicht losgelassen."
+      : "Die Fernsteuerung hat abgelehnt: " + reason);
+    send("list");
+  } else if (kind === "value" || kind === "fault") {
+    // Known lines this page does not use: the answer to "get", and a crash reported after hello.
+  } else if (helloSeen && kind !== "") {
+    warnMismatch(line);
+  }
+}
+
+function handleOk(words) {
+  if (words[0] === "defaults") {
+    send("save");
+    send("list");
+  } else if (words[0] === "calibrate" && words[1] === "end") {
+    showMessage("Kalibrierung übernommen und gespeichert.");
+  } else if (settings.has(words[0])) {
+    settings.get(words[0]).value = Number(words[1]);
+    showSetting(words[0]);
+    if (words[0].startsWith("ch.") || words[0].startsWith("cal.") || words[0] === "map.mode") {
+      showLabels();
+      if (document.activeElement !== $("dWeight") && document.activeElement !== $("dDead")) showDetail();
+      showMapping();
+    }
+  }
+}
+
+// ---- Connection
+
+function setConnected(connected) {
+  document.body.classList.toggle("offline", !connected);
+  helloSeen = false;
+  $("mismatch").hidden = true;
+  if (!connected) {
+    resetDrawing();
+    settings.clear();
+    optionLists.clear();
+    menuOpen = false;
+    showMapping();
+    openDetail(0);
+    showView("assign");
+    elrsState({ module: "0", lq: "0" });
+    $("band").hidden = true;
+  }
+}
+
+// Connect to known, a port this page may already use, or let the user pick one.
+async function connect(known) {
+  if (!("serial" in navigator)) {
+    showMessage("Dieser Browser kann keine seriellen Geräte ansprechen. Bitte Chrome oder Edge verwenden.");
+    return;
+  }
+  if (opening || writer) return;
+  opening = true;
+  let port;
+  try {
+    port = known || await navigator.serial.requestPort({ filters: [{ usbVendorId: USB_VENDOR_ID }] });
+    await port.open({ baudRate: 115200 });
+  } finally {
+    opening = false;
+  }
+  writer = port.writable.getWriter();
+  reader = port.readable.getReader();
+  resumeWanted = false;
+  setConnected(true);
+  await send("hello");
+  await send("stream 1");
+  await send("list");
+
+  const decoder = new TextDecoder();
+  let pending = "";
+  try {
+    while (true) {
+      // Disconnect cancels the reader, which ends this loop with done set.
+      const { value, done } = await reader.read();
+      if (done) break;
+      pending += decoder.decode(value, { stream: true });
+      const lines = pending.split("\n");
+      pending = lines.pop();
+      lines.forEach(handleLine);
+    }
+  } catch {
+    // The port went away, e.g. because the radio changed its USB form; resume() below reconnects
+    // and reports only if that fails.
+  }
+  // Closing the port frees it for other programs such as tools/flash.py.
+  reader.releaseLock();
+  writer.releaseLock();
+  writer = null;
+  await port.close().catch(() => {});
+  setConnected(false);
+  resumeWanted = !userDisconnected;
+  userDisconnected = false;
+  if (resumeWanted) {
+    // The radio enumerates anew when its USB form changes, e.g. when it is switched on.
+    resumeUntil = Date.now() + RESUME_MS;
+    resume();
+  }
+}
+
+// Set by "Trennen"; a connection that ends otherwise is resumed as soon as the radio is back.
+let userDisconnected = false;
+let resumeWanted = false;
+let resumeUntil = 0;
+const RESUME_MS = 5000;
+
+// Connect again to a radio this page was allowed to use, after a connection ended without "Trennen":
+// the same session, with the radio in a new USB form. Tries once a second for RESUME_MS, then asks
+// to connect by hand; after that only "Automatisch verbinden" connects to a radio plugged in.
+async function resume() {
+  if (writer || opening || !resumeWanted) return;
+  if (Date.now() >= resumeUntil) {
+    // Mostly a USB form this browser has not allowed yet: only the port picker can allow it.
+    resumeWanted = false;
+    showMessage("Die Fernsteuerung hat sich als anderes USB-Gerät angemeldet. Einmal auf Verbinden " +
+      "klicken und sie auswählen, danach verbindet der Konfigurator bei diesem Wechsel von selbst.");
+    autoConnect();
+    return;
+  }
+  const ports = await navigator.serial.getPorts();
+  const port = ports.find((p) => p.getInfo().usbVendorId === USB_VENDOR_ID);
+  if (port) {
+    try {
+      await connect(port);
+      return;
+    } catch {
+      // The new port may not open yet right after it appeared.
+    }
+  }
+  setTimeout(resume, 1000);
+}
+
+// With "Automatisch verbinden" on, start a connection without the port picker to
+// a radio this page was allowed to use before: when the page opens, when the
+// switch is turned on and whenever such a radio is plugged in. A change of the
+// radio's USB form within a connection is handled by resume(), switch or not.
+async function autoConnect() {
+  if (writer || !("serial" in navigator) || !$("autoConnect").checked) return;
+  const ports = await navigator.serial.getPorts();
+  const port = ports.find((p) => p.getInfo().usbVendorId === USB_VENDOR_ID);
+  if (port) connect(port).catch((error) => showMessage(error.message));
+}
+
+// ---- Views and events
+
+function showView(name) {
+  for (const view of document.querySelectorAll(".view")) view.hidden = view.id !== "view-" + name;
+  for (const button of $("nav").children) button.classList.toggle("active", button.dataset.view === name);
+  $("statusbar").hidden = name !== "assign";
+  elrsShow(name === "elrs");
+}
+
+// The drawing alone when there is no room for the labels beside it.
+const narrow = window.matchMedia("(max-width: 1000px)");
+function fitStage() {
+  $("stageSvg").setAttribute("viewBox", narrow.matches ? "0 44 640 440" : "-360 20 1360 470");
+}
+
+for (const element of document.querySelectorAll(".webVersion")) element.textContent = WEB_VERSION;
+buildLabels();
+fitStage();
+narrow.addEventListener("change", fitStage);
+setConnected(false);
+
+// Closing the port picker without a choice is no error.
+$("connectBig").addEventListener("click", () => connect().catch((error) => {
+  if (error.name !== "NotFoundError") showMessage(error.message);
+}));
+// Automatic connecting is off by default, since the open page keeps the port
+// from other programs; the choice is kept in this browser only.
+try { $("autoConnect").checked = localStorage.getItem("autoConnect") === "1"; } catch {}
+$("autoConnect").addEventListener("change", () => {
+  try { localStorage.setItem("autoConnect", $("autoConnect").checked ? "1" : "0"); } catch {}
+  autoConnect();
+});
+if ("serial" in navigator) {
+  navigator.serial.addEventListener("connect", () => (resumeWanted ? resume() : autoConnect()));
+}
+autoConnect();
+$("connect").addEventListener("click", () => {
+  if (!writer) return;
+  userDisconnected = true;
+  reader.cancel();
+});
+$("nav").addEventListener("click", (event) => {
+  if (event.target.dataset.view && !calibrating) showView(event.target.dataset.view);
+});
+
+$("mapButton").addEventListener("click", () => { menuOpen = !menuOpen; showMapping(); });
+$("mapMenu").addEventListener("click", (event) => {
+  const item = event.target.closest("[data-mode]");
+  if (item) { event.stopPropagation(); chooseMapping(Number(item.dataset.mode)); }
+});
+document.addEventListener("click", (event) => {
+  if (menuOpen && !event.target.closest(".pop")) { menuOpen = false; showMapping(); }
+  const control = event.target.closest("[data-source]");
+  if (control) openDetail(Number(control.dataset.source));
+});
+document.addEventListener("keydown", (event) => {
+  const label = event.target.closest && event.target.closest(".callout");
+  if (label && (event.key === "Enter" || event.key === " ")) {
+    event.preventDefault();
+    openDetail(Number(label.dataset.source));
+  }
+  if (event.key === "Escape") {
+    if (menuOpen) { menuOpen = false; showMapping(); } else openDetail(0);
+  }
+});
+
+$("dClose").addEventListener("click", () => openDetail(0));
+$("dAdvanced").addEventListener("click", () => { advancedOpen = !advancedOpen; showDetail(); });
+$("dChips").addEventListener("click", (event) => {
+  const chip = event.target.closest(".chip");
+  if (!chip || chip.classList.contains("own") || asking || pendingChange) return;
+  const channel = Number(chip.dataset.channel);
+  if (chip.classList.contains("free")) moveTo(channel, false);
+  else { asking = channel; showDetail(); }
+});
+// Cancelling the Custom question also puts weight and reverse back to what is in effect.
+$("askCancel").addEventListener("click", () => { asking = 0; pendingChange = null; showDetail(); drawCurve(); });
+$("askReplace").addEventListener("click", () => {
+  if (pendingChange) { changeAssignment(pendingChange, true); showDetail(); } else moveTo(asking, false);
+});
+$("askSwap").addEventListener("click", () => moveTo(asking, true));
+
+// Sliders follow while dragging; the radio gets the value on release.
+$("dWeight").addEventListener("input", () => { $("dWeightOut").textContent = $("dWeight").value + " %"; fill($("dWeight")); drawCurve(); });
+$("dMiddle").addEventListener("input", (event) => {
+  if (event.target.id !== "dDead") return;
+  $("dDeadOut").textContent = event.target.value + " %";
+  fill(event.target);
+  drawCurve();
+});
+$("dMiddle").addEventListener("click", (event) => {
+  if (event.target.id !== "dTrimReset") return;
+  send(`set ${TRIM_KEYS[controlOf(selected).stick[0]]} 0`);
+  send("save");
+});
+$("dMiddle").addEventListener("change", (event) => {
+  if (event.target.id !== "dDead") return;
+  send(`set cal.${controlOf(selected).axis}.deadzone ${event.target.value}`);
+  send("save");
+});
+$("dWeight").addEventListener("change", () => {
+  const weight = $("dWeight").value;
+  changeAssignment(() => { for (const channel of channelsOf(selected)) send(`set ch.${channel}.weight ${weight}`); });
+});
+$("dReverse").addEventListener("change", () => {
+  const reverse = Number($("dReverse").checked);
+  changeAssignment(() => { for (const channel of channelsOf(selected)) send(`set ch.${channel}.reverse ${reverse}`); });
+  drawCurve();
+});
+
+// Settings and raw values: send the new value and store it at once.
+document.addEventListener("change", (event) => {
+  const key = event.target.dataset.key;
+  if (!key) return;
+  const value = event.target.type === "checkbox" ? Number(event.target.checked) : event.target.value;
+  send(`set ${key} ${value}`);
+  send("save");
+});
+$("defaults").addEventListener("click", () => send("defaults"));
+
+// A play button plays its setting's sound on the radio.
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-play]");
+  if (button) send(`play ${button.dataset.play}`);
+});
+
+$("calOpen").addEventListener("click", () => send("calibrate start"));
+$("calCancel").addEventListener("click", () => send("calibrate cancel"));
+$("calNext").addEventListener("click", () => {
+  if (calStage === 1) { calStage = 2; showCalStage(); } else send("calibrate end");
+});
+
+$("testBeep").addEventListener("click", () => send("beep 2700 200"));
+$("testBind").addEventListener("click", () => send("bind"));
+setInterval(() => { $("sysRate").textContent = linesThisSecond; linesThisSecond = 0; }, 1000);
+</script>
 </body>
 </html>

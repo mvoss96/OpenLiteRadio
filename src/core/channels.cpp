@@ -161,7 +161,7 @@ void compute_channels(const Controls &controls, const int16_t *settings_values,
     /* Stick axis of each source, for the trim; -1 for the others. */
     static const int8_t TRIM_AXIS[] = { -1, AXIS_RIGHT_HORIZONTAL, AXIS_RIGHT_VERTICAL,
                                         AXIS_LEFT_VERTICAL, AXIS_LEFT_HORIZONTAL };
-    /* Sources of the fixed mappings, indexed by Mapping; web/app.js has the same tables. */
+    /* Sources of the fixed mappings, indexed by Mapping; web/index.html has the same tables. */
     static const uint8_t FIXED_SOURCES[2][CHANNEL_COUNT] = {
         { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0 },
         { 3, 1, 2, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0 },

@@ -15,17 +15,17 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $v = @{}
 Get-Content VERSION | ForEach-Object { if ($_ -match '^(\w+)\s*=\s*(\S*)') { $v[$Matches[1]] = $Matches[2] } }
 $version = "$($v.VERSION_MAJOR).$($v.VERSION_MINOR).$($v.PATCHLEVEL)"
-if (-not (Select-String -Path web/app.js -SimpleMatch "const WEB_VERSION = `"$version`";" -Quiet)) {
-    Write-Output "web/app.js: WEB_VERSION is not $version from VERSION"
+if (-not (Select-String -Path web/index.html -SimpleMatch "const WEB_VERSION = `"$version`";" -Quiet)) {
+    Write-Output "web/index.html: WEB_VERSION is not $version from VERSION"
     exit 1
 }
 Write-Output "web version matches VERSION ($version)"
 
 # Firmware and configurator must speak the same protocol number (hello line).
 $fwProto = [regex]::Match((Get-Content src/host.cpp -Raw), 'printk\("hello OpenLiteRadio %s proto=(\d+)').Groups[1].Value
-$webProto = [regex]::Match((Get-Content web/app.js -Raw), 'const PROTOCOL = (\d+);').Groups[1].Value
+$webProto = [regex]::Match((Get-Content web/index.html -Raw), 'const PROTOCOL = (\d+);').Groups[1].Value
 if (-not $fwProto -or $fwProto -ne $webProto) {
-    Write-Output "protocol: src/host.cpp says '$fwProto', web/app.js PROTOCOL '$webProto'"
+    Write-Output "protocol: src/host.cpp says '$fwProto', web/index.html PROTOCOL '$webProto'"
     exit 1
 }
 Write-Output "protocol matches ($fwProto)"

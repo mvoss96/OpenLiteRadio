@@ -327,7 +327,7 @@ __noinit uint32_t fault_lr;
 
 void print_hello()
 {
-    /* The protocol number changes with every change of a message; test.ps1 checks web/app.js against it. */
+    /* The protocol number changes with every change of a message; test.ps1 checks web/index.html against it. */
     printk("hello OpenLiteRadio %s proto=2\n", APP_VERSION_STRING);
     if (fault_marker == FAULT_MARKER) {
         printk("fault reason=%u pc=0x%08x lr=0x%08x\n", (unsigned int)fault_reason,

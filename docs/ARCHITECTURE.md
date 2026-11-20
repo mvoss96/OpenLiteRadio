@@ -66,8 +66,10 @@ Each further thread would cost about 1 KiB of stack.
   tab. Each setting is a 16-bit value with its own NVS id; only
   values that differ from the default are stored, so settings added later do
   not disturb stored ones.
-- The configurator is `web/index.html` with `web/app.js`: plain HTML and
-  JavaScript without a build step, opened from the file system. Its main view
+- The configurator is the one file `web/index.html`: plain HTML, CSS and
+  JavaScript without a build step, opened from the file system. Page and code
+  are one file so that a browser can never combine an older page with newer
+  code, which left a page without the elements its code expected. Its main view
   edits the assignment from the control's side ("SE sends on channel 9");
   the page translates that into the per-channel `ch.N.source` settings. A
   control can therefore sit on several channels, and a channel can follow
@@ -323,7 +325,7 @@ change. The module is configured with the radio switched on, also while
 locked; with the radio off the tab shows no values and asks to switch the
 radio on.
 
-Built in `web/elrs.js`: while the tab is open the page sends `frames 1`,
+Built in the first script block of `web/index.html`: while the tab is open the page sends `frames 1`,
 pings the module, reads the device information and every entry with all its
 chunks (`crsf` with 0x28 and 0x2C, answers 0x29 and 0x2B in `rx` lines), and
 reads the list again every 2 s and after every change. A choice is written
@@ -551,7 +553,7 @@ recorded from the module.
 ## Host protocol
 
 Text lines on the USB serial port, one message per line, fields separated by
-spaces. It is readable in a terminal and parsed by `web/app.js`. Opening
+spaces. It is readable in a terminal and parsed by `web/index.html`. Opening
 the port at 1200 baud restarts the radio into the vendor USB updater.
 
 From the radio:
@@ -625,7 +627,7 @@ the firmware, Custom is the settings `ch.N.*` (see "Mapping and trim").
 The protocol number in the hello line changes with every change of a
 message's form or meaning, also for a new kind of line. Firmware and
 configurator must speak the same number; `./test.ps1` checks that
-`src/host.cpp` and `PROTOCOL` in `web/app.js` agree. A configurator left
+`src/host.cpp` and `PROTOCOL` in `web/index.html` agree. A configurator left
 open in the browser can still be older than the firmware, so it shows a
 warning band asking to reload the page when the radio's number differs from
 its own, or when, after the radio's hello line, it receives a kind of line,

@@ -24,7 +24,7 @@ enum Axis {
 };
 
 /*
- * What a channel can follow; the value of the setting ch.N.source. web/app.js
+ * What a channel can follow; the value of the setting ch.N.source. web/index.html
  * uses the same numbers (CONTROLS), so they must not change.
  */
 enum Source {
@@ -41,7 +41,7 @@ enum Source {
     SOURCE_SF = 10,
 };
 
-/* The assignment in use; the value of the setting map.mode. web/app.js uses the same numbers. */
+/* The assignment in use; the value of the setting map.mode. web/index.html uses the same numbers. */
 enum Mapping {
     MAPPING_AETR = 0,   /* fixed: aileron, elevator, throttle, rudder, then SA to SF */
     MAPPING_TAER = 1,   /* fixed: throttle, aileron, elevator, rudder, then SA to SF */
