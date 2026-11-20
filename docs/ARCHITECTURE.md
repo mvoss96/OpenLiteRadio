@@ -268,6 +268,15 @@ stateDiagram-v2
   Upd --> [*]: image written, restart
 ```
 
+- Each change of the form takes the serial port away, also switching the
+  radio on and off. A connection survives it: when the port goes away
+  without "Trennen" and a radio is back within 5 s, the configurator connects
+  again by itself, whether "Automatisch verbinden" is on or not; after 5 s it
+  asks to connect by hand. Starting a connection is up to the switch, off by
+  default since an open page keeps the port from other programs such as
+  `tools/flash.py`: with it on, the page connects when it opens and whenever
+  a radio is plugged in. Chrome allows each form (product ID) once in its
+  port picker; a form not allowed yet needs that one click.
 - The mode is the setting `usb.mode` (0 joystick, 1 Xbox controller). It is
   stored and applies at every further connection; `set usb.mode` stores it at
   once, since the port goes away with the change. BIND + SETUP stays reserved
@@ -547,7 +556,7 @@ the port at 1200 baud restarts the radio into the vendor USB updater.
 
 From the radio:
 
-- `hello OpenLiteRadio <version> proto=1`, at start and on request. After
+- `hello OpenLiteRadio <version> proto=2`, at start and on request. After
   a fatal error the radio restarts instead of halting; the next hello line is
   followed once by `fault reason=N pc=0x... lr=0x...` (Zephyr's reason code
   and the faulting addresses).
@@ -613,6 +622,11 @@ To the radio:
 The assignment in use is the setting `map.mode`: AETR and TAER are fixed in
 the firmware, Custom is the settings `ch.N.*` (see "Mapping and trim").
 
-The protocol number in the hello line changes when a message changes meaning.
-New keys and new commands do not change it; a reader ignores what it does not
-know.
+The protocol number in the hello line changes with every change of a
+message's form or meaning, also for a new kind of line. Firmware and
+configurator must speak the same number; `./test.ps1` checks that
+`src/host.cpp` and `PROTOCOL` in `web/app.js` agree. A configurator left
+open in the browser can still be older than the firmware, so it shows a
+warning band asking to reload the page when the radio's number differs from
+its own, or when, after the radio's hello line, it receives a kind of line,
+a setting type or an option key it does not know.

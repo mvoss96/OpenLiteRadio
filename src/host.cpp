@@ -1,7 +1,7 @@
 /*
  * Host protocol, one message per line.
  * From the radio:
- *   hello OpenLiteRadio <version> proto=1
+ *   hello OpenLiteRadio <version> proto=2
  *   setting KEY TYPE MIN MAX DEFAULT VALUE   one per setting after "list"; TYPE bool, int or
  *                                            the name of the option list naming the values
  *   option LIST VALUE KEY                    one per named value after the settings, then "end";
@@ -327,7 +327,8 @@ __noinit uint32_t fault_lr;
 
 void print_hello()
 {
-    printk("hello OpenLiteRadio %s proto=1\n", APP_VERSION_STRING);
+    /* The protocol number changes with every change of a message; test.ps1 checks web/app.js against it. */
+    printk("hello OpenLiteRadio %s proto=2\n", APP_VERSION_STRING);
     if (fault_marker == FAULT_MARKER) {
         printk("fault reason=%u pc=0x%08x lr=0x%08x\n", (unsigned int)fault_reason,
                (unsigned int)fault_pc, (unsigned int)fault_lr);

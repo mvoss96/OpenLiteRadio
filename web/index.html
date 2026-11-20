@@ -252,6 +252,12 @@
   <b>TX aktiv</b>
 </div>
 
+<!-- The radio sent something this page does not know: the page is older than the firmware. -->
+<div class="band" id="mismatch" hidden>
+  <svg class="i" viewBox="0 0 24 24"><path d="M12 8v5m0 3.5v.5M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+  <b>Konfigurator passt nicht zur Firmware</b><span>Seite neu laden: Strg + Umschalt + R</span>
+</div>
+
 <main>
   <!-- Assignment: AETR, TAER or Custom, the drawing with one label per control, the detail card of one control. -->
   <section class="view" id="view-assign">
@@ -465,6 +471,8 @@
   <!-- TX state, with packet rate and receiver while the TX is on. -->
   <span>TX <b id="stModule">–</b></span>
   <span>Akku <b id="stBattery">–</b></span>
+  <!-- The USB controller, only while the radio is off and set up as one by the PC. -->
+  <span id="stUsbItem" hidden>USB <b id="stUsb"></b></span>
   <!-- Kept together on the right, so that the note does not move the items on
        the left and a narrow window wraps both as one. -->
   <div class="statusright">

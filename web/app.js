@@ -12,7 +12,9 @@
 // elrs.js, which is loaded first and uses send() and $() from here.
 
 // The project's version from the file VERSION; test.ps1 checks that both agree.
-const WEB_VERSION = "0.15.0";
+const WEB_VERSION = "0.15.1";
+// Protocol number of the hello line this page speaks; test.ps1 checks it against src/host.cpp.
+const PROTOCOL = 2;
 const USB_VENDOR_ID = 0x2fe3;
 const CHANNEL_COUNT = 16;
 const BATTERY_THRESHOLDS = [3232, 3298, 3391, 3552];   // stock firmware: 1, 2, 3, 4 LEDs
@@ -476,6 +478,10 @@ function showState(fields) {
   $("stModule").textContent = !moduleOn ? "aus" : special
     || `${locked ? "gesperrt" : "aktiv"} · ${rate} · ${link}`;
   $("stBattery").textContent = `${level} von 4`;
+  // Named with the keys of the setting usb.mode, so the texts exist once.
+  const usbForm = { usb_joystick: "joystick", usb_xbox: "xbox" }[fields.mode];
+  $("stUsbItem").hidden = !usbForm;
+  if (usbForm) $("stUsb").textContent = OPTION_TEXTS.usb[usbForm];
   $("sysBattery").textContent = battery;
   $("sysUsb").textContent = fields.usb === "1" ? "vorhanden" : "fehlt";
 
@@ -623,6 +629,27 @@ function showMessage(text) {
 
 // ---- Lines from the radio
 
+// The radio's hello line arrived on this connection; lines before it may be cut off and are not checked.
+let helloSeen = false;
+
+// The radio sent something this page does not know: show the band that asks to reload the page.
+function warnMismatch(what) {
+  console.warn("Konfigurator passt nicht zur Firmware:", what);
+  $("mismatch").hidden = false;
+}
+
+// After "end": every setting type must be a number or a known option list, and every key must have a text.
+function checkOptionLists() {
+  for (const [key, s] of settings) {
+    if (s.type !== "bool" && s.type !== "int" && !optionLists.has(s.type)) warnMismatch(`${key}: Typ ${s.type}`);
+  }
+  for (const [list, values] of optionLists) {
+    for (const optionKey of values.values()) {
+      if (!OPTION_TEXTS[list]?.[optionKey]) warnMismatch(`option ${list} ${optionKey}`);
+    }
+  }
+}
+
 function handleLine(line) {
   const [kind, ...rest] = line.trim().split(" ");
   if (kind === "state") {
@@ -631,8 +658,10 @@ function handleLine(line) {
   } else if (kind === "rx") {
     elrsReceived(rest);
   } else if (kind === "hello") {
+    helloSeen = true;
     $("deviceText").textContent = `LiteRadio 4 · Firmware ${rest[1]} · Konfigurator ${WEB_VERSION}`;
     $("sysFirmware").textContent = rest[1];
+    if (rest[2] !== `proto=${PROTOCOL}`) warnMismatch(rest[2]);
   } else if (kind === "setting") {
     const [key, type, min, max, def, value] = rest;
     settings.set(key, { type, min: Number(min), max: Number(max), def: Number(def), value: Number(value) });
@@ -641,6 +670,7 @@ function handleLine(line) {
     if (!optionLists.has(list)) optionLists.set(list, new Map());
     optionLists.get(list).set(Number(value), optionKey);
   } else if (kind === "end") {
+    checkOptionLists();
     fillOptionLists();
     buildRawTable();
     showLabels();
@@ -656,6 +686,10 @@ function handleLine(line) {
       ? "Kalibrierung verworfen: Ein Knüppel war nicht an allen Enden oder am Schluss nicht losgelassen."
       : "Die Fernsteuerung hat abgelehnt: " + reason);
     send("list");
+  } else if (kind === "value" || kind === "fault") {
+    // Known lines this page does not use: the answer to "get", and a crash reported after hello.
+  } else if (helloSeen && kind !== "") {
+    warnMismatch(line);
   }
 }
 
@@ -680,9 +714,12 @@ function handleOk(words) {
 
 function setConnected(connected) {
   document.body.classList.toggle("offline", !connected);
+  helloSeen = false;
+  $("mismatch").hidden = true;
   if (!connected) {
     resetDrawing();
     settings.clear();
+    optionLists.clear();
     menuOpen = false;
     showMapping();
     openDetail(0);
@@ -709,6 +746,7 @@ async function connect(known) {
   }
   writer = port.writable.getWriter();
   reader = port.readable.getReader();
+  resumeWanted = false;
   setConnected(true);
   await send("hello");
   await send("stream 1");
@@ -726,8 +764,9 @@ async function connect(known) {
       pending = lines.pop();
       lines.forEach(handleLine);
     }
-  } catch (error) {
-    showMessage("Verbindung verloren: " + error.message);
+  } catch {
+    // The port went away, e.g. because the radio changed its USB form; resume() below reconnects
+    // and reports only if that fails.
   }
   // Closing the port frees it for other programs such as tools/flash.py.
   reader.releaseLock();
@@ -735,12 +774,51 @@ async function connect(known) {
   writer = null;
   await port.close().catch(() => {});
   setConnected(false);
+  resumeWanted = !userDisconnected;
+  userDisconnected = false;
+  if (resumeWanted) {
+    // The radio enumerates anew when its USB form changes, e.g. when it is switched on.
+    resumeUntil = Date.now() + RESUME_MS;
+    resume();
+  }
 }
 
-// With "Automatisch verbinden" on, connect without the port picker to a radio
-// this page was allowed to use before: when the page opens, when the switch is
-// turned on and whenever such a radio is plugged in. After "Trennen" it stays
-// disconnected until the radio is plugged in again.
+// Set by "Trennen"; a connection that ends otherwise is resumed as soon as the radio is back.
+let userDisconnected = false;
+let resumeWanted = false;
+let resumeUntil = 0;
+const RESUME_MS = 5000;
+
+// Connect again to a radio this page was allowed to use, after a connection ended without "Trennen":
+// the same session, with the radio in a new USB form. Tries once a second for RESUME_MS, then asks
+// to connect by hand; after that only "Automatisch verbinden" connects to a radio plugged in.
+async function resume() {
+  if (writer || opening || !resumeWanted) return;
+  if (Date.now() >= resumeUntil) {
+    // Mostly a USB form this browser has not allowed yet: only the port picker can allow it.
+    resumeWanted = false;
+    showMessage("Die Fernsteuerung hat sich als anderes USB-Gerät angemeldet. Einmal auf Verbinden " +
+      "klicken und sie auswählen, danach verbindet der Konfigurator bei diesem Wechsel von selbst.");
+    autoConnect();
+    return;
+  }
+  const ports = await navigator.serial.getPorts();
+  const port = ports.find((p) => p.getInfo().usbVendorId === USB_VENDOR_ID);
+  if (port) {
+    try {
+      await connect(port);
+      return;
+    } catch {
+      // The new port may not open yet right after it appeared.
+    }
+  }
+  setTimeout(resume, 1000);
+}
+
+// With "Automatisch verbinden" on, start a connection without the port picker to
+// a radio this page was allowed to use before: when the page opens, when the
+// switch is turned on and whenever such a radio is plugged in. A change of the
+// radio's USB form within a connection is handled by resume(), switch or not.
 async function autoConnect() {
   if (writer || !("serial" in navigator) || !$("autoConnect").checked) return;
   const ports = await navigator.serial.getPorts();
@@ -780,9 +858,15 @@ $("autoConnect").addEventListener("change", () => {
   try { localStorage.setItem("autoConnect", $("autoConnect").checked ? "1" : "0"); } catch {}
   autoConnect();
 });
-if ("serial" in navigator) navigator.serial.addEventListener("connect", autoConnect);
+if ("serial" in navigator) {
+  navigator.serial.addEventListener("connect", () => (resumeWanted ? resume() : autoConnect()));
+}
 autoConnect();
-$("connect").addEventListener("click", () => { if (writer) reader.cancel(); });
+$("connect").addEventListener("click", () => {
+  if (!writer) return;
+  userDisconnected = true;
+  reader.cancel();
+});
 $("nav").addEventListener("click", (event) => {
   if (event.target.dataset.view && !calibrating) showView(event.target.dataset.view);
 });
