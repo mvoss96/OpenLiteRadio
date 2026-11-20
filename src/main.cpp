@@ -69,18 +69,20 @@ static void set_radio_on(bool on)
 }
 
 /*
- * The USB device's form: only the serial port while the radio is on, else
- * the controller chosen in usb.mode. With the radio off, both trim centres
- * held for 2 s switch between joystick and Xbox controller and store it.
- * Each change of the form makes the device enumerate again.
+ * The USB device's form: only the serial port while the ELRS module is on
+ * (radio on, or the host command "module 1"), else the controller chosen in
+ * usb.mode. With the module off, both trim centres held for 2 s switch
+ * between joystick and Xbox controller and store it. Each change of the
+ * form makes the device enumerate again.
  */
 static void usb_tick(const board::Inputs &inputs)
 {
     static int centres_held_loops;
     static int requested = -1; /* enum usb_function asked for last, -1 before the first */
     bool both = (inputs.trim_left & board::TRIM_CENTRE) && (inputs.trim_right & board::TRIM_CENTRE);
+    bool module_on = output::module_is_on();
 
-    if (!radio_on && both && !inputs.power) {
+    if (!module_on && both && !inputs.power) {
         if (++centres_held_loops == USB_SWITCH_LOOPS) {
             settings::set(settings::USB_MODE, settings::values[settings::USB_MODE] == 0 ? 1 : 0);
             storage::save_setting(settings::USB_MODE);
@@ -90,7 +92,7 @@ static void usb_tick(const board::Inputs &inputs)
         centres_held_loops = 0;
     }
 
-    usb_function wanted = radio_on ? USB_SERIAL_ONLY
+    usb_function wanted = module_on ? USB_SERIAL_ONLY
                           : settings::values[settings::USB_MODE] != 0 ? USB_XBOX
                                                                      : USB_JOYSTICK;
 

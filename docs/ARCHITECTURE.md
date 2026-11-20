@@ -164,8 +164,9 @@ Switching off at a PC leads to the stored USB mode instead of Off. "At a PC"
 needs both the controller interface set up by the PC and the USB supply: the
 USB stack does not report a pulled cable, so after unplugging the radio
 stayed a USB joystick and the LED flashed white when switched off on
-battery. While the radio is on, the USB device is the serial port only, so
-no USB controller exists in the ELRS, Bluetooth and WiFi modes. The joystick
+battery. While the ELRS module is on (radio on, or `module 1` from the
+host), the USB device is the serial port only, so no USB controller exists
+in the ELRS, Bluetooth and WiFi modes. The joystick
 and the Bluetooth joystick report a high channel as a high axis value, which
 Windows draws downwards (pitch up moves the cross down); simulators set the
 direction per axis. The Xbox controller reports a high channel as a positive
@@ -248,14 +249,14 @@ stateDiagram-v2
   state "Serial port + joystick (2FE3:0005)" as Joy
   state "Xbox controller + serial port (2FE3:0007)" as Xbox
   state "Vendor updater (0483:5740)" as Upd
-  [*] --> Joy: radio off, stored mode joystick
-  [*] --> Xbox: radio off, stored mode Xbox
-  Joy --> Xbox: radio off, both trim centres 2 s, or configurator
-  Xbox --> Joy: radio off, both trim centres 2 s, or configurator
-  Joy --> Ser: radio switched on
-  Xbox --> Ser: radio switched on
-  Ser --> Joy: radio switched off, stored mode joystick
-  Ser --> Xbox: radio switched off, stored mode Xbox
+  [*] --> Joy: module off, stored mode joystick
+  [*] --> Xbox: module off, stored mode Xbox
+  Joy --> Xbox: both trim centres 2 s, or configurator
+  Xbox --> Joy: both trim centres 2 s, or configurator
+  Joy --> Ser: module switched on
+  Xbox --> Ser: module switched on
+  Ser --> Joy: module switched off, stored mode joystick
+  Ser --> Xbox: module switched off, stored mode Xbox
   Joy --> Upd: port opened at 1200 baud
   Xbox --> Upd: port opened at 1200 baud
   Ser --> Upd: port opened at 1200 baud
@@ -266,7 +267,8 @@ stateDiagram-v2
   stored and applies at every further connection; `set usb.mode` stores it at
   once, since the port goes away with the change. BIND + SETUP stays reserved
   for PC control.
-- `main.cpp` chooses the form in the main loop; `usb_device_select()` shuts
+- `main.cpp` chooses the form in the main loop from the module's state, so
+  that the host command `module 1` also removes the controller; `usb_device_select()` shuts
   the USB stack down, signals a disconnect and builds the device anew. The
   board ties D+ (PA12) to its pull-up and the STM32F103 cannot switch it off,
   so stopping the USB peripheral alone leaves the device on the bus: the host
