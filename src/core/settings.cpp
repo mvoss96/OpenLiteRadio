@@ -56,7 +56,7 @@ struct Group {
 constexpr uint16_t IDS_PER_INSTANCE = 8;
 
 const Field UNLOCK_FIELDS[] = { { "mode", 1, 2, 1, UNLOCK_OPTIONS } };
-/* Volume 0..3, a sound::TrimStyle, then one sound::TuneId per event. */
+/* Volume 0..3, a sound::TrimStyle, one sound::TuneId per event, then the link warning's repeat in seconds. */
 constexpr int16_t LAST_TUNE = sound::TUNE_COUNT - 1;
 const Field SOUND_FIELDS[] = {
     { "volume", 0, 3, 3 },
@@ -69,6 +69,9 @@ const Field SOUND_FIELDS[] = {
     { "cancel", 0, LAST_TUNE, sound::TUNE_LOW, TUNE_OPTIONS },
     { "error", 0, LAST_TUNE, sound::TUNE_LOW_LONG, TUNE_OPTIONS },
     { "battery", 0, LAST_TUNE, sound::TUNE_WARNING, TUNE_OPTIONS },
+    { "lost", 0, LAST_TUNE, sound::TUNE_LOW_LONG, TUNE_OPTIONS },
+    { "back", 0, LAST_TUNE, sound::TUNE_TRIAD, TUNE_OPTIONS },
+    { "repeat", 0, 30, 3 },
 };
 const Field MAP_FIELDS[] = { { "mode", 0, 2, 0, MAP_OPTIONS } };
 /* 0 joystick, 1 Xbox controller: the USB device with the radio off. */
@@ -84,7 +87,7 @@ const Field CALIBRATION_FIELD_LIST[] = { { "low", 0, 4095, 600 }, { "centre", 0,
 
 const Group GROUPS[] = {
     { "unlock", 0, 0, 1, UNLOCK_FIELDS, 0x100 },
-    { "sound", 0, 0, 10, SOUND_FIELDS, 0x110 },
+    { "sound", 0, 0, 13, SOUND_FIELDS, 0x110 },
     { "map", 0, 0, 1, MAP_FIELDS, 0x120 },
     { "trim", 0, 0, 5, TRIM_FIELDS, 0x130 },
     { "usb", 0, 0, 1, USB_FIELDS, 0x140 },

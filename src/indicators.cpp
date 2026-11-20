@@ -77,7 +77,7 @@ bool play_setting(int setting)
         play(sound::tune(sound::TUNE_BEEP));
     } else if (setting == settings::SOUND_TRIM) {
         play(sound::trim_demo(settings::values[setting]));
-    } else if (setting >= settings::SOUND_POWER_ON && setting <= settings::SOUND_WEAK_BATTERY) {
+    } else if (setting >= settings::SOUND_POWER_ON && setting <= settings::SOUND_LINK_BACK) {
         play_event(setting);
     } else {
         return false;

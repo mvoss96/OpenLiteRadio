@@ -31,7 +31,7 @@ struct Tune {
     Note notes[MAX_NOTES];
 };
 
-/* The built-in tunes; the settings sound.on to sound.battery hold one of these. */
+/* The built-in tunes; the settings sound.on to sound.back hold one of these. */
 enum TuneId : uint8_t {
     TUNE_NONE = 0,     // no tune
     TUNE_BEEP,         // one short high tone

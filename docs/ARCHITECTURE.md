@@ -138,8 +138,8 @@ stateDiagram-v2
     [*] --> Locked
     Locked --> Active: unlock gesture, not held
     Active --> Locked: setting changed, calibration, storing
-    Locked --> HostReady: BIND + SETUP 1 s, USB connected
-    Active --> HostReady: BIND + SETUP 1 s, USB connected
+    Locked --> HostReady: BIND + SETUP 3 to 5 s, USB connected
+    Active --> HostReady: BIND + SETUP 3 to 5 s, USB connected
     HostReady --> Host: PC sends values
     HostReady --> Locked: BIND + SETUP, USB removed, 30 s without PC values
     Host --> Locked: BIND + SETUP, PC releases, USB removed, 200 ms without PC values
@@ -232,8 +232,10 @@ mapping, weight and reverse; channels without a source stay centred.
   without a link for 60 s starts its WiFi and does not connect until it is
   restarted.
 - PC control is allowed only at the radio: with the radio on and USB
-  connected, BIND and SETUP held together for 1 s. The PC alone can never take
-  over. While both buttons are down, neither binding nor calibration starts.
+  connected, BIND and SETUP held together for 3 to 5 s (the exact time is
+  open). The PC alone can never take over. While both buttons are down,
+  neither binding nor calibration starts, and releasing them does not switch
+  the battery LEDs to the link quality.
 - Every end of PC control leads to Locked, without exceptions. The receiver
   gets the safe values, and the controls take over only after the unlock
   gesture, so the throttle cannot jump. Sending the last PC values on would
@@ -463,8 +465,23 @@ off when the power button is let go.
 The configurator plays each setting's sound on the radio with the host
 command `play KEY`. `sound.battery` (default `warning`: four 150 ms tones
 at 1480 Hz with 150 ms pauses, the stock firmware's warning) sounds with
-every weak reading, see "Battery". Still open: tones for a weak signal and
-before the automatic power-off, which wait for those features.
+every weak reading, see "Battery". Still open: tones for key presses and
+before the automatic power-off, which waits for that feature.
+
+Link warning (`src/core/link_alarm.cpp`, with tests): while the radio sends
+to a receiver (modes ELRS_LOCKED, ELRS_ACTIVE and the PC modes, no command
+being started), and only after a receiver was connected once since then:
+
+- no link statistics with a quality above 0 for 1 s: the tune in
+  `sound.lost` (default `low_long`);
+- the receiver answering again after that: the tune in `sound.back`
+  (default `triad`), once.
+
+While the link stays lost the warning repeats every `sound.repeat` seconds
+(0 to 30, default 3; 0 warns once per loss). There is no warning for a low
+link quality; the battery LEDs show it on request (see "Battery"). Binding, WiFi,
+Bluetooth and switching off reset it, so a receiver that is not there
+afterwards does not warn until it has been connected again.
 
 ### LEDs
 
@@ -531,6 +548,10 @@ held 1 s to switch on without the stock firmware's click before.
   the level three times (100 ms on, 100 ms off); started from battery, the
   power latch is set at start and released after that, so the radio
   switches off again.
+- Link quality instead of the battery: SETUP pressed briefly with the radio
+  on switches the LEDs between battery and link quality, until switched
+  back or off. One LED from 1 %, two from 50 %, three from 70 %, four from
+  90 %, all dark without a receiver. The weak-battery tone still sounds.
 - The host command `batleds MASK` takes the LEDs over until `batleds auto`.
 
 ## Stages
@@ -665,7 +686,7 @@ To the radio:
 | `stream 0` / `stream 1` | stop or start the state lines |
 | `led R G B` | status LED colour, 0 to 255 each; `led auto` returns control to the firmware |
 | `beep HZ MS` | tone at the volume in `sound.volume` |
-| `play KEY` | play what a setting sounds like: the tune chosen in `sound.on` to `sound.error`, a few trim steps away from the centre and back for `sound.trim`, one beep for `sound.volume`; answers `ok play` or `error unknown key` |
+| `play KEY` | play what a setting sounds like: the tune chosen in `sound.on` to `sound.back`, a few trim steps away from the centre and back for `sound.trim`, one beep for `sound.volume`; answers `ok play` or `error unknown key` |
 | `batleds MASK` | battery LEDs, bit 0 is the leftmost, until `batleds auto` |
 | `bind` | start binding, as holding BIND for 1 s does |
 | `wifi` | start the module's WiFi, as the right trim centre at switch-on does |

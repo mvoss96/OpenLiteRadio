@@ -12,7 +12,7 @@ namespace indicators {
 /* Play a tune at the volume in sound.volume; it replaces one still playing. */
 void play(const sound::Tune &tune);
 
-/* Play the tune chosen in an event's setting, settings::SOUND_POWER_ON to SOUND_WEAK_BATTERY. */
+/* Play the tune chosen in an event's setting, settings::SOUND_POWER_ON to SOUND_LINK_BACK. */
 void play_event(int setting);
 
 /*

@@ -53,4 +53,10 @@ uint8_t switching_off(uint32_t held_ms, uint8_t shown);
 /* The LEDs since_ms after a short press with the radio off: the level, blinking three times. */
 uint8_t peek(uint16_t raw, uint32_t since_ms);
 
+/* Lowest link quality in percent for one, two, three and four LEDs. */
+constexpr uint8_t LINK_THRESHOLDS[4] = { 1, 50, 70, 90 };
+
+/* The LEDs for the link quality, lit from the left; all dark without a receiver. */
+uint8_t link_quality(bool connected, uint8_t quality);
+
 } // namespace battery

@@ -412,6 +412,13 @@
               <button class="icon" data-play="sound.error" aria-label="Abspielen"><svg class="i" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button></div>
             <div class="tile"><span>Akku schwach</span><select data-key="sound.battery"></select>
               <button class="icon" data-play="sound.battery" aria-label="Abspielen"><svg class="i" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button></div>
+            <div class="tile"><span>Verbindung weg</span><select data-key="sound.lost"></select>
+              <button class="icon" data-play="sound.lost" aria-label="Abspielen"><svg class="i" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button></div>
+            <div class="tile"><span>Verbindung zurück</span><select data-key="sound.back"></select>
+              <button class="icon" data-play="sound.back" aria-label="Abspielen"><svg class="i" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button></div>
+            <label class="tile"><span>Warnung wiederholen</span>
+              <select data-key="sound.repeat"><option value="0">Einmal</option><option value="3">Alle 3 s</option><option value="5">Alle 5 s</option><option value="10">Alle 10 s</option><option value="30">Alle 30 s</option></select>
+              <span class="icon" style="visibility: hidden"></span></label>
           </div>
         </section>
       </div>
@@ -829,7 +836,7 @@ setInterval(() => { if (elrs.open && elrs.moduleOn && elrs.queued === 0) elrsQue
 // an older page with newer code.
 
 // The project's version from the file VERSION; test.ps1 checks that both agree.
-const WEB_VERSION = "0.17.0";
+const WEB_VERSION = "0.18.0";
 // Protocol number of the hello line this page speaks; test.ps1 checks it against src/host.cpp.
 const PROTOCOL = 2;
 const USB_VENDOR_ID = 0x2fe3;

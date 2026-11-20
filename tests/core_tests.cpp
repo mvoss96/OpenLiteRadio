@@ -4,6 +4,7 @@
 #include <cstring>
 
 #include "core/battery.h"
+#include "core/link_alarm.h"
 #include "core/channels.h"
 #include "core/crsf.h"
 #include "core/joystick.h"
@@ -692,11 +693,12 @@ static void test_options()
         }
         CHECK(expected == info.max + 1);
     }
-    CHECK(named == 12); /* unlock.mode, sound.trim, the eight event tones, map.mode, usb.mode */
+    CHECK(named == 14); /* unlock.mode, sound.trim, the ten event tones, map.mode, usb.mode */
     CHECK(settings::info(settings::SOUND_VOLUME).options == nullptr);
     CHECK(std::strcmp(settings::info(settings::SOUND_POWER_ON).options, "tune") == 0);
     CHECK(std::strcmp(settings::info(settings::SOUND_ERROR).options, "tune") == 0);
     CHECK(settings::info(settings::TRIM_LED).options == nullptr);
+    CHECK(settings::info(settings::SOUND_LINK_REPEAT).options == nullptr);
     CHECK(settings::info(settings::find("ch.1.source")).options == nullptr);
     CHECK(settings::option(settings::option_count()).list == nullptr);
 
@@ -811,6 +813,48 @@ static void test_battery()
     CHECK(battery::peek(3400, 600) == 0x00);
 }
 
+static void test_link_alarm()
+{
+    using link_alarm::Event;
+    link_alarm::State state;
+
+    /* No receiver yet: nothing, also while no link statistics come. */
+    CHECK(link_alarm::tick(state, true, false, 0, 3000) == Event::NONE);
+    CHECK(link_alarm::tick(state, true, true, 100, 3000) == Event::NONE);
+
+    /* Lost, repeated every 3 s, then back once. */
+    CHECK(link_alarm::tick(state, true, false, 4000, 3000) == Event::LOST);
+    CHECK(link_alarm::tick(state, true, false, 6999, 3000) == Event::NONE);
+    CHECK(link_alarm::tick(state, true, false, 7000, 3000) == Event::LOST);
+    CHECK(link_alarm::tick(state, true, true, 7100, 3000) == Event::BACK);
+    CHECK(link_alarm::tick(state, true, true, 7200, 3000) == Event::NONE);
+
+    /* Repeat 0: once per loss. */
+    CHECK(link_alarm::tick(state, true, false, 12000, 0) == Event::LOST);
+    CHECK(link_alarm::tick(state, true, false, 60000, 0) == Event::NONE);
+
+    /* Not active: reset, so a receiver that is not there after binding or WiFi does not warn. */
+    CHECK(link_alarm::tick(state, false, false, 61000, 3000) == Event::NONE);
+    CHECK(link_alarm::tick(state, true, false, 62000, 3000) == Event::NONE);
+
+    /* Link quality on the battery LEDs. */
+    CHECK(battery::link_quality(false, 100) == 0x00);
+    CHECK(battery::link_quality(true, 0) == 0x00);
+    CHECK(battery::link_quality(true, 1) == 0x01);
+    CHECK(battery::link_quality(true, 49) == 0x01);
+    CHECK(battery::link_quality(true, 50) == 0x03);
+    CHECK(battery::link_quality(true, 70) == 0x07);
+    CHECK(battery::link_quality(true, 89) == 0x07);
+    CHECK(battery::link_quality(true, 90) == 0x0f);
+
+    /* Keys and defaults of the settings. */
+    CHECK(settings::find("sound.lost") == settings::SOUND_LINK_LOST);
+    CHECK(settings::find("sound.back") == settings::SOUND_LINK_BACK);
+    CHECK(settings::find("sound.repeat") == settings::SOUND_LINK_REPEAT);
+    CHECK(settings::find("sound.signal") == -1);
+    CHECK(settings::info(settings::SOUND_LINK_REPEAT).default_value == 3);
+}
+
 int main()
 {
     test_crc();
@@ -835,6 +879,7 @@ int main()
     test_sound();
     test_options();
     test_battery();
+    test_link_alarm();
 
     if (failures != 0) {
         std::printf("%d check(s) failed\n", failures);

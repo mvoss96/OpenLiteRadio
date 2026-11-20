@@ -75,4 +75,18 @@ uint8_t peek(uint16_t raw, uint32_t since_ms)
     return lit(level(raw));
 }
 
+uint8_t link_quality(bool connected, uint8_t quality)
+{
+    int count = 0;
+
+    if (connected) {
+        for (uint8_t threshold : LINK_THRESHOLDS) {
+            if (quality >= threshold) {
+                count++;
+            }
+        }
+    }
+    return lit(count);
+}
+
 } // namespace battery

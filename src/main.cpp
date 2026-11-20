@@ -27,6 +27,7 @@
 #include "calibration.h"
 #include "core/battery.h"
 #include "core/channels.h"
+#include "core/link_alarm.h"
 #include "core/settings.h"
 #include "host.h"
 #include "indicators.h"
@@ -60,6 +61,8 @@ static bool trim_unsaved;
 static bool latch_release_pending;
 /* Uptime when the radio was switched on. */
 static int64_t on_since;
+/* The battery LEDs show the link quality instead of the battery; SETUP pressed briefly switches. */
+static bool show_link_quality;
 
 static void set_radio_on(bool on)
 {
@@ -77,6 +80,7 @@ static void set_radio_on(bool on)
         board::set_power_latch(true);
     }
     latch_release_pending = !on;
+    show_link_quality = false;
     on_since = k_uptime_get();
     indicators::play_event(on ? settings::SOUND_POWER_ON : settings::SOUND_POWER_OFF);
 }
@@ -197,6 +201,27 @@ static void trim_tick(uint8_t left, uint8_t right)
     }
 }
 
+/*
+ * Link to the receiver while the radio sends to one: the tune of sound.lost
+ * when no link statistics came for 1 s, repeated every sound.repeat seconds,
+ * and of sound.back when the receiver answers again.
+ */
+static void link_tick(core::Mode mode, int64_t now)
+{
+    static link_alarm::State state;
+    bool active = (mode == core::Mode::ELRS_LOCKED || mode == core::Mode::ELRS_ACTIVE ||
+                   mode == core::Mode::ELRS_HOST_READY || mode == core::Mode::ELRS_HOST) &&
+                  module_link::starting_task() == core::ModuleTask::NONE;
+    uint32_t repeat_ms = (uint32_t)settings::values[settings::SOUND_LINK_REPEAT] * 1000u;
+    link_alarm::Event event = link_alarm::tick(state, active, module_link::receiver_connected(), now, repeat_ms);
+
+    if (event == link_alarm::Event::LOST) {
+        indicators::play_event(settings::SOUND_LINK_LOST);
+    } else if (event == link_alarm::Event::BACK) {
+        indicators::play_event(settings::SOUND_LINK_BACK);
+    }
+}
+
 int main(void)
 {
     output::Snapshot snapshot = {};
@@ -287,6 +312,9 @@ int main(void)
             battery_leds = radio_on ? battery::switching_off(held_ms, bar) : battery::switching_on(held_ms);
         } else if (peek_since >= 0) {
             battery_leds = battery::peek(battery_raw, (uint32_t)(now - peek_since));
+        } else if (radio_on && show_link_quality) {
+            battery_leds = battery::link_quality(module_link::receiver_connected(),
+                                                 module_link::status().link_quality);
         } else if (battery_raw != 0 && (radio_on ? now - on_since >= BAR_AFTER_ON_MS : usb)) {
             battery_leds = bar;
         }
@@ -299,6 +327,7 @@ int main(void)
             indicators::play_event(settings::SOUND_UNLOCK);
         }
         was_locked = snapshot.locked;
+        link_tick(snapshot.mode, now);
         /* While WiFi or Bluetooth waits for the module, the LED shows it already; the output stays locked. */
         core::Mode shown = snapshot.mode;
 
@@ -326,7 +355,11 @@ int main(void)
             bind_held_loops = 0;
         }
 
-        /* SETUP held for 2 s starts a calibration run, a short press ends it. */
+        /*
+         * SETUP held for 2 s starts a calibration run, a short press ends it.
+         * Otherwise a short press with the radio on switches the battery LEDs
+         * between battery and link quality.
+         */
         if (calibration::running()) {
             calibration::track(inputs.sticks);
         }
@@ -335,9 +368,12 @@ int main(void)
                 calibration::start();
             }
         } else {
-            if (calibration::running() && setup_held_loops > 0 &&
-                setup_held_loops < SETUP_HOLD_LOOPS) {
+            bool short_press = setup_held_loops > 0 && setup_held_loops < SETUP_HOLD_LOOPS;
+
+            if (calibration::running() && short_press) {
                 calibration::finish(inputs.sticks);
+            } else if (radio_on && short_press) {
+                show_link_quality = !show_link_quality;
             }
             setup_held_loops = 0;
         }
