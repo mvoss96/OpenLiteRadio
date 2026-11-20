@@ -105,6 +105,7 @@ analysis kept outside this repository.
 | Prio | Feature | Stock | Status |
 |---|---|---|---|
 | M | Update without buttons and without unplugging | no | hw |
+| S | Firmware update from the web tool: OpenLiteRadio to a new version without buttons, to and from the stock firmware | stock uses the BETAFPV Configurator | 0.16.0 → stock 1.1.3 (connected) and stock → 0.16.0 (buttons) done from web/index.html, hw |
 | M | USB connector switching between controller and bridge | measured | hw |
 | S | Gamepad as HID (DirectInput) | measured | channels 1 to 8 as axes, 9 to 16 as buttons, beside the serial port; checked against the channels with injected inputs (0.7.1), not yet tried in a simulator |
 | S | Gamepad as XInput | manual: stick position while plugging in; class found in the image | Xbox 360 controller beside the serial port, chosen with `usb.mode` or both trim centres held 2 s with the radio off; checked against the channels with injected inputs over XInput (0.14.0), not yet tried in a game |

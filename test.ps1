@@ -22,7 +22,7 @@ if (-not (Select-String -Path web/index.html -SimpleMatch "const WEB_VERSION = `
 Write-Output "web version matches VERSION ($version)"
 
 # Firmware and configurator must speak the same protocol number (hello line).
-$fwProto = [regex]::Match((Get-Content src/host.cpp -Raw), 'printk\("hello OpenLiteRadio %s proto=(\d+)').Groups[1].Value
+$fwProto = [regex]::Match((Get-Content src/host.cpp -Raw), 'printk\("hello %s proto=(\d+)').Groups[1].Value
 $webProto = [regex]::Match((Get-Content web/index.html -Raw), 'const PROTOCOL = (\d+);').Groups[1].Value
 if (-not $fwProto -or $fwProto -ne $webProto) {
     Write-Output "protocol: src/host.cpp says '$fwProto', web/index.html PROTOCOL '$webProto'"

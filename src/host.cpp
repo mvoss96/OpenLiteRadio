@@ -323,12 +323,15 @@ __noinit uint32_t fault_reason;
 __noinit uint32_t fault_pc;
 __noinit uint32_t fault_lr;
 
+/* Name and version as one string in the image; the configurator reads it from a firmware file. */
+const char IMAGE_ID[] = "OpenLiteRadio " APP_VERSION_STRING;
+
 } // namespace
 
 void print_hello()
 {
     /* The protocol number changes with every change of a message; test.ps1 checks web/index.html against it. */
-    printk("hello OpenLiteRadio %s proto=2\n", APP_VERSION_STRING);
+    printk("hello %s proto=2\n", IMAGE_ID);
     if (fault_marker == FAULT_MARKER) {
         printk("fault reason=%u pc=0x%08x lr=0x%08x\n", (unsigned int)fault_reason,
                (unsigned int)fault_pc, (unsigned int)fault_lr);

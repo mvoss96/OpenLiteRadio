@@ -303,6 +303,37 @@ stateDiagram-v2
   X, Y, LB, RB, Back, Start channels 9 to 16 (pressed above 1500). Channels 7
   and 8 have no element. Open: one setting per element, a channel or none.
 
+### Firmware update from the configurator
+
+The configurator writes an image through the vendor updater (0483:5740)
+with the protocol of `tools/flash.py`, over Web Serial. The way into the
+updater is chosen by where the update is started, not guessed:
+
+- System → Firmware → "Aktualisieren", connected: the page opens the
+  radio's port at 1200 baud, the firmware restarts into the updater, the
+  image is written, and `src/updater_entry.c` restarts the radio into the new
+  firmware. For an OpenLiteRadio image the page reconnects and shows the
+  version from the hello line. "Aufspielen" is blocked while the connection
+  is down and while the TX is on.
+- "Firmware aufspielen" in the bar of the unconnected page: the updater is
+  entered with SETUP + power first, whatever firmware runs (the stock
+  firmware has no command for it); the file is chosen once the updater is
+  there. The bootloader then stays in the updater until USB is unplugged.
+
+Chrome lets the page use the updater only after it was chosen once in the
+port picker; the page asks for that click when no allowed updater appears
+within 10 s. Updater ports that were present before the request, such as a
+flight controller with the same IDs, are not taken in the connected case.
+
+A file is shown as "OpenLiteRadio x.y.z" (the string `IMAGE_ID` in
+`src/host.cpp`), "BETAFPV-Original" (the USB product name "BETAFPV Joystick"
+in the image; the stock firmware has no version string) or "Unbekannte
+Firmware". It is refused when it is larger than 92 KiB, which would reach the
+settings pages, or when its first words fail the bootloader's stack pointer
+test or hold no Thumb reset vector inside the image. A new stock release
+therefore stays writable. The way without buttons depends on the addresses of
+bootloader 1.1.3 in `src/updater_entry.c`; the way with buttons does not.
+
 ### ELRS module
 
 The module has its own processor and firmware. The radio switches it on and
@@ -480,7 +511,7 @@ what the vendor bootloader shows on these LEDs.
 | 2 | flying: factory calibration, channels, CRSF at the module's rate, throttle lock, binding | in progress, see below |
 | 3 | settings storage, trim, calibration on the radio | storage and calibration built, trim open |
 | 4 | USB joystick, then Xbox mode | both built (DirectInput joystick and Xbox controller, each beside the serial port); per-element Xbox assignment open |
-| 5 | configuration protocol for the web tool | settings commands, the configurator's views and the USB mode built; ELRS parameters, buttons, update and backup open |
+| 5 | configuration protocol for the web tool | settings commands, the configurator's views, the USB mode and firmware update built; ELRS parameters, buttons and backup open |
 | 6 | Bluetooth, WiFi, battery display, remaining features | open |
 
 Stage 1 as built: the power button switches the radio on after 1 s and off
@@ -558,7 +589,8 @@ the port at 1200 baud restarts the radio into the vendor USB updater.
 
 From the radio:
 
-- `hello OpenLiteRadio <version> proto=2`, at start and on request. After
+- `hello OpenLiteRadio <version> proto=2`, at start and on request. "OpenLiteRadio
+  <version>" is `IMAGE_ID`, by which the configurator also recognises a firmware file. After
   a fatal error the radio restarts instead of halting; the next hello line is
   followed once by `fault reason=N pc=0x... lr=0x...` (Zephyr's reason code
   and the faulting addresses).

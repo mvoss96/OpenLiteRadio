@@ -196,7 +196,12 @@
   .padname span { font-weight: 500; color: var(--fg3); }
   .padname span.ok { color: var(--accent); }
   .padname span.missing { color: var(--warn); }
-  .calfoot { display: flex; justify-content: flex-end; padding: 0 24px 24px; }
+  .calfoot { display: flex; justify-content: flex-end; gap: 8px; padding: 0 24px 24px; }
+
+  /* Firmware update run: same layout as the calibration run, nothing else on screen. */
+  body.updating header.top, body.updating .statusbar, body.updating .offlinebar, body.updating .band { display: none !important; }
+  .updsteps { width: 520px; max-width: 100%; }
+  .warn { color: var(--warn); }
 
   .toast { position: fixed; left: 50%; bottom: 80px; transform: translateX(-50%); z-index: 9; max-width: calc(100% - 48px);
            padding: 10px 16px; border-radius: var(--r-control); background: var(--raised); box-shadow: 0 16px 40px rgba(0, 0, 0, .5); }
@@ -418,7 +423,8 @@
         <div class="stack">
           <section class="group"><h2>Gerät</h2>
             <div class="tiles">
-              <div class="tile"><span>Firmware</span><span class="value" id="sysFirmware">–</span></div>
+              <div class="tile"><span>Firmware</span><span class="value" id="sysFirmware">–</span>
+                <button class="btn" id="updOpen">Aktualisieren</button></div>
               <div class="tile"><span>Konfigurator</span><span class="value webVersion"></span></div>
               <div class="tile"><span>Akku-Eingang</span><span class="value" id="sysBattery">–</span></div>
               <div class="tile"><span>USB-Versorgung</span><span class="value" id="sysUsb">–</span></div>
@@ -442,7 +448,7 @@
         <section class="raw">
           <div class="rawrow head"><span>Alle Einstellungen</span><span>Wert</span><span>Bereich</span><span>Vorgabe</span></div>
           <div id="rawRows"></div>
-          <div class="rawfoot"><button class="btn subtle" id="defaults">Alles auf Vorgabe</button></div>
+          <div class="rawfoot"><button class="btn subtle" id="defaults">Alles auf Vorgabe</button></div> 
         </section>
       </div>
     </div>
@@ -465,6 +471,29 @@
     </div>
     <div class="calfoot"><button class="btn primary" id="calNext"></button></div>
   </section>
+
+  <!-- Firmware update run: choose a file, check it, bring the radio into the vendor updater, write. -->
+  <section class="view" id="view-update" hidden>
+    <div class="calhead">
+      <b>Firmware aufspielen</b><span class="muted" id="updSub"></span><span class="spacer"></span>
+      <button class="btn subtle" id="updCancel">Abbrechen</button>
+    </div>
+    <div class="calbody">
+      <h1 id="updTitle"></h1>
+      <div class="big" id="updProgress" hidden></div>
+      <div class="tiles updsteps" id="updSteps" hidden>
+        <div class="tile"><span>1. Ausschalten, USB abziehen</span></div>
+        <div class="tile"><span>2. SETUP halten, einschalten bis zum Doppelton</span></div>
+        <div class="tile"><span>3. USB einstecken</span></div>
+      </div>
+      <span class="muted" id="updNote"></span>
+    </div>
+    <div class="calfoot">
+      <button class="btn subtle" id="updOther">Andere Datei</button>
+      <button class="btn primary" id="updNext"></button>
+    </div>
+    <input type="file" id="updFile" accept=".bin" hidden>
+  </section>
 </main>
 
 <footer class="statusbar" id="statusbar">
@@ -483,6 +512,7 @@
 <footer class="offlinebar">
   <span>Nicht verbunden</span><span>Konfigurator <span class="webVersion"></span></span><span class="spacer"></span>
   <label class="autoconnect">Automatisch verbinden<input type="checkbox" class="switch" id="autoConnect"></label>
+  <button class="btn" id="updOpenOffline">Firmware aufspielen</button>
   <button class="btn primary" id="connectBig">Verbinden</button>
 </footer>
 <div class="toast" id="message" role="status" hidden></div>
@@ -797,7 +827,7 @@ setInterval(() => { if (elrs.open && elrs.moduleOn && elrs.queued === 0) elrsQue
 // an older page with newer code.
 
 // The project's version from the file VERSION; test.ps1 checks that both agree.
-const WEB_VERSION = "0.15.1";
+const WEB_VERSION = "0.16.0";
 // Protocol number of the hello line this page speaks; test.ps1 checks it against src/host.cpp.
 const PROTOCOL = 2;
 const USB_VENDOR_ID = 0x2fe3;
@@ -857,6 +887,10 @@ const icon = (name) => `<svg class="i" viewBox="0 0 24 24"><path d="${ICON[name]
 let writer = null;
 let reader = null;
 let opening = false;               // a port is being chosen or opened
+let openPort = null;               // the port of the open connection
+let portClosed = null;             // resolves when that connection has closed its port
+let firmwareVersion = "";          // version from the radio's hello line
+let upd = null;                    // the firmware update run, null when none is shown
 let linesThisSecond = 0;
 const settings = new Map();        // key -> { type, min, max, def, value }
 const optionLists = new Map();     // option list name -> Map(value -> key), from "option" lines
@@ -1286,6 +1320,8 @@ function showState(fields) {
   elrsState(fields);
   // A band on every page while the radio sends to a receiver: changes reach the model at once.
   $("band").hidden = fields.mode !== "elrs_active";
+  // The question before an update is blocked while the TX is on.
+  if (upd && upd.step === "ready") showUpdate();
 }
 
 // Grey drawing without live values, as shown before connecting.
@@ -1446,7 +1482,9 @@ function handleLine(line) {
     helloSeen = true;
     $("deviceText").textContent = `LiteRadio 4 · Firmware ${rest[1]} · Konfigurator ${WEB_VERSION}`;
     $("sysFirmware").textContent = rest[1];
+    firmwareVersion = rest[1];
     if (rest[2] !== `proto=${PROTOCOL}`) warnMismatch(rest[2]);
+    if (upd && upd.step === "restart") updateRestarted();
   } else if (kind === "setting") {
     const [key, type, min, max, def, value] = rest;
     settings.set(key, { type, min: Number(min), max: Number(max), def: Number(def), value: Number(value) });
@@ -1508,10 +1546,12 @@ function setConnected(connected) {
     menuOpen = false;
     showMapping();
     openDetail(0);
-    showView("assign");
+    if (!upd) showView("assign");
     elrsState({ module: "0", lq: "0" });
+    firmwareVersion = "";
     $("band").hidden = true;
   }
+  if (upd && upd.step === "ready") showUpdate();
 }
 
 // Connect to known, a port this page may already use, or let the user pick one.
@@ -1531,6 +1571,9 @@ async function connect(known) {
   }
   writer = port.writable.getWriter();
   reader = port.readable.getReader();
+  openPort = port;
+  let markClosed;
+  portClosed = new Promise((resolve) => { markClosed = resolve; });
   resumeWanted = false;
   setConnected(true);
   await send("hello");
@@ -1558,6 +1601,8 @@ async function connect(known) {
   writer.releaseLock();
   writer = null;
   await port.close().catch(() => {});
+  openPort = null;
+  markClosed();
   setConnected(false);
   resumeWanted = !userDisconnected;
   userDisconnected = false;
@@ -1610,6 +1655,338 @@ async function autoConnect() {
   const port = ports.find((p) => p.getInfo().usbVendorId === USB_VENDOR_ID);
   if (port) connect(port).catch((error) => showMessage(error.message));
 }
+
+// ---- Firmware update
+//
+// The vendor bootloader's USB updater (0483:5740) writes an image into the application area from
+// 0x08008000. Its protocol is described in tools/flash.py. Firmware from this project starts the
+// updater when its port is opened at 1200 baud and restarts by itself after a completed download;
+// any other firmware needs SETUP + power, and the updater then waits until USB is unplugged.
+
+const UPDATER = { usbVendorId: 0x0483, usbProductId: 0x5740 };
+const UPD_READY = 0x43, UPD_ACK = 0x06, UPD_VERIFIED = 0x15, UPD_BLOCK = 1024;
+// The image must end below the settings pages at 0x0801F000.
+const UPD_MAX = 92 * 1024;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const isUpdater = (port) => port.getInfo().usbVendorId === UPDATER.usbVendorId &&
+  port.getInfo().usbProductId === UPDATER.usbProductId;
+const txActive = () => Boolean(writer && lastFields && lastFields.mode === "elrs_active");
+
+function crc16Xmodem(bytes) {
+  let crc = 0;
+  for (const byte of bytes) {
+    crc ^= byte << 8;
+    for (let bit = 0; bit < 8; bit++) crc = crc & 0x8000 ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
+  }
+  return crc;
+}
+
+// 133-byte packet: start byte, number and its complement, data, CRC high byte first.
+function updaterPacket(start, number, data) {
+  const packet = new Uint8Array(3 + data.length + 2);
+  packet.set([start, number & 0xff, ~number & 0xff]);
+  packet.set(data, 3);
+  const crc = crc16Xmodem(data);
+  packet.set([crc >> 8, crc & 0xff], 3 + data.length);
+  return packet;
+}
+
+// The first packet: target name and image size as ASCII decimal.
+function updaterHeader(size) {
+  const data = new Uint8Array(128);
+  data.set(new TextEncoder().encode("Bootloader_F.bin\0"));
+  data.set(new TextEncoder().encode(String(size)), 17);
+  return updaterPacket(0x01, 0x00, data);
+}
+
+// What a file holds: name, kind ("open", "stock", "other") and why it cannot be written, if so.
+async function inspectImage(bytes) {
+  const text = new TextDecoder("latin1").decode(bytes);
+  const own = text.match(/OpenLiteRadio (\d+\.\d+\.\d+)/);
+  const image = { bytes, kind: "other", name: "Unbekannte Firmware", version: "", problem: "" };
+  if (own) Object.assign(image, { kind: "open", name: `OpenLiteRadio ${own[1]}`, version: own[1] });
+  // The stock firmware has no version string; its USB product name identifies it.
+  if (!own && text.includes("BETAFPV Joystick")) Object.assign(image, { kind: "stock", name: "BETAFPV-Original" });
+  if (bytes.length > UPD_MAX) {
+    image.problem = `Zu groß: ${Math.ceil(bytes.length / 1024)} KiB, höchstens ${UPD_MAX / 1024} KiB`;
+  } else {
+    // The bootloader's own test of the stack pointer, and a Thumb reset vector inside the image.
+    const view = new DataView(bytes.buffer);
+    const stack = bytes.length >= 8 ? view.getUint32(0, true) : 0;
+    const reset = bytes.length >= 8 ? view.getUint32(4, true) : 0;
+    if ((stack & 0x2ffe0000) !== 0x20000000 || reset < 0x08008000 || reset >= 0x08008000 + bytes.length || !(reset & 1)) {
+      image.problem = "Keine Firmware für diese Fernsteuerung";
+    }
+  }
+  return image;
+}
+
+// Steps of the run; each shows a title, maybe a note, and the buttons it needs.
+function showUpdate() {
+  if (!upd) return;
+  const image = upd.image;
+  const step = upd.step;
+  let title = "", note = "", warn = false, next = "";
+  if (step === "choose") {
+    title = "Firmware-Datei wählen";
+    next = "Datei wählen";
+  } else if (step === "ready") {
+    title = image.name;
+    next = "Aufspielen";
+    const problem = image.problem || (upd.fromApp && !(writer && firmwareVersion) ? "Nicht verbunden"
+      : txActive() ? "Erst den Sender ausschalten" : "");
+    warn = Boolean(problem);
+    note = problem ||
+      (image.kind === "stock" ? "Zurück zur Original-Firmware"
+        : image.kind === "other" ? "Weder OpenLiteRadio noch die bekannte Original-Firmware"
+        : image.version === upd.installed ? "Diese Version läuft schon"
+        : upd.installed ? "Einstellungen bleiben erhalten" : "");
+  } else if (step === "manual") {
+    title = "Update-Modus einschalten";
+    next = "Weiter";
+  } else if (step === "wait") {
+    title = "Updater startet";
+  } else if (step === "permit") {
+    title = "Updater freigeben";
+    note = "Im Auswahlfenster den Updater wählen";
+    next = "Freigeben";
+  } else if (step === "writing") {
+    title = "Wird geschrieben";
+    note = "USB nicht abziehen";
+  } else if (step === "restart") {
+    title = "Startet neu";
+  } else if (step === "done") {
+    next = "Fertig";
+    if (upd.running) {
+      title = `Firmware ${upd.running} läuft`;
+      if (upd.running !== image.version) { note = `Erwartet war ${image.version}`; warn = true; }
+    } else if (!upd.fromApp) {
+      title = "Geschrieben und geprüft";
+      note = "USB abziehen, damit die Firmware startet";
+    } else {
+      title = image.kind === "stock" ? "Original-Firmware aufgespielt" : "Geschrieben und geprüft";
+      if (image.kind === "open") note = "Nach dem Neustart keine Verbindung: Verbinden von Hand";
+    }
+  } else if (step === "failed") {
+    title = "Nicht geschrieben";
+    note = upd.error;
+    warn = true;
+    next = "Erneut versuchen";
+  }
+  $("updSub").textContent = step === "choose" || step === "ready"
+    ? (upd.installed ? `installiert ${upd.installed}` : "") : image ? image.name : "";
+  $("updTitle").textContent = title;
+  $("updNote").textContent = note;
+  $("updNote").className = warn ? "warn" : "muted";
+  $("updProgress").hidden = step !== "writing";
+  $("updProgress").textContent = `${upd.progress} %`;
+  $("updSteps").hidden = step !== "manual";
+  $("updNext").hidden = !next;
+  $("updNext").textContent = next;
+  $("updNext").disabled = step === "ready" && warn;
+  $("updOther").hidden = step !== "ready";
+  $("updCancel").hidden = !["choose", "ready", "manual", "permit", "writing", "failed"].includes(step);
+  $("updCancel").disabled = step === "writing";
+  $("updCancel").textContent = step === "failed" ? "Schließen" : "Abbrechen";
+}
+
+// fromApp: opened from the connected radio, which the page sends into the updater after the file is
+// chosen. Opened without a connection, the updater is entered with the buttons first, whatever
+// firmware the radio runs, and the file is chosen once the updater is there.
+function openUpdate(fromApp) {
+  upd = { step: fromApp ? "choose" : "manual", image: null, installed: firmwareVersion, fromApp,
+          before: new Set(), port: null, progress: 0, error: "", running: "" };
+  document.body.classList.add("updating");
+  showView("update");
+  showUpdate();
+  if (!fromApp) findUpdater();
+}
+
+function closeUpdate() {
+  upd = null;
+  document.body.classList.remove("updating");
+  showView(writer ? "system" : "assign");
+}
+
+// Start: firmware from this project is sent into the updater; otherwise the buttons are needed.
+async function startUpdate() {
+  showUpdate();
+  if ($("updNext").disabled) return;
+  if (!upd.fromApp) return writeImage(upd.port);
+  // Ports of other devices with the updater's IDs, e.g. a flight controller, are not taken.
+  upd.before = new Set((await navigator.serial.getPorts()).filter(isUpdater));
+  upd.step = "wait";
+  showUpdate();
+  const port = openPort;
+  userDisconnected = true;
+  reader.cancel();
+  await portClosed;
+  try {
+    await port.open({ baudRate: 1200 });
+    await sleep(500);
+    await port.close();
+  } catch {
+    // The port goes away when the radio restarts.
+  }
+  findUpdater();
+}
+
+// Wait for an allowed updater port; after 10 s in "wait" Chrome has to be asked for one.
+async function findUpdater() {
+  const deadline = Date.now() + 10000;
+  while (upd && ["wait", "manual", "permit"].includes(upd.step)) {
+    const port = (await navigator.serial.getPorts()).find((p) => isUpdater(p) && !upd.before.has(p));
+    if (port) return useUpdater(port);
+    if (upd.step === "wait" && Date.now() > deadline) { upd.step = "permit"; showUpdate(); }
+    await sleep(500);
+  }
+}
+
+// The port picker, limited to the updater's IDs; it needs a click.
+async function chooseUpdater() {
+  try {
+    const port = await navigator.serial.requestPort({ filters: [UPDATER] });
+    if (upd && ["manual", "permit"].includes(upd.step)) useUpdater(port);
+  } catch (error) {
+    if (error.name !== "NotFoundError") showMessage(error.message);
+  }
+}
+
+// The updater is there: write at once when the page sent the radio into it, else choose the file first.
+function useUpdater(port) {
+  if (upd.fromApp) return writeImage(port);
+  upd.port = port;
+  upd.step = upd.image ? "ready" : "choose";
+  showUpdate();
+}
+
+async function writeImage(port) {
+  if (!upd || upd.step === "writing") return;
+  upd.step = "writing";
+  upd.progress = 0;
+  showUpdate();
+  let error;
+  try {
+    error = await sendImage(port, upd.image.bytes);
+  } catch (exception) {
+    error = exception.message;
+  }
+  if (!upd) return;
+  if (error) {
+    upd.step = "failed";
+    upd.error = error;
+  } else if (upd.fromApp && upd.image.kind === "open") {
+    // The radio restarts into the new firmware; the hello line of the new connection ends the run.
+    upd.step = "restart";
+    resumeWanted = true;
+    resumeUntil = Date.now() + 20000;
+    setTimeout(resume, 1500);
+    setTimeout(() => { if (upd && upd.step === "restart") { upd.step = "done"; showUpdate(); } }, 21000);
+  } else {
+    upd.step = "done";
+  }
+  showUpdate();
+}
+
+function updateRestarted() {
+  upd.step = "done";
+  upd.running = firmwareVersion;
+  showUpdate();
+}
+
+// The updater protocol of tools/flash.py; returns an error text or "".
+async function sendImage(port, image) {
+  // The updater may list its port a moment before it answers.
+  await sleep(1000);
+  for (let tries = 0; ; tries++) {
+    try { await port.open({ baudRate: 115200 }); break; } catch (error) { if (tries === 20) throw error; }
+    await sleep(250);
+  }
+  const portWriter = port.writable.getWriter();
+  const portReader = port.readable.getReader();
+  let received = [];
+  let reading = true;
+  let wake = null;
+  const pump = (async () => {
+    try {
+      while (true) {
+        const { value, done } = await portReader.read();
+        if (done) break;
+        received.push(...value);
+        if (wake) wake();
+      }
+    } catch {
+      // The port went away.
+    }
+    reading = false;
+    if (wake) wake();
+  })();
+  // Wait for one byte; others, such as the repeated 'C', are dropped.
+  const waitByte = async (wanted, ms) => {
+    const end = Date.now() + ms;
+    while (true) {
+      const found = received.includes(wanted);
+      received = [];
+      if (found) return true;
+      if (!reading || Date.now() >= end) return false;
+      await new Promise((resolve) => { wake = resolve; setTimeout(resolve, end - Date.now()); });
+    }
+  };
+  const blocks = Math.ceil(image.length / UPD_BLOCK);
+  try {
+    await portWriter.write(new TextEncoder().encode("update\r\n"));
+    if (!await waitByte(UPD_READY, 3000)) return "Keine Antwort vom Updater";
+    await portWriter.write(updaterHeader(image.length));
+    if (!await waitByte(UPD_ACK, 10000)) return "Kopfdaten nicht bestätigt";
+    for (let number = 1; number <= blocks; number++) {
+      const data = new Uint8Array(UPD_BLOCK);
+      data.set(image.subarray((number - 1) * UPD_BLOCK, number * UPD_BLOCK));
+      await portWriter.write(updaterPacket(0x02, number, data));
+      if (!await waitByte(UPD_ACK, 10000)) return `Block ${number} von ${blocks} nicht bestätigt`;
+      upd.progress = Math.round((number * 100) / blocks);
+      $("updProgress").textContent = `${upd.progress} %`;
+    }
+    await portWriter.write(new Uint8Array([0x04]));
+    if (!await waitByte(UPD_VERIFIED, 20000)) return "Prüfung des Updaters fehlgeschlagen";
+    // Closing packet; firmware from this project may already restart.
+    await portWriter.write(updaterPacket(0x01, 0x00, new Uint8Array(128))).catch(() => {});
+    return "";
+  } finally {
+    await portReader.cancel().catch(() => {});
+    await pump;
+    portReader.releaseLock();
+    portWriter.releaseLock();
+    await port.close().catch(() => {});
+  }
+}
+
+$("updOpen").addEventListener("click", () => openUpdate(true));
+$("updOpenOffline").addEventListener("click", () => openUpdate(false));
+$("updCancel").addEventListener("click", closeUpdate);
+$("updOther").addEventListener("click", () => $("updFile").click());
+$("updFile").addEventListener("change", async () => {
+  const file = $("updFile").files[0];
+  $("updFile").value = "";
+  if (!file || !upd) return;
+  upd.image = await inspectImage(new Uint8Array(await file.arrayBuffer()));
+  upd.step = "ready";
+  showUpdate();
+});
+$("updNext").addEventListener("click", async () => {
+  const step = upd.step;
+  if (step === "choose") $("updFile").click();
+  else if (step === "ready") startUpdate();
+  else if (step === "manual" || step === "permit") chooseUpdater();
+  else if (step === "done") closeUpdate();
+  else if (step === "failed") {
+    // After a failed download the updater mostly stays; otherwise the buttons are needed again.
+    upd.before.clear();
+    const port = (await navigator.serial.getPorts()).find(isUpdater);
+    if (port) writeImage(port);
+    else { upd.fromApp = false; upd.step = "manual"; showUpdate(); findUpdater(); }
+  }
+});
 
 // ---- Views and events
 
