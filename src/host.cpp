@@ -43,8 +43,12 @@
 #include <zephyr/app_version.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/uart.h>
+#include <zephyr/fatal.h>
 #include <zephyr/kernel.h>
+#include <zephyr/linker/section_tags.h>
 #include <zephyr/sys/printk.h>
+
+#include <cmsis_core.h>
 #include <zephyr/sys/util.h>
 
 #include "board/board.h"
@@ -224,7 +228,15 @@ void handle_command(char *line)
             printk("error value out of range\n");
         } else {
             output::relock();
-            printk("ok %s %d\n", arguments[0], settings::values[index]);
+            /*
+             * The USB device changes its form in the next loop and this port
+             * goes away with it, before a following "save" may arrive.
+             */
+            if (index == settings::USB_MODE && !storage::save_setting(index)) {
+                printk("error storage\n");
+            } else {
+                printk("ok %s %d\n", arguments[0], settings::values[index]);
+            }
         }
     } else if (strcmp(command, "save") == 0) {
         printk(storage::save_settings() ? "ok save\n" : "error storage\n");
@@ -279,10 +291,43 @@ void poll()
 
 } // namespace
 
+/*
+ * A fatal error is kept across the restart that follows it and reported once
+ * after "hello", so that a crash can be read from the host.
+ */
+namespace {
+
+constexpr uint32_t FAULT_MARKER = 0x46415554u; /* "FAUT" */
+__noinit uint32_t fault_marker;
+__noinit uint32_t fault_reason;
+__noinit uint32_t fault_pc;
+__noinit uint32_t fault_lr;
+
+} // namespace
+
 void print_hello()
 {
     printk("hello OpenLiteRadio %s proto=1\n", APP_VERSION_STRING);
+    if (fault_marker == FAULT_MARKER) {
+        printk("fault reason=%u pc=0x%08x lr=0x%08x\n", (unsigned int)fault_reason,
+               (unsigned int)fault_pc, (unsigned int)fault_lr);
+        fault_marker = 0;
+    }
 }
+
+} // namespace host
+
+/* Replaces Zephyr's handler, which halts: keep the cause and restart. */
+extern "C" void k_sys_fatal_error_handler(unsigned int reason, const struct arch_esf *esf)
+{
+    host::fault_reason = reason;
+    host::fault_pc = esf != nullptr ? esf->basic.pc : 0;
+    host::fault_lr = esf != nullptr ? esf->basic.lr : 0;
+    host::fault_marker = host::FAULT_MARKER;
+    NVIC_SystemReset();
+}
+
+namespace host {
 
 void tick()
 {

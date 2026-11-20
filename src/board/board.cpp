@@ -15,6 +15,7 @@ namespace {
 
 /* Values for the 4-bit pin configuration fields in GPIOx_CRL and GPIOx_CRH. */
 constexpr uint32_t PIN_ANALOG = 0x0;
+constexpr uint32_t PIN_INPUT_FLOATING = 0x4;
 constexpr uint32_t PIN_INPUT_PULL = 0x8; /* pull direction from the ODR bit */
 constexpr uint32_t PIN_OUTPUT = 0x2;
 constexpr uint32_t PIN_OUTPUT_OPEN_DRAIN = 0x6;
@@ -26,6 +27,7 @@ constexpr uint32_t PA_BUTTON_SE = BIT(5);
 constexpr uint32_t PA_KEYS_CLOCK = BIT(6);
 constexpr uint32_t PA_KEYS_DATA = BIT(7);
 constexpr uint32_t PA_BUTTON_BIND = BIT(8);
+constexpr uint32_t PA_USB_DP = BIT(12);
 constexpr uint32_t PA_USB_SUPPLY = BIT(15);
 /* Port B */
 constexpr uint32_t PB_SWITCH_SB_END0 = BIT(4);
@@ -479,6 +481,15 @@ void set_usb_to_controller(bool controller)
     shift_write();
 }
 
+void signal_usb_disconnect()
+{
+    GPIOA->BRR = PA_USB_DP;
+    configure_pins(GPIOA, PA_USB_DP, PIN_OUTPUT);
+    k_msleep(20);
+    /* The input the USB pinctrl state gives the pin. */
+    configure_pins(GPIOA, PA_USB_DP, PIN_INPUT_FLOATING);
+}
+
 void set_battery_leds(uint8_t mask)
 {
     /* Output 0x08 is the leftmost LED, 0x01 the rightmost. */
@@ -532,3 +543,8 @@ void set_buzzer(uint32_t frequency)
 }
 
 } // namespace board
+
+extern "C" void board_signal_usb_disconnect(void)
+{
+    board::signal_usb_disconnect();
+}

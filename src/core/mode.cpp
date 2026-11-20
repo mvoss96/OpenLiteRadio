@@ -39,7 +39,7 @@ const char *mode_name(Mode mode)
 Mode ModeMachine::update(const ModeInputs &in)
 {
     if (!in.module_on) {
-        mode_ = in.usb_host ? Mode::USB_JOYSTICK : Mode::OFF;
+        mode_ = !in.usb_host ? Mode::OFF : in.usb_xbox ? Mode::USB_XBOX : Mode::USB_JOYSTICK;
         return mode_;
     }
     switch (in.task) {

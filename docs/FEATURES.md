@@ -107,7 +107,7 @@ analysis kept outside this repository.
 | M | Update without buttons and without unplugging | no | hw |
 | M | USB connector switching between controller and bridge | measured | hw |
 | S | Gamepad as HID (DirectInput) | measured | channels 1 to 8 as axes, 9 to 16 as buttons, beside the serial port; checked against the channels with injected inputs (0.7.1), not yet tried in a simulator |
-| S | Gamepad as XInput | manual: stick position while plugging in; class found in the image | missing |
+| S | Gamepad as XInput | manual: stick position while plugging in; class found in the image | Xbox 360 controller beside the serial port, chosen with `usb.mode` or both trim centres held 2 s with the radio off; checked against the channels with injected inputs over XInput (0.14.0), not yet tried in a game |
 | S | Serial configuration interface with own protocol | stock uses the Configurator protocol | list, get, set, save, revert, defaults, hw |
 | S | Live stream of stick and switch values for the configuration tool | measured: 10 values at about 500 Hz | state lines 25 times per second, shown by web/index.html, hw |
 | S | USB serial port for configuration and update whenever a cable is plugged in | no: stock has USB only when off | hw |

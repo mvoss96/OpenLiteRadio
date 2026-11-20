@@ -16,4 +16,7 @@ bool save_settings();
 /* Store only the trim (trim.*), leaving other unsaved changes unsaved. */
 bool save_trim();
 
+/* Store one setting, leaving other unsaved changes unsaved. */
+bool save_setting(int index);
+
 } // namespace storage

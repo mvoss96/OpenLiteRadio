@@ -1,7 +1,7 @@
 /*
  * OpenLiteRadio firmware: power handling, controls and indicators, channel
  * frames to the ELRS module, a line protocol on the USB serial port for the
- * configurator in web/, and a USB joystick.
+ * configurator in web/, and a USB joystick or Xbox controller.
  *
  * Two threads: the control thread (output.cpp) reads sticks and switches and
  * sends one channel frame per frame period of the module; the main thread
@@ -20,6 +20,7 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/uart.h>
 #include <zephyr/kernel.h>
+#include <zephyr/sys/printk.h>
 
 #include "board/board.h"
 #include "calibration.h"
@@ -30,6 +31,7 @@
 #include "module_link.h"
 #include "output.h"
 #include "storage.h"
+#include "usb_device.h"
 
 extern "C" void updater_enter(void);
 
@@ -42,6 +44,7 @@ constexpr int POWER_ON_LOOPS = 50;     /* power button held for 1 s */
 constexpr int POWER_OFF_LOOPS = 100;   /* power button held for 2 s */
 constexpr int BIND_HOLD_LOOPS = 50;    /* BIND held for 1 s */
 constexpr int SETUP_HOLD_LOOPS = 100;  /* SETUP held for 2 s */
+constexpr int USB_SWITCH_LOOPS = 100;  /* both trim centres held for 2 s */
 
 static const struct device *const console = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 
@@ -63,6 +66,45 @@ static void set_radio_on(bool on)
     }
     board::set_power_latch(on);
     indicators::beep(on ? 2700 : 1800, 150);
+}
+
+/*
+ * The USB device's form: only the serial port while the radio is on, else
+ * the controller chosen in usb.mode. With the radio off, both trim centres
+ * held for 2 s switch between joystick and Xbox controller and store it.
+ * Each change of the form makes the device enumerate again.
+ */
+static void usb_tick(const board::Inputs &inputs)
+{
+    static int centres_held_loops;
+    static int requested = -1; /* enum usb_function asked for last, -1 before the first */
+    bool both = (inputs.trim_left & board::TRIM_CENTRE) && (inputs.trim_right & board::TRIM_CENTRE);
+
+    if (!radio_on && both && !inputs.power) {
+        if (++centres_held_loops == USB_SWITCH_LOOPS) {
+            settings::set(settings::USB_MODE, settings::values[settings::USB_MODE] == 0 ? 1 : 0);
+            storage::save_setting(settings::USB_MODE);
+            indicators::beep(2700, 150);
+        }
+    } else {
+        centres_held_loops = 0;
+    }
+
+    usb_function wanted = radio_on ? USB_SERIAL_ONLY
+                          : settings::values[settings::USB_MODE] != 0 ? USB_XBOX
+                                                                     : USB_JOYSTICK;
+
+    if (wanted != requested) {
+        requested = wanted;
+        int err = usb_device_select(wanted);
+
+        if (err != 0) {
+            /* The device fell back to the serial port only; tell the host and the user. */
+            k_msleep(1500);
+            printk("error usb %d %d\n", (int)wanted, err);
+            indicators::beep(600, 600);
+        }
+    }
 }
 
 /*
@@ -144,6 +186,7 @@ int main(void)
 
         board::read_trims(inputs);
         trim_tick(inputs.trim_left, inputs.trim_right);
+        usb_tick(inputs);
 
         /*
          * Power button: hold 1 s to switch on, 2 s to switch off. Started from

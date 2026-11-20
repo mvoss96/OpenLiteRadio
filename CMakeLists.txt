@@ -17,7 +17,9 @@ target_sources(app PRIVATE
   src/core/joystick.cpp
   src/core/led.cpp
   src/core/mode.cpp
-  src/usb_device.c
   src/core/settings.cpp
+  src/core/xbox.cpp
+  src/usb_device.c
+  src/usb_xinput.c
 )
 target_sources_ifdef(CONFIG_UPDATER_ENTRY app PRIVATE src/updater_entry.c)

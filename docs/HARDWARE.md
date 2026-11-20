@@ -261,6 +261,14 @@ control lines showed:
   USB device stays active; the console port then fails until the next
   enumeration. Powering the USB peripheral down and holding PA11 and PA12
   low for 700 ms before switching makes the host enumerate the bridge.
+- D+ (PA12) has a pull-up the firmware cannot switch off, and the board has
+  no pin for it. Observed 2026-11-20 with firmware 0.14.0 on Windows 11:
+  after `usbd_disable()` and `usbd_shutdown()` and a new device description,
+  the host noticed a change from the joystick (2FE3:0005) to the Xbox
+  controller (2FE3:0007), but not the change back; it kept the Xbox device,
+  whose serial port then failed with "Ein an das System angeschlossenes Gerät
+  funktioniert nicht". With PA12 driven low for 20 ms after the shutdown,
+  both directions enumerated anew in each of more than ten changes.
 
 Hypotheses: PC13 high removes power from the module or holds it in reset.
 The 1370 bytes are the boot messages seen on the bridge. The 0x3A frame is

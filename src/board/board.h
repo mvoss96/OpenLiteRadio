@@ -89,6 +89,13 @@ void set_module_enabled(bool enabled);
 /* Route the USB connector to this MCU (true) or to the CH9102 bridge (false). */
 void set_usb_to_controller(bool controller);
 
+/*
+ * Make the host see the USB device unplugged: D+ (PA12) low for 20 ms. The
+ * board ties D+ to its pull-up, so stopping the USB peripheral alone leaves
+ * the device on the bus. Only while the USB peripheral is shut down.
+ */
+void signal_usb_disconnect();
+
 /* Light the four battery LEDs; bit 0 is the leftmost LED. */
 void set_battery_leds(uint8_t mask);
 
@@ -99,3 +106,6 @@ void set_status_led(uint8_t red, uint8_t green, uint8_t blue);
 void set_buzzer(uint32_t frequency);
 
 } // namespace board
+
+/* board::signal_usb_disconnect() for src/usb_device.c, which is C. */
+extern "C" void board_signal_usb_disconnect(void);

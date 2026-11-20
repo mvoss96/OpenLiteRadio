@@ -55,4 +55,9 @@ bool save_trim()
     return save(settings::TRIM_FIRST, core::AXIS_COUNT);
 }
 
+bool save_setting(int index)
+{
+    return save(index, 1);
+}
+
 } // namespace storage

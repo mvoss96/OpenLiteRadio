@@ -9,11 +9,9 @@
 #include "core/crsf.h"
 #include "core/joystick.h"
 #include "core/settings.h"
+#include "core/xbox.h"
+#include "usb_device.h"
 
-/* Sends joystick::REPORT_SIZE bytes, see src/usb_device.c. */
-extern "C" void usb_joystick_send(const uint8_t *report);
-/* True while a PC has set up the joystick interface. */
-extern "C" bool usb_joystick_ready(void);
 static_assert(joystick::REPORT_SIZE == DT_PROP(DT_NODELABEL(joystick_hid), in_report_size),
               "src/core/joystick.h, src/usb_device.c and the devicetree must agree on the report size");
 
@@ -158,7 +156,8 @@ void control_thread(void *, void *, void *)
             .module_on = on,
             .task = task,
             /* The stack does not report a pulled cable, so the USB supply has to be there too. */
-            .usb_host = usb_joystick_ready() && board::usb_supply_present(),
+            .usb_host = usb_controller_ready() && board::usb_supply_present(),
+            .usb_xbox = usb_device_function() == USB_XBOX,
             .held = atomic_get(&hold_output) != 0,
             .relock = atomic_set(&relock_requested, 0) != 0,
             .throttle = core::source_value(core::SOURCE_THROTTLE, controls, settings::values),
@@ -166,24 +165,18 @@ void control_thread(void *, void *, void *)
         };
         core::Mode mode = machine.update(mode_inputs);
 
-        /*
-         * The joystick follows the controls only in the joystick mode. In
-         * every other mode it reports all channels centred, so that a
-         * simulator still open on the PC does not keep the last positions.
-         */
-        uint8_t report[joystick::REPORT_SIZE];
-
+        /* The USB controller exists only with the radio off; main.cpp chooses the USB device's form. */
         if (mode == core::Mode::USB_JOYSTICK) {
-            joystick::fill_report(channels, report);
-        } else {
-            uint16_t centred[core::CHANNEL_COUNT];
+            uint8_t report[joystick::REPORT_SIZE];
 
-            for (uint16_t &value : centred) {
-                value = core::CHANNEL_CENTRE;
-            }
-            joystick::fill_report(centred, report);
+            joystick::fill_report(channels, report);
+            usb_joystick_send(report);
+        } else if (mode == core::Mode::USB_XBOX) {
+            uint8_t report[xbox::REPORT_SIZE];
+
+            xbox::fill_report(channels, report);
+            usb_xbox_send(report);
         }
-        usb_joystick_send(report);
 
         bool locked = mode != core::Mode::ELRS_ACTIVE;
 

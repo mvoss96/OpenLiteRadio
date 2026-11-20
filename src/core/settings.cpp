@@ -30,6 +30,8 @@ constexpr uint16_t IDS_PER_INSTANCE = 8;
 const Field UNLOCK_FIELDS[] = { { "mode", 1, 2, 1 }, { "beep", 0, 1, 1 } };
 const Field BUZZER_FIELDS[] = { { "on", 0, 1, 1 } };
 const Field MAP_FIELDS[] = { { "mode", 0, 2, 0 } };
+/* 0 joystick, 1 Xbox controller: the USB device with the radio off. */
+const Field USB_FIELDS[] = { { "mode", 0, 1, 0 } };
 /* In the order of core::Axis; steps of core::TRIM_STEP_US. */
 const Field TRIM_FIELDS[] = { { "thr", -25, 25, 0 }, { "rud", -25, 25, 0 }, { "ele", -25, 25, 0 },
                               { "ail", -25, 25, 0 } };
@@ -44,6 +46,7 @@ const Group GROUPS[] = {
     { "buzzer", 0, 0, 1, BUZZER_FIELDS, 0x110 },
     { "map", 0, 0, 1, MAP_FIELDS, 0x120 },
     { "trim", 0, 0, 4, TRIM_FIELDS, 0x130 },
+    { "usb", 0, 0, 1, USB_FIELDS, 0x140 },
     { "ch", 16, 1, 3, CHANNEL_FIELD_LIST, 0x200 },
     { "cal", 4, 0, 4, CALIBRATION_FIELD_LIST, 0x300 },
 };

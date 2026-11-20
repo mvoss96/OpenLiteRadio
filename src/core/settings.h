@@ -20,7 +20,8 @@ enum Index {
     BUZZER_ON = 2,     /* 0 silences all tones */
     MAP_MODE = 3,      /* the assignment in use, a core::Mapping */
     TRIM_FIRST = 4,    /* trim of the 4 stick axes in steps, in the order of core::Axis */
-    CHANNEL_FIRST = 8, /* 16 channels with CHANNEL_FIELDS values each: the Custom assignment */
+    USB_MODE = 8,      /* USB device with the radio off: 0 joystick, 1 Xbox controller */
+    CHANNEL_FIRST = 9, /* 16 channels with CHANNEL_FIELDS values each: the Custom assignment */
     CALIBRATION_FIRST = CHANNEL_FIRST + 16 * 3, /* 4 axes with CALIBRATION_FIELDS values each */
     COUNT = CALIBRATION_FIRST + 4 * 4,
 };

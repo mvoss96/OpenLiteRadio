@@ -32,8 +32,9 @@ import serial
 from serial.tools import list_ports
 
 UPDATER_IDS = ((0x0483, 0x5740),)
-# Firmware from 0.7.0 on is a serial port plus joystick (PID 0x0005); older ones were 0x0004.
-CONSOLE_IDS = ((0x2FE3, 0x0005), (0x2FE3, 0x0004))
+# The firmware's serial port in each form of its USB device: serial port only (radio on),
+# with the joystick, with the Xbox controller (src/usb_device.c).
+CONSOLE_IDS = ((0x2FE3, 0x0004), (0x2FE3, 0x0005), (0x2FE3, 0x0007))
 UPDATE_REQUEST_BAUD = 1200
 
 READY = 0x43

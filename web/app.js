@@ -12,7 +12,7 @@
 // elrs.js, which is loaded first and uses send() and $() from here.
 
 // The project's version from the file VERSION; test.ps1 checks that both agree.
-const WEB_VERSION = "0.13.0";
+const WEB_VERSION = "0.14.0";
 const USB_VENDOR_ID = 0x2fe3;
 const CHANNEL_COUNT = 16;
 const BATTERY_THRESHOLDS = [3232, 3298, 3391, 3552];   // stock firmware: 1, 2, 3, 4 LEDs

@@ -9,6 +9,7 @@
 #include "core/led.h"
 #include "core/mode.h"
 #include "core/settings.h"
+#include "core/xbox.h"
 
 static int failures;
 
@@ -636,6 +637,25 @@ static void test_joystick()
     CHECK(axis(5) == 23);
 }
 
+static void test_xbox()
+{
+    /* Roll right, pitch down, throttle up, yaw centre; ch5 low, ch6 high; ch9, ch12 and ch16 on. */
+    uint16_t channels[16] = { 2012, 988, 2012, 1500, 988, 2012, 1500, 1500,
+                              2012, 988, 1500, 2012, 988, 988, 988, 2012 };
+    uint8_t report[xbox::REPORT_SIZE];
+    auto at = [&](int i) { return (int16_t)(report[i] | (report[i + 1] << 8)); };
+
+    xbox::fill_report(channels, report);
+    CHECK(report[0] == 0x00 && report[1] == 20);
+    CHECK(at(2) == (int16_t)(xbox::BUTTON_A | xbox::BUTTON_Y | xbox::BUTTON_START));
+    CHECK(report[4] == 0 && report[5] == 255);
+    CHECK(at(6) == 0);       /* left X: yaw */
+    CHECK(at(8) == 32767);   /* left Y: throttle up */
+    CHECK(at(10) == 32767);  /* right X: roll right */
+    CHECK(at(12) == -32767); /* right Y: pitch down */
+    CHECK(report[19] == 0);
+}
+
 int main()
 {
     test_crc();
@@ -656,6 +676,7 @@ int main()
     test_mapping();
     test_trim();
     test_joystick();
+    test_xbox();
 
     if (failures != 0) {
         std::printf("%d check(s) failed\n", failures);

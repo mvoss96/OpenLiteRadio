@@ -41,7 +41,8 @@ enum class ModuleTask : uint8_t {
 struct ModeInputs {
     bool module_on;     // the ELRS module is switched on
     ModuleTask task;    // command running on the module
-    bool usb_host;      // a PC has set up the USB joystick
+    bool usb_host;      // a PC has set up the USB controller
+    bool usb_xbox;      // the USB controller is the Xbox controller, not the joystick
     bool held;          // calibration or storing holds the output back
     bool relock;        // a setting changed since the last update (an event, true once)
     uint16_t throttle;  // value of SOURCE_THROTTLE in microseconds

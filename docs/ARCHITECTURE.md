@@ -25,8 +25,9 @@ throttle lock, test inputs), `module_link.cpp` (frames from the module, link
 statistics, binding), `host.cpp` (line protocol and state lines),
 `storage.cpp` (settings in flash), `calibration.cpp` (stick
 calibration run), `indicators.cpp` (buzzer and status LED), `usb_device.c`
-(USB serial port and joystick) and `main.cpp` (start, power button, BIND and
-SETUP, the main loop). Only `output.cpp` touches the state shared between the
+(the USB device in its forms: serial port, joystick, Xbox controller),
+`usb_xinput.c` (the Xbox controller's interface) and `main.cpp` (start,
+power button, BIND and SETUP, the USB device's form, the main loop). Only `output.cpp` touches the state shared between the
 two threads; the others go through its functions.
 
 The core layer contains everything where an error is dangerous or hard to see
@@ -36,7 +37,8 @@ checked there with fixed inputs.
 ## Threads
 
 - Control thread, high priority, at the module's frame rate: read sticks and
-  switches, compute channels, send the CRSF frame and the joystick report.
+  switches, compute channels, send the CRSF frame or the USB controller's
+  report.
 - Main thread, low priority, 50 Hz: buttons and actions, LED and buzzer
   patterns, battery, power, CRSF parameters, host protocol.
 - Bytes from the module arrive by interrupt in a ring buffer and are parsed in
@@ -66,7 +68,8 @@ Each further thread would cost about 1 KiB of stack.
   control can therefore sit on several channels, and a channel can follow
   nothing.
 - The USB serial port is always available for configuration and update when a
-  cable is plugged in, also while the radio is switched on.
+  cable is plugged in, also while the radio is switched on. It goes away
+  briefly whenever the USB device changes its form (see "USB device").
 - The status LED is driven by TIM2 with DMA, not by timed loops with
   interrupts masked, so that no CRSF byte is lost while a colour is sent.
 
@@ -87,7 +90,7 @@ flowchart LR
   CH --> M{Mode}
   PC[PC program]:::planned -.-> M
   M --> J[USB: joystick]
-  M -.-> X[USB: Xbox controller]:::planned
+  M --> X[USB: Xbox controller]
   M --> E[ELRS module: radio link to the model]
   M --> BT[ELRS module: Bluetooth joystick]
   CH --> S[State line to the configurator]
@@ -153,20 +156,20 @@ stateDiagram-v2
   Xbox --> On: power button 1 s
   On --> Off: power button 2 s, battery empty, auto power-off without USB
   classDef planned stroke-dasharray: 5 5
-  class Xbox planned
   class HostReady planned
   class Host planned
 ```
 
 Switching off at a PC leads to the stored USB mode instead of Off. "At a PC"
-needs both the joystick interface set up by the PC and the USB supply: the
+needs both the controller interface set up by the PC and the USB supply: the
 USB stack does not report a pulled cable, so after unplugging the radio
 stayed a USB joystick and the LED flashed white when switched off on
-battery. In the Bluetooth mode the USB joystick still exists and reports
-centred values; it is to go away with the re-enumeration planned for the
-Xbox mode. Both joysticks report a high channel as a high axis value, which
+battery. While the radio is on, the USB device is the serial port only, so
+no USB controller exists in the ELRS, Bluetooth and WiFi modes. The joystick
+and the Bluetooth joystick report a high channel as a high axis value, which
 Windows draws downwards (pitch up moves the cross down); simulators set the
-direction per axis. Battery
+direction per axis. The Xbox controller reports a high channel as a positive
+value, which XInput counts as up and right. Battery
 empty and auto power-off are planned. WiFi and Bluetooth end only by
 switching the radio off, since the module leaves them only by a restart.
 
@@ -174,19 +177,17 @@ switching the radio off, since the module leaves them only by a restart.
 |------|----------------------|-------------|----------------|
 | Off | none, module off | – | – |
 | USB joystick / Xbox | none, module off | controls | reports |
-| ELRS locked | one channel frame per frame period | fixed safe values | centred |
-| ELRS active | one channel frame per frame period | controls | centred |
-| ELRS host ready (planned) | as locked | – | centred |
-| ELRS host (planned) | one channel frame per frame period | PC program on the serial port | centred |
-| ELRS binding | safe frames | fixed safe values | centred |
-| Bluetooth joystick | one channel frame per frame period | controls, untrimmed | centred |
-| WiFi | pings | – | centred |
+| ELRS locked | one channel frame per frame period | fixed safe values | – |
+| ELRS active | one channel frame per frame period | controls | – |
+| ELRS host ready (planned) | as locked | – | – |
+| ELRS host (planned) | one channel frame per frame period | PC program on the serial port | – |
+| ELRS binding | safe frames | fixed safe values | – |
+| Bluetooth joystick | one channel frame per frame period | controls, untrimmed | – |
+| WiFi | pings | – | – |
 
-Built: Off, USB joystick, ELRS locked, ELRS active, binding, Bluetooth and WiFi in `src/core/mode.cpp`
-and `src/output.cpp`. Outside the joystick mode the
-joystick reports all channels centred (1500 µs, buttons released), so that a
-simulator still open on the PC does not keep the last positions. The serial
-port stays available in every mode. Safe values are the channels computed
+Built: Off, USB joystick, USB Xbox controller, ELRS locked, ELRS active,
+binding, Bluetooth and WiFi in `src/core/mode.cpp` and `src/output.cpp`. The
+serial port stays available in every mode. Safe values are the channels computed
 by `core::safe_controls()`: throttle at its lower end, the other sticks at
 their centres, every switch in its first position, with each channel's
 mapping, weight and reverse; channels without a source stay centred.
@@ -236,34 +237,53 @@ mapping, weight and reverse; channels without a source stay centred.
 ### USB device
 
 The radio presents one device description per enumeration, so changing the
-mode means disconnecting from USB and enumerating again.
+form means disconnecting from USB and enumerating again. Each form has its
+own product ID, because Windows caches a device's description per vendor and
+product ID.
 
 ```mermaid
 stateDiagram-v2
   direction LR
+  state "Serial port only (2FE3:0004)" as Ser
   state "Serial port + joystick (2FE3:0005)" as Joy
-  state "Serial port + Xbox controller" as Xbox
+  state "Xbox controller + serial port (2FE3:0007)" as Xbox
   state "Vendor updater (0483:5740)" as Upd
-  [*] --> Joy: stored mode joystick
-  [*] --> Xbox: stored mode Xbox
+  [*] --> Joy: radio off, stored mode joystick
+  [*] --> Xbox: radio off, stored mode Xbox
   Joy --> Xbox: radio off, both trim centres 2 s, or configurator
   Xbox --> Joy: radio off, both trim centres 2 s, or configurator
+  Joy --> Ser: radio switched on
+  Xbox --> Ser: radio switched on
+  Ser --> Joy: radio switched off, stored mode joystick
+  Ser --> Xbox: radio switched off, stored mode Xbox
   Joy --> Upd: port opened at 1200 baud
+  Xbox --> Upd: port opened at 1200 baud
+  Ser --> Upd: port opened at 1200 baud
   Upd --> [*]: image written, restart
-  classDef planned stroke-dasharray: 5 5
-  class Xbox planned
 ```
 
-- The mode is stored and applies at every further connection. BIND + SETUP
-  stays reserved for PC control.
-- Xbox mode was tested with a test build on Windows 11: with our own vendor
-  ID and the compatible ID `XUSB10` in an MS OS 2.0 descriptor, Windows loads
-  its "Xbox 360 Controller for Windows" driver, alone and next to the serial
-  port. The Microsoft controller's IDs are not needed, and the serial port
-  stays available in Xbox mode.
-- Each Xbox axis, trigger and button follows a channel or none, one setting
-  per element. Default: left stick channels 4 and 3, right stick 1 and 2,
-  triggers 5 and 6, buttons A, B, X, Y, LB, RB, Back, Start channels 9 to 16.
+- The mode is the setting `usb.mode` (0 joystick, 1 Xbox controller). It is
+  stored and applies at every further connection; `set usb.mode` stores it at
+  once, since the port goes away with the change. BIND + SETUP stays reserved
+  for PC control.
+- `main.cpp` chooses the form in the main loop; `usb_device_select()` shuts
+  the USB stack down, signals a disconnect and builds the device anew. The
+  board ties D+ (PA12) to its pull-up and the STM32F103 cannot switch it off,
+  so stopping the USB peripheral alone leaves the device on the bus: the host
+  noticed the change from joystick to Xbox, but not the one back.
+  `board::signal_usb_disconnect()` therefore drives D+ low for 20 ms, as the
+  vendor bootloader does before it jumps. If a form cannot be built, the
+  device falls back to the serial port only, prints `error usb FORM ERR` and
+  gives a low tone.
+- The Xbox form: our own vendor ID and the compatible ID `XUSB10` in an MS OS
+  2.0 descriptor make Windows 11 load its "Xbox 360 Controller for Windows"
+  driver for interface 0; the serial port follows as interfaces 1 and 2. The
+  Microsoft controller's IDs are not needed. LED and rumble commands from the
+  host are read and dropped.
+- Xbox assignment, fixed in `src/core/xbox.cpp`: left stick channels 4 and 3,
+  right stick 1 and 2, triggers 5 and 6 (988..2012 as 0..255), buttons A, B,
+  X, Y, LB, RB, Back, Start channels 9 to 16 (pressed above 1500). Channels 7
+  and 8 have no element. Open: one setting per element, a channel or none.
 
 ### ELRS module
 
@@ -366,7 +386,7 @@ this brightness.
 | Off, on a charger or without USB | off |
 
 Built in `src/core/led.cpp` (with tests) for every row; the rows of modes
-that have no transitions yet (error, PC, Xbox)
+that have no transitions yet (error, PC)
 show once those modes exist. The colours are driven at about a fifth of the
 LED's range; white is 0x181818. Orange (0x300500) for the joystick was
 too close to red on the radio. "Receiver connected" means link statistics with a link quality above
@@ -384,8 +404,8 @@ what the vendor bootloader shows on these LEDs.
 | 1 | board layer, power on/off, LED, buzzer, host protocol with live view | built, see below |
 | 2 | flying: factory calibration, channels, CRSF at the module's rate, throttle lock, binding | in progress, see below |
 | 3 | settings storage, trim, calibration on the radio | storage and calibration built, trim open |
-| 4 | USB joystick, then Xbox mode | joystick built (DirectInput, beside the serial port), Xbox open |
-| 5 | configuration protocol for the web tool | settings commands and the configurator's views built; ELRS parameters, buttons, USB modes, update and backup open |
+| 4 | USB joystick, then Xbox mode | both built (DirectInput joystick and Xbox controller, each beside the serial port); per-element Xbox assignment open |
+| 5 | configuration protocol for the web tool | settings commands, the configurator's views and the USB mode built; ELRS parameters, buttons, update and backup open |
 | 6 | Bluetooth, WiFi, battery display, remaining features | open |
 
 Stage 1 as built: the power button switches the radio on after 1 s and off
@@ -464,7 +484,12 @@ the port at 1200 baud restarts the radio into the vendor USB updater.
 
 From the radio:
 
-- `hello OpenLiteRadio <version> proto=1`, at start and on request.
+- `hello OpenLiteRadio <version> proto=1`, at start and on request. After
+  a fatal error the radio restarts instead of halting; the next hello line is
+  followed once by `fault reason=N pc=0x... lr=0x...` (Zephyr's reason code
+  and the faulting addresses).
+- `error usb FORM ERR` when the USB device could not be built in a form
+  (`FORM` 1 joystick, 2 Xbox) and fell back to the serial port only.
 - `state key=value ...`, 25 times per second while streaming. Keys: `sticks`
   (four raw 12-bit values: left vertical, left horizontal, right vertical,
   right horizontal), `sa`, `sd` (0 or 1), `sb`, `sc` (0, 1, 2), `se`, `sf`,
@@ -481,7 +506,7 @@ From the radio:
   the last timing frame), `bindpar` (number of the module's bind parameter, 0
   until it was searched), `tx` and `txbusy` (frames the control thread
   handed to the module's UART, and those refused because the previous one
-  was still being sent), `mode` (the mode, e.g. `usb_joystick`,
+  was still being sent), `mode` (the mode, e.g. `usb_joystick`, `usb_xbox`,
   `elrs_locked`, `elrs_active`, see "Operating modes"), `led` (the colour as
   RRGGBB now sent to the status LED, blinking included; the configurator
   draws it brightened), `calib` (1 during a calibration run).
@@ -507,7 +532,7 @@ To the radio:
 | `crsf HEX` | send one complete CRSF frame to the module, given in hex with its CRC, at most 26 bytes; answers `ok crsf` or `error crsf`. The configurator reads and writes the module's parameters with it and `frames 1` |
 | `list` | report all settings |
 | `get KEY` | report one setting |
-| `set KEY VALUE` | change a setting; answers `ok KEY VALUE`. It applies at once, locks the output and is lost at power-off unless stored |
+| `set KEY VALUE` | change a setting; answers `ok KEY VALUE`. It applies at once, locks the output and is lost at power-off unless stored; `usb.mode` is stored at once, since the USB device then changes its form and the port goes away |
 | `save` | store all settings |
 | `revert` | return to the stored settings |
 | `defaults` | set all settings except the stick calibration (`cal.N.*`) to their defaults without storing them |
