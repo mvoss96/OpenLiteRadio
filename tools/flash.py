@@ -36,6 +36,8 @@ UPDATER_IDS = ((0x0483, 0x5740),)
 # with the joystick, with the Xbox controller (src/usb_device.c).
 CONSOLE_IDS = ((0x2FE3, 0x0004), (0x2FE3, 0x0005), (0x2FE3, 0x0007))
 UPDATE_REQUEST_BAUD = 1200
+# Serial number of the virtual port serbridge (a serial-port proxy) offers with the radio's IDs.
+SERBRIDGE_SERIAL = "SERBRIDGE0"
 
 READY = 0x43
 ACK = 0x06
@@ -69,9 +71,14 @@ def build_block(number, payload):
     return bytes([0x02, number & 0xFF, ~number & 0xFF]) + data + crc16_xmodem(data).to_bytes(2, "big")
 
 
+def device_ports():
+    """Return the serial ports of real devices, without serbridge's virtual port with the radio's IDs."""
+    return [port for port in list_ports.comports() if port.serial_number != SERBRIDGE_SERIAL]
+
+
 def find_port(usb_ids):
     """Return the serial port name of a device with one of these (VID, PID) pairs, or None."""
-    for port in list_ports.comports():
+    for port in device_ports():
         if (port.vid, port.pid) in usb_ids:
             return port.device
     return None
@@ -79,7 +86,7 @@ def find_port(usb_ids):
 
 def ports_with(usb_ids):
     """Return the names of all serial ports with one of these (VID, PID) pairs."""
-    return {port.device for port in list_ports.comports() if (port.vid, port.pid) in usb_ids}
+    return {port.device for port in device_ports() if (port.vid, port.pid) in usb_ids}
 
 
 def wait_port(usb_ids, timeout, ignore=()):
