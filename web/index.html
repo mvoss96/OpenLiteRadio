@@ -416,9 +416,6 @@
               <button class="icon" data-play="sound.lost" aria-label="Abspielen"><svg class="i" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button></div>
             <div class="tile"><span>Verbindung zurück</span><select data-key="sound.back"></select>
               <button class="icon" data-play="sound.back" aria-label="Abspielen"><svg class="i" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button></div>
-            <label class="tile"><span>Warnung wiederholen</span>
-              <select data-key="sound.repeat"><option value="0">Einmal</option><option value="3">Alle 3 s</option><option value="5">Alle 5 s</option><option value="10">Alle 10 s</option><option value="30">Alle 30 s</option></select>
-              <span class="icon" style="visibility: hidden"></span></label>
           </div>
         </section>
       </div>
@@ -836,7 +833,7 @@ setInterval(() => { if (elrs.open && elrs.moduleOn && elrs.queued === 0) elrsQue
 // an older page with newer code.
 
 // The project's version from the file VERSION; test.ps1 checks that both agree.
-const WEB_VERSION = "0.18.0";
+const WEB_VERSION = "0.18.1";
 // Protocol number of the hello line this page speaks; test.ps1 checks it against src/host.cpp.
 const PROTOCOL = 2;
 const USB_VENDOR_ID = 0x2fe3;
@@ -1575,7 +1572,8 @@ async function connect(known) {
   let port;
   try {
     port = known || await navigator.serial.requestPort({ filters: [{ usbVendorId: USB_VENDOR_ID }] });
-    await port.open({ baudRate: 115200 });
+    // A larger buffer than the default 255 bytes: one state line alone is longer.
+    await port.open({ baudRate: 115200, bufferSize: 65536 });
   } finally {
     opening = false;
   }
@@ -1592,8 +1590,8 @@ async function connect(known) {
 
   const decoder = new TextDecoder();
   let pending = "";
-  try {
-    while (true) {
+  while (true) {
+    try {
       // Disconnect cancels the reader, which ends this loop with done set.
       const { value, done } = await reader.read();
       if (done) break;
@@ -1601,11 +1599,17 @@ async function connect(known) {
       const lines = pending.split("\n");
       pending = lines.pop();
       lines.forEach(handleLine);
+    } catch (error) {
+      console.warn("Lesen vom seriellen Port:", error);
+      // After an error such as a buffer overrun the port stays open with a new readable stream.
+      if (!port.readable) break;
+      reader.releaseLock();
+      reader = port.readable.getReader();
+      pending = "";
     }
-  } catch {
-    // The port went away, e.g. because the radio changed its USB form; resume() below reconnects
-    // and reports only if that fails.
   }
+  // Without a readable stream the port went away, e.g. because the radio changed its USB form;
+  // resume() below reconnects and reports only if that fails.
   // Closing the port frees it for other programs such as tools/flash.py.
   reader.releaseLock();
   writer.releaseLock();

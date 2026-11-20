@@ -203,17 +203,16 @@ static void trim_tick(uint8_t left, uint8_t right)
 
 /*
  * Link to the receiver while the radio sends to one: the tune of sound.lost
- * when no link statistics came for 1 s, repeated every sound.repeat seconds,
- * and of sound.back when the receiver answers again.
+ * once when no link statistics came for 1 s, and of sound.back when the
+ * receiver answers again.
  */
-static void link_tick(core::Mode mode, int64_t now)
+static void link_tick(core::Mode mode)
 {
     static link_alarm::State state;
     bool active = (mode == core::Mode::ELRS_LOCKED || mode == core::Mode::ELRS_ACTIVE ||
                    mode == core::Mode::ELRS_HOST_READY || mode == core::Mode::ELRS_HOST) &&
                   module_link::starting_task() == core::ModuleTask::NONE;
-    uint32_t repeat_ms = (uint32_t)settings::values[settings::SOUND_LINK_REPEAT] * 1000u;
-    link_alarm::Event event = link_alarm::tick(state, active, module_link::receiver_connected(), now, repeat_ms);
+    link_alarm::Event event = link_alarm::tick(state, active, module_link::receiver_connected());
 
     if (event == link_alarm::Event::LOST) {
         indicators::play_event(settings::SOUND_LINK_LOST);
@@ -327,7 +326,7 @@ int main(void)
             indicators::play_event(settings::SOUND_UNLOCK);
         }
         was_locked = snapshot.locked;
-        link_tick(snapshot.mode, now);
+        link_tick(snapshot.mode);
         /* While WiFi or Bluetooth waits for the module, the LED shows it already; the output stays locked. */
         core::Mode shown = snapshot.mode;
 

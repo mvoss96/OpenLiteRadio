@@ -19,21 +19,20 @@ enum class Level : uint8_t {
 /* What to play now. */
 enum class Event : uint8_t {
     NONE,  // nothing
-    LOST,  // the link was lost, or is still lost after the repeat time
+    LOST,  // the link was lost
     BACK,  // the link came back after it was lost
 };
 
 struct State {
     Level level = Level::NONE;
-    int64_t warned_ms = 0; /* uptime of the last LOST event */
 };
 
 /*
  * Call every loop. active: the radio sends to a receiver (module on, not
  * binding, WiFi or Bluetooth); while not active the state is reset and
- * nothing is played. connected comes from the link statistics. repeat_ms 0
- * warns once per loss; otherwise a lost link warns again every repeat_ms.
+ * nothing is played. connected comes from the link statistics. Each change
+ * gives one event, as EdgeTX does.
  */
-Event tick(State &state, bool active, bool connected, int64_t now_ms, uint32_t repeat_ms);
+Event tick(State &state, bool active, bool connected);
 
 } // namespace link_alarm

@@ -76,7 +76,7 @@ analysis kept outside this repository.
 | M | Binding | manual: BIND long, up to 8 s | BIND 1 s or `bind`, hw; not yet with a receiver in bind mode |
 | S | Bluetooth gamepad through the module | manual: BIND held at power-on | a trim centre held at power-on or `ble`, Bluetooth joystick seen on the PC, hw |
 | S | WiFi mode of the module | manual names the LED state only | the other trim centre held at power-on or `wifi`, the module's web page reached, hw |
-| S | Disconnection warning | manual: tone | built in 0.18.0: tones for a lost link and its return, repeat time settable; link quality on the battery LEDs with a short SETUP press; PC tests only |
+| S | Disconnection warning | manual: tone | built in 0.18.0: one tone when the link is lost and one when it returns, as in EdgeTX; link quality on the battery LEDs with a short SETUP press; PC tests only |
 | C | Telemetry warnings (link quality, receiver voltage) | no | missing |
 
 ## Safety and power

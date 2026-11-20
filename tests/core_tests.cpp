@@ -698,7 +698,6 @@ static void test_options()
     CHECK(std::strcmp(settings::info(settings::SOUND_POWER_ON).options, "tune") == 0);
     CHECK(std::strcmp(settings::info(settings::SOUND_ERROR).options, "tune") == 0);
     CHECK(settings::info(settings::TRIM_LED).options == nullptr);
-    CHECK(settings::info(settings::SOUND_LINK_REPEAT).options == nullptr);
     CHECK(settings::info(settings::find("ch.1.source")).options == nullptr);
     CHECK(settings::option(settings::option_count()).list == nullptr);
 
@@ -819,23 +818,19 @@ static void test_link_alarm()
     link_alarm::State state;
 
     /* No receiver yet: nothing, also while no link statistics come. */
-    CHECK(link_alarm::tick(state, true, false, 0, 3000) == Event::NONE);
-    CHECK(link_alarm::tick(state, true, true, 100, 3000) == Event::NONE);
+    CHECK(link_alarm::tick(state, true, false) == Event::NONE);
+    CHECK(link_alarm::tick(state, true, true) == Event::NONE);
 
-    /* Lost, repeated every 3 s, then back once. */
-    CHECK(link_alarm::tick(state, true, false, 4000, 3000) == Event::LOST);
-    CHECK(link_alarm::tick(state, true, false, 6999, 3000) == Event::NONE);
-    CHECK(link_alarm::tick(state, true, false, 7000, 3000) == Event::LOST);
-    CHECK(link_alarm::tick(state, true, true, 7100, 3000) == Event::BACK);
-    CHECK(link_alarm::tick(state, true, true, 7200, 3000) == Event::NONE);
-
-    /* Repeat 0: once per loss. */
-    CHECK(link_alarm::tick(state, true, false, 12000, 0) == Event::LOST);
-    CHECK(link_alarm::tick(state, true, false, 60000, 0) == Event::NONE);
+    /* Lost once, however long it stays lost, then back once. */
+    CHECK(link_alarm::tick(state, true, false) == Event::LOST);
+    CHECK(link_alarm::tick(state, true, false) == Event::NONE);
+    CHECK(link_alarm::tick(state, true, true) == Event::BACK);
+    CHECK(link_alarm::tick(state, true, true) == Event::NONE);
+    CHECK(link_alarm::tick(state, true, false) == Event::LOST);
 
     /* Not active: reset, so a receiver that is not there after binding or WiFi does not warn. */
-    CHECK(link_alarm::tick(state, false, false, 61000, 3000) == Event::NONE);
-    CHECK(link_alarm::tick(state, true, false, 62000, 3000) == Event::NONE);
+    CHECK(link_alarm::tick(state, false, false) == Event::NONE);
+    CHECK(link_alarm::tick(state, true, false) == Event::NONE);
 
     /* Link quality on the battery LEDs. */
     CHECK(battery::link_quality(false, 100) == 0x00);
@@ -850,9 +845,8 @@ static void test_link_alarm()
     /* Keys and defaults of the settings. */
     CHECK(settings::find("sound.lost") == settings::SOUND_LINK_LOST);
     CHECK(settings::find("sound.back") == settings::SOUND_LINK_BACK);
-    CHECK(settings::find("sound.repeat") == settings::SOUND_LINK_REPEAT);
     CHECK(settings::find("sound.signal") == -1);
-    CHECK(settings::info(settings::SOUND_LINK_REPEAT).default_value == 3);
+    CHECK(settings::find("sound.repeat") == -1);
 }
 
 int main()

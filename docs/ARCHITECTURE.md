@@ -477,8 +477,7 @@ being started), and only after a receiver was connected once since then:
 - the receiver answering again after that: the tune in `sound.back`
   (default `triad`), once.
 
-While the link stays lost the warning repeats every `sound.repeat` seconds
-(0 to 30, default 3; 0 warns once per loss). There is no warning for a low
+Each tune sounds once per change, as in EdgeTX. There is no warning for a low
 link quality; the battery LEDs show it on request (see "Battery"). Binding, WiFi,
 Bluetooth and switching off reset it, so a receiver that is not there
 afterwards does not warn until it has been connected again.
