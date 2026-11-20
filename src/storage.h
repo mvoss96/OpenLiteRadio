@@ -13,7 +13,7 @@ void load_settings();
 /* Store all settings; only values that differ from their default take up space. */
 bool save_settings();
 
-/* Store only the trim (trim.*), leaving other unsaved changes unsaved. */
+/* Store only the trim of the four axes (trim.thr to trim.ail), leaving other unsaved changes unsaved. */
 bool save_trim();
 
 /* Store one setting, leaving other unsaved changes unsaved. */

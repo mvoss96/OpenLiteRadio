@@ -2,7 +2,10 @@
  * Host protocol, one message per line.
  * From the radio:
  *   hello OpenLiteRadio <version> proto=1
- *   setting KEY TYPE MIN MAX DEFAULT VALUE   one per setting after "list", then "end"
+ *   setting KEY TYPE MIN MAX DEFAULT VALUE   one per setting after "list"; TYPE bool, int or
+ *                                            the name of the option list naming the values
+ *   option LIST VALUE KEY                    one per named value after the settings, then "end";
+ *                                            KEY is one language-neutral word
  *   value KEY VALUE                          answer to "get"
  *   ok ... / error REASON                    answer to the other settings commands
  *   state sticks=a,b,c,d sa= sb= sc= sd= se= sf= bind= setup= power= tl= tr=
@@ -12,13 +15,16 @@
  *   hello             ask for the hello line
  *   stream 0|1        stop or start the state lines
  *   led R G B         status LED colour, 0..255 each; "led auto" returns control
- *   beep HZ MS        tone
+ *   beep HZ MS        tone at the volume in sound.volume
+ *   play KEY          play what a setting sounds like: the tune of sound.on .. sound.error,
+ *                     a few trim steps for sound.trim, one beep for sound.volume
  *   batleds MASK      battery LEDs, bit 0 is the leftmost
  *   module 0|1        ELRS module off or on
  *   bind              start binding, as a long press of BIND does
  *   wifi              start the module's WiFi, as the right trim centre at switch-on does
  *   ble               start the module's Bluetooth joystick, as the left trim centre at
- *                     switch-on does; WiFi and Bluetooth end when the module is switched off *   frames 0|1        print every frame received from the module as "rx" plus hex bytes
+ *                     switch-on does; WiFi and Bluetooth end when the module is switched off
+ *   frames 0|1        print every frame received from the module as "rx" plus hex bytes
  *   crsf HEX          send one complete CRSF frame (hex, CRC included) to the module
  *   list              report all settings
  *   get KEY           report one setting
@@ -65,8 +71,8 @@ namespace {
 const struct device *const console = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 
 bool stream = true;
-/* Next setting the "list" command still has to report; COUNT when it is done. */
-int list_next = settings::COUNT;
+/* Next line the "list" command still has to report, settings first, then options; -1 when done. */
+int list_next = -1;
 
 /* Keys of "inject", in the order of the output::InjectField bits. */
 const char *const INJECT_NAMES[] = { "sticks", "sa", "sb", "sc", "sd", "se", "sf" };
@@ -77,17 +83,27 @@ void print_setting(int index)
     settings::Info info = settings::info(index);
 
     settings::key(index, key);
-    printk("setting %s %s %d %d %d %d\n", key, (info.min == 0 && info.max == 1) ? "bool" : "int",
+    printk("setting %s %s %d %d %d %d\n", key,
+           info.options != nullptr ? info.options : (info.min == 0 && info.max == 1) ? "bool" : "int",
            info.min, info.max, info.default_value, settings::values[index]);
 }
 
-/* Report a few settings per loop so that the USB buffer keeps up. */
+/* Report a few lines per loop so that the USB buffer keeps up: the settings, then the options. */
 void list_tick()
 {
-    for (int i = 0; i < 4 && list_next < settings::COUNT; i++) {
-        print_setting(list_next++);
-        if (list_next == settings::COUNT) {
+    int lines = settings::COUNT + settings::option_count();
+
+    for (int i = 0; i < 4 && list_next >= 0; i++) {
+        if (list_next < settings::COUNT) {
+            print_setting(list_next);
+        } else {
+            settings::Option option = settings::option(list_next - settings::COUNT);
+
+            printk("option %s %d %s\n", option.list, option.value, option.key);
+        }
+        if (++list_next == lines) {
             printk("end\n");
+            list_next = -1;
         }
     }
 }
@@ -180,6 +196,10 @@ void handle_command(char *line)
                                       (uint8_t)number(0), (uint8_t)number(1), (uint8_t)number(2));
     } else if (strcmp(command, "beep") == 0) {
         indicators::beep((uint32_t)number(0), (int)number(1));
+    } else if (strcmp(command, "play") == 0) {
+        int index = (arguments[0] != nullptr) ? settings::find(arguments[0]) : -1;
+
+        printk(indicators::play_setting(index) ? "ok play\n" : "error unknown key\n");
     } else if (strcmp(command, "batleds") == 0) {
         board::set_battery_leds((uint8_t)number(0));
     } else if (strcmp(command, "module") == 0) {

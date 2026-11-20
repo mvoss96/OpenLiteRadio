@@ -18,6 +18,7 @@ target_sources(app PRIVATE
   src/core/led.cpp
   src/core/mode.cpp
   src/core/settings.cpp
+  src/core/sound.cpp
   src/core/xbox.cpp
   src/usb_device.c
   src/usb_xinput.c

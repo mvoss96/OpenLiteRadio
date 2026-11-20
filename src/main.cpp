@@ -15,7 +15,6 @@
  *   indicators.cpp   buzzer and status LED
  */
 
-#include <stdlib.h>
 
 #include <zephyr/device.h>
 #include <zephyr/drivers/uart.h>
@@ -45,12 +44,15 @@ constexpr int POWER_OFF_LOOPS = 100;   /* power button held for 2 s */
 constexpr int BIND_HOLD_LOOPS = 50;    /* BIND held for 1 s */
 constexpr int SETUP_HOLD_LOOPS = 100;  /* SETUP held for 2 s */
 constexpr int USB_SWITCH_LOOPS = 100;  /* both trim centres held for 2 s */
+constexpr int TRIM_RESET_LOOPS = 50;   /* a trim centre held for 1 s */
 
 static const struct device *const console = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 
 static bool radio_on;
 /* The trim was changed with the trim buttons and is not stored yet. */
 static bool trim_unsaved;
+/* Switched off: the power latch is released once the power-off tune has ended. */
+static bool latch_release_pending;
 
 static void set_radio_on(bool on)
 {
@@ -64,8 +66,11 @@ static void set_radio_on(bool on)
     if (!on && trim_unsaved) {
         trim_unsaved = !storage::save_trim();
     }
-    board::set_power_latch(on);
-    indicators::beep(on ? 2700 : 1800, 150);
+    if (on) {
+        board::set_power_latch(true);
+    }
+    latch_release_pending = !on;
+    indicators::play_event(on ? settings::SOUND_POWER_ON : settings::SOUND_POWER_OFF);
 }
 
 /*
@@ -86,7 +91,7 @@ static void usb_tick(const board::Inputs &inputs)
         if (++centres_held_loops == USB_SWITCH_LOOPS) {
             settings::set(settings::USB_MODE, settings::values[settings::USB_MODE] == 0 ? 1 : 0);
             storage::save_setting(settings::USB_MODE);
-            indicators::beep(2700, 150);
+            indicators::play_event(settings::SOUND_ACCEPTED);
         }
     } else {
         centres_held_loops = 0;
@@ -104,7 +109,7 @@ static void usb_tick(const board::Inputs &inputs)
             /* The device fell back to the serial port only; tell the host and the user. */
             k_msleep(1500);
             printk("error usb %d %d\n", (int)wanted, err);
-            indicators::beep(600, 600);
+            indicators::play_event(settings::SOUND_ERROR);
         }
     }
 }
@@ -112,14 +117,42 @@ static void usb_tick(const board::Inputs &inputs)
 /*
  * Trim buttons, one step per press while the radio is on: left button up and
  * down trim the throttle, left and right the yaw; the right button pitch and
- * roll. A high tone for a step away from the centre, a low one towards it,
- * a long one at the centre and a long low one at ±25. The centre presses do
- * nothing here.
+ * roll. Each step, also a press beyond the end, gives the tone of sound.trim
+ * and the LED flash of trim.led. A centre held for 1 s resets both axes of
+ * its button; it counts only once released after switching on, since a
+ * centre held at switch-on starts Bluetooth or WiFi.
  */
 static void trim_tick(uint8_t left, uint8_t right)
 {
     static uint8_t previous_left;
     static uint8_t previous_right;
+    static bool centre_armed[2];   /* the centre was released while the radio is on */
+    static int centre_held_loops[2];
+    const uint8_t buttons[2] = { left, right };
+    /* Axes of each button: left throttle and yaw, right pitch and roll. */
+    const core::Axis button_axes[2][2] = {
+        { core::AXIS_LEFT_VERTICAL, core::AXIS_LEFT_HORIZONTAL },
+        { core::AXIS_RIGHT_VERTICAL, core::AXIS_RIGHT_HORIZONTAL },
+    };
+
+    for (int side = 0; side < 2; side++) {
+        bool held = radio_on && (buttons[side] & board::TRIM_CENTRE);
+
+        if (!held) {
+            centre_armed[side] = radio_on;
+            centre_held_loops[side] = 0;
+        } else if (centre_armed[side] && ++centre_held_loops[side] == TRIM_RESET_LOOPS) {
+            centre_armed[side] = false;
+            for (core::Axis axis : button_axes[side]) {
+                int index = settings::TRIM_FIRST + (int)axis;
+
+                if (settings::values[index] != 0 && settings::set(index, 0)) {
+                    trim_unsaved = true;
+                }
+            }
+            indicators::trim_step(1, 0, settings::info(settings::TRIM_FIRST).max);
+        }
+    }
     uint8_t pressed_left = left & ~previous_left;
     uint8_t pressed_right = right & ~previous_right;
     struct {
@@ -152,18 +185,7 @@ static void trim_tick(uint8_t left, uint8_t right)
         if (settings::set(index, before + step)) {
             trim_unsaved = true;
         }
-        int value = settings::values[index];
-
-        /* The stock firmware's tones, plus one for the end, which it does not have. */
-        if (value == 0) {
-            indicators::beep(989, 300); /* B5 */
-        } else if (value == settings::info(index).min || value == settings::info(index).max) {
-            indicators::beep(659, 300); /* E5, also for every press beyond the end */
-        } else if (abs(value) > abs(before)) {
-            indicators::beep(1176, 100); /* D6, away from the centre */
-        } else {
-            indicators::beep(784, 100); /* G5, towards the centre */
-        }
+        indicators::trim_step(before, settings::values[index], settings::info(index).max);
     }
 }
 
@@ -215,12 +237,11 @@ int main(void)
             power_handled = false;
         }
 
-        /* One tone when the throttle lock is released. */
+        /* One tune when the throttle lock is released. */
         bool module_is_on = output::module_is_on();
 
-        if (module_is_on && was_locked && !snapshot.locked &&
-            settings::values[settings::UNLOCK_BEEP] != 0) {
-            indicators::beep(2700, 100);
+        if (module_is_on && was_locked && !snapshot.locked) {
+            indicators::play_event(settings::SOUND_UNLOCK);
         }
         was_locked = snapshot.locked;
         /* While WiFi or Bluetooth waits for the module, the LED shows it already; the output stays locked. */
@@ -232,6 +253,11 @@ int main(void)
             shown = core::Mode::BLUETOOTH;
         }
         indicators::tick({ shown, calibration::running(), module_link::receiver_connected() });
+        /* On battery the radio loses power here unless the power button is still held. */
+        if (latch_release_pending && !indicators::playing()) {
+            latch_release_pending = false;
+            board::set_power_latch(false);
+        }
 
         /* BIND held for 1 s starts binding, a short press ends it. */
         if (inputs.bind) {

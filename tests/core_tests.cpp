@@ -9,6 +9,7 @@
 #include "core/led.h"
 #include "core/mode.h"
 #include "core/settings.h"
+#include "core/sound.h"
 #include "core/xbox.h"
 
 static int failures;
@@ -266,7 +267,14 @@ static void test_settings()
 
     /* Positions and keys agree. */
     CHECK(settings::find("unlock.mode") == settings::UNLOCK_MODE);
-    CHECK(settings::find("buzzer.on") == settings::BUZZER_ON);
+    CHECK(settings::find("sound.volume") == settings::SOUND_VOLUME);
+    CHECK(settings::find("sound.trim") == settings::SOUND_TRIM);
+    CHECK(settings::find("sound.on") == settings::SOUND_POWER_ON);
+    CHECK(settings::find("sound.error") == settings::SOUND_ERROR);
+    CHECK(settings::find("map.mode") == settings::MAP_MODE);
+    CHECK(settings::find("trim.thr") == settings::TRIM_FIRST);
+    CHECK(settings::find("trim.led") == settings::TRIM_LED);
+    CHECK(settings::find("usb.mode") == settings::USB_MODE);
     CHECK(settings::find("ch.1.source") == settings::CHANNEL_FIRST);
     CHECK(settings::find("ch.16.reverse") == settings::CALIBRATION_FIRST - 1);
     CHECK(settings::find("cal.0.low") == settings::CALIBRATION_FIRST);
@@ -656,6 +664,109 @@ static void test_xbox()
     CHECK(report[19] == 0);
 }
 
+static void test_options()
+{
+    /* Each setting with an option list has one named value for every value of its range, in order. */
+    int named = 0;
+
+    for (int index = 0; index < settings::COUNT; index++) {
+        settings::Info info = settings::info(index);
+
+        if (info.options == nullptr) {
+            continue;
+        }
+        named++;
+        int expected = info.min;
+
+        for (int n = 0; n < settings::option_count(); n++) {
+            settings::Option option = settings::option(n);
+
+            if (std::strcmp(option.list, info.options) == 0) {
+                CHECK(option.value == expected);
+                /* One word, so that the protocol line splits at spaces. */
+                CHECK(option.key != nullptr && option.key[0] != '\0' && std::strchr(option.key, ' ') == nullptr);
+                expected++;
+            }
+        }
+        CHECK(expected == info.max + 1);
+    }
+    CHECK(named == 11); /* unlock.mode, sound.trim, the seven event tones, map.mode, usb.mode */
+    CHECK(settings::info(settings::SOUND_VOLUME).options == nullptr);
+    CHECK(std::strcmp(settings::info(settings::SOUND_POWER_ON).options, "tune") == 0);
+    CHECK(std::strcmp(settings::info(settings::SOUND_ERROR).options, "tune") == 0);
+    CHECK(settings::info(settings::TRIM_LED).options == nullptr);
+    CHECK(settings::info(settings::find("ch.1.source")).options == nullptr);
+    CHECK(settings::option(settings::option_count()).list == nullptr);
+
+    settings::Option first = settings::option(0);
+
+    CHECK(std::strcmp(first.list, "unlock") == 0 && first.value == 1);
+    CHECK(std::strcmp(first.key, "throttle_low") == 0);
+}
+
+static void test_sound()
+{
+    /* Every tune fits its array and has audible lengths; TUNE_NONE is silent. */
+    CHECK(sound::tune(sound::TUNE_NONE).count == 0);
+    for (int id = 1; id < sound::TUNE_COUNT; id++) {
+        const sound::Tune &t = sound::tune(id);
+
+        CHECK(t.count > 0 && t.count <= sound::MAX_NOTES);
+        for (int i = 0; i < t.count; i++) {
+            CHECK(t.notes[i].ms >= 20);
+        }
+    }
+    CHECK(sound::tune(sound::TUNE_COUNT).count == 0);
+    CHECK(sound::tune(-1).count == 0);
+    CHECK(std::strcmp(sound::TUNE_KEYS[sound::TUNE_DOUBLE_BEEP], "double_beep") == 0);
+    /* The stock power-on tune: G5 A5 B5. */
+    CHECK(sound::tune(sound::TUNE_RISING).notes[0].frequency == 784);
+    CHECK(sound::tune(sound::TUNE_RISING).notes[2].frequency == 988);
+
+    /* Stock trim tones. */
+    CHECK(sound::trim_tone(sound::TRIM_STOCK, 0, 1, 25).notes[0].frequency == 1176);
+    CHECK(sound::trim_tone(sound::TRIM_STOCK, 2, 1, 25).notes[0].frequency == 784);
+    CHECK(sound::trim_tone(sound::TRIM_STOCK, -2, -3, 25).notes[0].frequency == 1176);
+    CHECK(sound::trim_tone(sound::TRIM_STOCK, 1, 0, 25).notes[0].frequency == 989);
+    CHECK(sound::trim_tone(sound::TRIM_STOCK, 24, 25, 25).notes[0].frequency == 659);
+    CHECK(sound::trim_tone(sound::TRIM_STOCK, -25, -25, 25).notes[0].frequency == 659);
+    CHECK(sound::trim_tone(sound::TRIM_SILENT, 0, 1, 25).count == 0);
+
+    /* EdgeTX: value * 8 + 1920 Hz over -128..128; 40 ms per step, 80 ms at the centre and the ends. */
+    /* The centre: two 80 ms tones at 1920 Hz, where EdgeTX has one. */
+    sound::Tune t = sound::trim_tone(sound::TRIM_EDGETX, 1, 0, 25);
+    CHECK(t.count == 3 && t.notes[0].frequency == 1920 && t.notes[0].ms == 80);
+    CHECK(t.notes[1].frequency == 0 && t.notes[2].frequency == 1920);
+    t = sound::trim_tone(sound::TRIM_EDGETX, 24, 25, 25);
+    CHECK(t.notes[0].frequency == 1920 + 128 * 8 && t.notes[0].ms == 80);
+    t = sound::trim_tone(sound::TRIM_EDGETX, 24, -25, 25);
+    CHECK(t.notes[0].frequency == 1920 - 128 * 8);
+    t = sound::trim_tone(sound::TRIM_EDGETX, 0, 5, 25);
+    CHECK(t.notes[0].frequency == 1920 + 25 * 8 && t.notes[0].ms == 40);
+    CHECK(sound::trim_tone(sound::TRIM_EDGETX, 0, 1, 25).notes[0].frequency >
+          sound::trim_tone(sound::TRIM_EDGETX, 0, -1, 25).notes[0].frequency);
+
+    /* The demo plays four steps with pauses between them, the centre last; silent for no trim tones. */
+    CHECK(sound::trim_demo(sound::TRIM_STOCK).count == 7);
+    CHECK(sound::trim_demo(sound::TRIM_STOCK).notes[6].frequency == 989);
+    CHECK(sound::trim_demo(sound::TRIM_EDGETX).count == 9);
+    CHECK(sound::trim_demo(sound::TRIM_EDGETX).notes[8].frequency == 1920);
+    CHECK(sound::trim_demo(sound::TRIM_SILENT).count == 0);
+
+    /* LED flash: short white, long green at the centre, double white at the end. */
+    CHECK(sound::trim_flash(3, 25).count == 1 && sound::trim_flash(3, 25).notes[0].ms == 60);
+    CHECK(sound::trim_flash(3, 25).notes[0].frequency == sound::FLASH_WHITE);
+    CHECK(sound::trim_flash(0, 25).notes[0].frequency == sound::FLASH_GREEN);
+    CHECK(sound::trim_flash(0, 25).notes[0].ms == 300);
+    CHECK(sound::trim_flash(-25, 25).count == 3 &&
+          sound::trim_flash(-25, 25).notes[1].frequency == sound::FLASH_DARK);
+
+    CHECK(sound::volume_duty(0) == 0);
+    CHECK(sound::volume_duty(1) == 10);
+    CHECK(sound::volume_duty(3) == 50);
+    CHECK(sound::volume_duty(4) == 0);
+}
+
 int main()
 {
     test_crc();
@@ -677,6 +788,8 @@ int main()
     test_trim();
     test_joystick();
     test_xbox();
+    test_sound();
+    test_options();
 
     if (failures != 0) {
         std::printf("%d check(s) failed\n", failures);

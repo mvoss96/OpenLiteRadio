@@ -12,7 +12,7 @@
 // elrs.js, which is loaded first and uses send() and $() from here.
 
 // The project's version from the file VERSION; test.ps1 checks that both agree.
-const WEB_VERSION = "0.14.1";
+const WEB_VERSION = "0.15.0";
 const USB_VENDOR_ID = 0x2fe3;
 const CHANNEL_COUNT = 16;
 const BATTERY_THRESHOLDS = [3232, 3298, 3391, 3552];   // stock firmware: 1, 2, 3, 4 LEDs
@@ -42,14 +42,24 @@ const LIST_ORDER = [3, 4, 2, 1, 5, 6, 7, 8, 9, 10];   // list that replaces the 
 // The fixed assignments, indexed by map.mode; the same tables as FIXED_SOURCES
 // in src/core/channels.cpp. Weight is 100 and nothing is reversed.
 const MAPPINGS = [
-  { name: "AETR", sources: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0] },
-  { name: "TAER", sources: [3, 1, 2, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0] },
+  { sources: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0] },
+  { sources: [3, 1, 2, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0] },
 ];
 const MAPPING_CUSTOM = 2;
-const MAPPING_NAMES = ["AETR", "TAER", "Custom"];
 
-// Trim of the stick axes (settings trim.*), in the order of the axes and of
-// "trim=" in the state line. One step is TRIM_STEP_US.
+// Texts for the keys of the radio's option lists ("option LIST VALUE KEY"), per list.
+// A key without a text here is shown as it is.
+const OPTION_TEXTS = {
+  unlock: { throttle_low: "Gas unten", throttle_up_down: "Gas hoch, dann runter" },
+  trimtone: { none: "Aus", stock: "Original", edgetx: "EdgeTX" },
+  tune: { none: "Aus", beep: "Piep", double_beep: "Doppelpiep", short_high: "Kurz hoch", low: "Tief",
+    low_long: "Tief lang", rising: "Aufsteigend", falling: "Absteigend", triad: "Dreiklang" },
+  map: { aetr: "AETR", taer: "TAER", custom: "Custom" },
+  usb: { joystick: "Joystick", xbox: "Xbox-Controller" },
+};
+
+// Trim of the stick axes (settings trim.thr to trim.ail), in the order of the
+// axes and of "trim=" in the state line. One step is TRIM_STEP_US.
 const TRIM_KEYS = ["trim.thr", "trim.rud", "trim.ele", "trim.ail"];
 const TRIM_STEP_US = 4;
 
@@ -62,6 +72,7 @@ let reader = null;
 let opening = false;               // a port is being chosen or opened
 let linesThisSecond = 0;
 const settings = new Map();        // key -> { type, min, max, def, value }
+const optionLists = new Map();     // option list name -> Map(value -> key), from "option" lines
 let lastFields = null;             // fields of the last state line
 let lastChannels = [];
 let selected = 0;                  // source of the control open in the detail card, 0 = none
@@ -134,11 +145,12 @@ function changeAssignment(apply, confirmed = false) {
 
 function showMapping() {
   const mode = setting("map.mode");
-  $("mapButton").textContent = mode === undefined ? "–" : MAPPING_NAMES[mode];
+  const names = new Map(optionsOf("map.mode"));
+  $("mapButton").textContent = names.get(mode) ?? "–";
   $("mapButton").setAttribute("aria-expanded", menuOpen);
   $("mapMenu").hidden = !menuOpen;
   if (!menuOpen) return;
-  $("mapMenu").innerHTML = MAPPING_NAMES.map((name, i) =>
+  $("mapMenu").innerHTML = [...names].map(([i, name]) =>
     `<div class="mitem${i === mode ? " sel" : ""}" data-mode="${i}"><span>${name}</span>` +
     (i === mode ? `<span class="slot check">${icon("check")}</span>` : "") + `</div>`).join("");
 }
@@ -577,6 +589,24 @@ function showSetting(key) {
   }
 }
 
+// Named values of a setting as [value, text] pairs, from the option list its type names; [] for a number.
+function optionsOf(key) {
+  const s = settings.get(key);
+  const list = s && optionLists.get(s.type);
+  if (!list) return [];
+  const texts = OPTION_TEXTS[s.type] || {};
+  return [...list].map(([value, optionKey]) => [value, texts[optionKey] ?? optionKey]);
+}
+
+// Every list bound to a setting with named values gets them as the radio reports them.
+function fillOptionLists() {
+  for (const key of settings.keys()) {
+    const options = optionsOf(key).map(([value, text]) => `<option value="${value}">${text}</option>`).join("");
+    if (!options) continue;
+    for (const select of document.querySelectorAll(`select[data-key="${key}"]`)) select.innerHTML = options;
+  }
+}
+
 function buildRawTable() {
   $("rawRows").innerHTML = [...settings].map(([key, s]) =>
     `<div class="rawrow"><b>${key}</b><span><input type="number" min="${s.min}" max="${s.max}" data-key="${key}" aria-label="${key}"></span>` +
@@ -606,7 +636,12 @@ function handleLine(line) {
   } else if (kind === "setting") {
     const [key, type, min, max, def, value] = rest;
     settings.set(key, { type, min: Number(min), max: Number(max), def: Number(def), value: Number(value) });
+  } else if (kind === "option") {
+    const [list, value, optionKey] = rest;
+    if (!optionLists.has(list)) optionLists.set(list, new Map());
+    optionLists.get(list).set(Number(value), optionKey);
   } else if (kind === "end") {
+    fillOptionLists();
     buildRawTable();
     showLabels();
     showDetail();
@@ -826,6 +861,12 @@ document.addEventListener("change", (event) => {
   send("save");
 });
 $("defaults").addEventListener("click", () => send("defaults"));
+
+// A play button plays its setting's sound on the radio.
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-play]");
+  if (button) send(`play ${button.dataset.play}`);
+});
 
 $("calOpen").addEventListener("click", () => send("calibrate start"));
 $("calCancel").addEventListener("click", () => send("calibrate cancel"));

@@ -97,8 +97,8 @@ analysis kept outside this repository.
 |---|---|---|---|
 | M | Status LED: blue working, purple Bluetooth, green WiFi, red throttle warning | manual; WS2812-type LED on PB3, measured | colours shown by the test build, hw |
 | M | Buzzer patterns for power, binding, calibration, warnings | manual, code; buzzer on PB1, measured | single tone in the test build, hw |
-| S | Buzzer can be switched off | manual | setting buzzer.on, not heard |
-| S | Tone on release of the throttle lock can be switched off in the web tool | - | setting unlock.beep, not heard |
+| S | Buzzer volume, off to loud | manual: on/off | setting sound.volume, four levels by duty cycle; levels heard with a test build (0.15.0) |
+| S | Tone per event chosen in the web tool, trim tones stock or EdgeTX, LED flash on trim steps | - | settings sound.*, trim.led; built in 0.15.0 |
 
 ## USB
 

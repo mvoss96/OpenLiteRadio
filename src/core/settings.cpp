@@ -1,5 +1,6 @@
 #include "core/settings.h"
 
+#include "core/sound.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -7,11 +8,38 @@ namespace settings {
 
 namespace {
 
+/* Keys for the values first .. first + count - 1 of the settings that use the list. */
+struct OptionList {
+    const char *name;
+    int16_t first;
+    uint8_t count;
+    const char *const *keys;
+};
+
+const char *const UNLOCK_KEYS[] = { "throttle_low", "throttle_up_down" };
+const char *const TRIM_TONE_KEYS[] = { "none", "stock", "edgetx" };
+const char *const MAP_KEYS[] = { "aetr", "taer", "custom" };
+const char *const USB_KEYS[] = { "joystick", "xbox" };
+
+const OptionList OPTION_LISTS[] = {
+    { "unlock", 1, 2, UNLOCK_KEYS },
+    { "trimtone", 0, 3, TRIM_TONE_KEYS },
+    { "tune", 0, sound::TUNE_COUNT, sound::TUNE_KEYS },
+    { "map", 0, 3, MAP_KEYS },
+    { "usb", 0, 2, USB_KEYS },
+};
+const OptionList *const UNLOCK_OPTIONS = &OPTION_LISTS[0];
+const OptionList *const TRIM_TONE_OPTIONS = &OPTION_LISTS[1];
+const OptionList *const TUNE_OPTIONS = &OPTION_LISTS[2];
+const OptionList *const MAP_OPTIONS = &OPTION_LISTS[3];
+const OptionList *const USB_OPTIONS = &OPTION_LISTS[4];
+
 struct Field {
     const char *name;
     int16_t min;
     int16_t max;
     int16_t default_value;
+    const OptionList *options = nullptr; /* names the values from min to max */
 };
 
 /* A group of settings; with instances it repeats its fields once per instance. */
@@ -27,14 +55,26 @@ struct Group {
 /* Each instance has room for this many fields in the storage numbers. */
 constexpr uint16_t IDS_PER_INSTANCE = 8;
 
-const Field UNLOCK_FIELDS[] = { { "mode", 1, 2, 1 }, { "beep", 0, 1, 1 } };
-const Field BUZZER_FIELDS[] = { { "on", 0, 1, 1 } };
-const Field MAP_FIELDS[] = { { "mode", 0, 2, 0 } };
+const Field UNLOCK_FIELDS[] = { { "mode", 1, 2, 1, UNLOCK_OPTIONS } };
+/* Volume 0..3, a sound::TrimStyle, then one sound::TuneId per event. */
+constexpr int16_t LAST_TUNE = sound::TUNE_COUNT - 1;
+const Field SOUND_FIELDS[] = {
+    { "volume", 0, 3, 3 },
+    { "trim", 0, 2, sound::TRIM_STOCK, TRIM_TONE_OPTIONS },
+    { "on", 0, LAST_TUNE, sound::TUNE_RISING, TUNE_OPTIONS },
+    { "off", 0, LAST_TUNE, sound::TUNE_FALLING, TUNE_OPTIONS },
+    { "unlock", 0, LAST_TUNE, sound::TUNE_BEEP, TUNE_OPTIONS },
+    { "accept", 0, LAST_TUNE, sound::TUNE_BEEP, TUNE_OPTIONS },
+    { "success", 0, LAST_TUNE, sound::TUNE_SHORT_HIGH, TUNE_OPTIONS },
+    { "cancel", 0, LAST_TUNE, sound::TUNE_LOW, TUNE_OPTIONS },
+    { "error", 0, LAST_TUNE, sound::TUNE_LOW_LONG, TUNE_OPTIONS },
+};
+const Field MAP_FIELDS[] = { { "mode", 0, 2, 0, MAP_OPTIONS } };
 /* 0 joystick, 1 Xbox controller: the USB device with the radio off. */
-const Field USB_FIELDS[] = { { "mode", 0, 1, 0 } };
-/* In the order of core::Axis; steps of core::TRIM_STEP_US. */
+const Field USB_FIELDS[] = { { "mode", 0, 1, 0, USB_OPTIONS } };
+/* In the order of core::Axis; steps of core::TRIM_STEP_US. Then the LED flash on a step. */
 const Field TRIM_FIELDS[] = { { "thr", -25, 25, 0 }, { "rud", -25, 25, 0 }, { "ele", -25, 25, 0 },
-                              { "ail", -25, 25, 0 } };
+                              { "ail", -25, 25, 0 }, { "led", 0, 1, 1 } };
 /* The default source depends on the channel, see info(). */
 const Field CHANNEL_FIELD_LIST[] = { { "source", 0, 10, 0 }, { "weight", 0, 100, 100 },
                                      { "reverse", 0, 1, 0 } };
@@ -42,10 +82,10 @@ const Field CALIBRATION_FIELD_LIST[] = { { "low", 0, 4095, 600 }, { "centre", 0,
                                          { "high", 0, 4095, 3500 }, { "deadzone", 0, 10, 1 } };
 
 const Group GROUPS[] = {
-    { "unlock", 0, 0, 2, UNLOCK_FIELDS, 0x100 },
-    { "buzzer", 0, 0, 1, BUZZER_FIELDS, 0x110 },
+    { "unlock", 0, 0, 1, UNLOCK_FIELDS, 0x100 },
+    { "sound", 0, 0, 9, SOUND_FIELDS, 0x110 },
     { "map", 0, 0, 1, MAP_FIELDS, 0x120 },
-    { "trim", 0, 0, 4, TRIM_FIELDS, 0x130 },
+    { "trim", 0, 0, 5, TRIM_FIELDS, 0x130 },
     { "usb", 0, 0, 1, USB_FIELDS, 0x140 },
     { "ch", 16, 1, 3, CHANNEL_FIELD_LIST, 0x200 },
     { "cal", 4, 0, 4, CALIBRATION_FIELD_LIST, 0x300 },
@@ -91,7 +131,8 @@ Info info(int index)
     }
     return { field.min, field.max, default_value,
              (uint16_t)(position.group->first_id + position.instance * IDS_PER_INSTANCE +
-                        position.field) };
+                        position.field),
+             field.options != nullptr ? field.options->name : nullptr };
 }
 
 void key(int index, char *buffer)
@@ -140,6 +181,27 @@ void set_defaults()
     for (int index = 0; index < COUNT; index++) {
         values[index] = info(index).default_value;
     }
+}
+
+int option_count()
+{
+    int count = 0;
+
+    for (const OptionList &list : OPTION_LISTS) {
+        count += list.count;
+    }
+    return count;
+}
+
+Option option(int n)
+{
+    for (const OptionList &list : OPTION_LISTS) {
+        if (n < list.count) {
+            return { list.name, (int16_t)(list.first + n), list.keys[n] };
+        }
+        n -= list.count;
+    }
+    return { nullptr, 0, nullptr };
 }
 
 } // namespace settings

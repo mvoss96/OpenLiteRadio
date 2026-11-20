@@ -28,7 +28,7 @@ void start()
     }
     active = true;
     output::set_hold(true);
-    indicators::beep(2700, 100);
+    indicators::play_event(settings::SOUND_ACCEPTED);
 }
 
 bool running()
@@ -67,7 +67,7 @@ bool finish(const uint16_t rest[core::AXIS_COUNT])
     }
     active = false;
     output::set_hold(false);
-    indicators::beep(stored ? 3200 : 600, stored ? 300 : 600);
+    indicators::play_event(stored ? settings::SOUND_SUCCESS : settings::SOUND_ERROR);
     return stored;
 }
 

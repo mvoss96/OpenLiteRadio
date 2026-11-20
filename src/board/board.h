@@ -102,8 +102,11 @@ void set_battery_leds(uint8_t mask);
 /* Set the colour of the status LED. */
 void set_status_led(uint8_t red, uint8_t green, uint8_t blue);
 
-/* Sound the buzzer at a frequency in hertz; 0 switches it off. */
-void set_buzzer(uint32_t frequency);
+/*
+ * Sound the buzzer at a frequency in hertz with a duty cycle in percent,
+ * which sets the loudness; frequency or duty 0 switches it off.
+ */
+void set_buzzer(uint32_t frequency, uint32_t duty_percent);
 
 } // namespace board
 

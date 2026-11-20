@@ -56,9 +56,14 @@ Each further thread would cost about 1 KiB of stack.
   is not touched. The factory calibration there is not used: it does not fit
   the stick readings (docs/HARDWARE.md).
 - The radio knows its settings: `src/core/settings.cpp` lists key, range and
-  default of each one and reports them on request. The configurator adds
-  labels and layout only, and shows a setting it has no label for on its
-  Advanced tab. Each setting is a 16-bit value with its own NVS id; only
+  default of each one and reports them on request. A setting whose values
+  stand for choices (`unlock.mode`, a tune) also reports a language-neutral
+  key for each value, so the firmware alone defines what can be chosen and
+  holds no text for people. A quantity stays a plain number (`sound.volume`).
+  The configurator adds all texts: the labels of the settings, the texts of
+  the keys (a key without a text is shown as it is) and the layout; it is to
+  be localized later. It shows a setting it has no label for on its Advanced
+  tab. Each setting is a 16-bit value with its own NVS id; only
   values that differ from the default are stored, so settings added later do
   not disturb stored ones.
 - The configurator is `web/index.html` with `web/app.js`: plain HTML and
@@ -344,23 +349,78 @@ frame, so greying out until a lock would leave nothing changeable.
   as a file follow in the configurator.
 - Trim shifts the centre of the four stick axes, 4 µs per step, at most ±25
   steps. It is stored apart from the mapping and changed with the trim
-  buttons, a short tone per step and another at the centre. It applies only to
-  the frames to the ELRS module, not to joystick and Xbox. The trim centres do
-  nothing while the radio is on; trim is reset from the configurator. Built in
+  buttons, with a tone and an LED flash per step (see "Tones"). It applies only to
+  the frames to the ELRS module, not to joystick and Xbox. With the radio on,
+  a trim centre held for 1 s resets both axes of its button (left throttle
+  and yaw, right pitch and roll), with the centre's tone and LED flash; it
+  counts only once the centre was released after switching on, since a
+  centre held at switch-on starts Bluetooth or WiFi. The configurator resets
+  single axes. Built in
   0.11.0: the settings `trim.thr`, `trim.rud`, `trim.ele`, `trim.ail` (−25..25
   steps of `core::TRIM_STEP_US`) are added to the stick source before weight
   and reverse, and every channel is limited to 988..2012. Left trim button up
   and down trim the throttle, left and right the yaw; the right button pitch
-  and roll. The buttons work only while the radio is on, one step per press,
-  the stock firmware's tones: 1176 Hz 100 ms for a step away from the centre,
-  784 Hz 100 ms towards it, 989 Hz 300 ms when a trim reaches 0. The stock
-  firmware has no tone for the end; here 659 Hz 300 ms sounds at ±25 and for
-  every press beyond. The stock tones were read from its disassembly (TIM3
-  prescaler 99, a table of nine periods at 0x08008d68, chosen at 0x08011fde),
-  not recorded on the radio. Writing to flash holds the output and locks it, so trim from
+  and roll. The buttons work only while the radio is on, one step per press.
+  Writing to flash holds the output and locks it, so trim from
   the buttons is stored only when the radio is switched off (`storage::save_trim()`,
   only the trim values). The state line reports `trim=` and `ch=` as sent:
   trimmed while the module is on.
+
+### Tones
+
+Built in 0.15.0. The buzzer's loudness follows the duty cycle of its square
+wave (docs/HARDWARE.md): `sound.volume` 0 off, 1 quiet (10 %), 2 medium
+(25 %), 3 loud (50 %, default). Every tone goes through
+`indicators::play()`, which plays a `sound::Tune` (up to eight notes or
+pauses) note by note in the main loop, so durations are rounded up to its
+20 ms; a new tune replaces one still playing.
+
+Each event has a setting holding one of the built-in tunes of
+`src/core/sound.cpp` (`sound::TuneId`, 0 none): Piep, Doppelpiep, Kurz hoch,
+Tief, Tief lang, Aufsteigend (G5 A5 B5, the stock firmware's power-on tune),
+Absteigend (its power-off tune), Dreiklang. The tunes exist only there;
+`list` reports their keys as the option list `tune` (`none`, `beep`,
+`double_beep`, ...), and the configurator translates them. A new tune needs
+only a text in the configurator, and is shown with its key until it has one.
+
+| Setting | Event | Default |
+|---------|-------|---------|
+| `sound.on` | radio switched on | Aufsteigend |
+| `sound.off` | radio switched off | Absteigend |
+| `sound.unlock` | the throttle lock releases the output | Piep |
+| `sound.accept` | binding, WiFi, Bluetooth, a calibration run or a USB form change starts | Piep |
+| `sound.success` | a receiver is bound, a calibration is stored | Kurz hoch |
+| `sound.cancel` | binding is cancelled with BIND | Tief |
+| `sound.error` | a module command is not found, binding times out, a calibration is rejected or not stored, the USB device fails | Tief lang |
+
+`sound.trim` chooses the trim tones, for every step and every press beyond
+the end:
+
+- 0: none.
+- 1 (default), the stock firmware's tones: 1176 Hz 100 ms for a step away
+  from the centre, 784 Hz 100 ms towards it, 989 Hz 300 ms when a trim
+  reaches 0. The stock firmware has no tone for the end; here 659 Hz 300 ms
+  sounds at ±25. The stock tones were read from its disassembly (TIM3
+  prescaler 99, a table of nine periods at 0x08008d68, chosen at
+  0x08011fde), not recorded on the radio.
+- 2, EdgeTX (`radio/src/audio.cpp`, `myeeprom.h`): value × 8 + 1920 Hz with
+  the value over −128..128, 40 ms per step, 80 ms at the ends; the radio's
+  −25..25 is scaled to −128..128. EdgeTX plays one 80 ms tone at 1920 Hz at
+  the centre and marks it further by vibration and the voice prompt "trim
+  center". This radio has only the buzzer, and the single tone was hard to
+  tell from the steps next to it, so the centre is two such tones 40 ms apart.
+
+`trim.led` 1 (default) flashes the status LED on every trim step: white 60 ms
+for a step, green 300 ms at the centre, white twice 60 ms at the end. The flash replaces
+the state colour for its duration.
+
+Switching off stops the module at once, but releases the power latch only
+when the power-off tune has ended, so that on battery the tune is not cut
+off when the power button is let go.
+
+The configurator plays each setting's sound on the radio with the host
+command `play KEY`. Still open: tones for a weak battery, a weak signal and
+before the automatic power-off, which wait for those features.
 
 ### LEDs
 
@@ -393,7 +453,9 @@ show once those modes exist. The colours are driven at about a fifth of the
 LED's range; white is 0x181818. Orange (0x300500) for the joystick was
 too close to red on the radio. "Receiver connected" means link statistics with a link quality above
 0 arrived within the last second. The host command `led` still overrides
-the LED until `led auto`.
+the LED until `led auto`. The one exception to a colour per state is the
+trim flash (see "Tones"), which interrupts the state colour for at most
+300 ms.
 
 The four battery LEDs show the charge, four to one; below one the last LED
 blinks, with a warning tone if enabled. Still to be observed on the device:
@@ -440,8 +502,7 @@ Stage 2 as built so far:
   throttle at its upper and then its lower end. With 1 and the throttle
   already down, a lock from a changed setting or from `lock` is released in
   the next frame. The status LED is red while
-  locked; one tone marks the release unless `unlock.beep` is 0. `buzzer.on`
-  0 silences all tones.
+  locked; the tune of `sound.unlock` marks the release.
 - Switching the radio on starts the module, switching it off stops it.
 - Module commands (0.12.0, `src/module_link.cpp`): binding (BIND held 1 s,
   host `bind`), WiFi (right trim centre held at switch-on, host `wifi`) and
@@ -512,8 +573,14 @@ From the radio:
   `elrs_locked`, `elrs_active`, see "Operating modes"), `led` (the colour as
   RRGGBB now sent to the status LED, blinking included; the configurator
   draws it brightened), `calib` (1 during a calibration run).
-- `setting KEY TYPE MIN MAX DEFAULT VALUE`, one line per setting after `list`,
-  followed by `end`. TYPE is `bool` or `int`.
+- `setting KEY TYPE MIN MAX DEFAULT VALUE`, one line per setting after `list`.
+  TYPE is `bool`, `int`, or the name of the option list that names the
+  values by keys (e.g. `tune`, shared by the seven event tones).
+- `option LIST VALUE KEY`, one line per named value after the settings,
+  followed by `end`. KEY is one language-neutral word, e.g. `option tune 2
+  double_beep`; the configurator fills every choice of a setting from the
+  list its TYPE names and translates the keys. Lists: `unlock`, `trimtone`,
+  `tune`, `map`, `usb`.
 - `value KEY VALUE` after `get`; `ok ...` or `error REASON` after the other
   settings commands.
 
@@ -524,7 +591,8 @@ To the radio:
 | `hello` | send the hello line |
 | `stream 0` / `stream 1` | stop or start the state lines |
 | `led R G B` | status LED colour, 0 to 255 each; `led auto` returns control to the firmware |
-| `beep HZ MS` | tone |
+| `beep HZ MS` | tone at the volume in `sound.volume` |
+| `play KEY` | play what a setting sounds like: the tune chosen in `sound.on` to `sound.error`, a few trim steps away from the centre and back for `sound.trim`, one beep for `sound.volume`; answers `ok play` or `error unknown key` |
 | `batleds MASK` | battery LEDs, bit 0 is the leftmost |
 | `bind` | start binding, as holding BIND for 1 s does |
 | `wifi` | start the module's WiFi, as the right trim centre at switch-on does |

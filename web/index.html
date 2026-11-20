@@ -370,17 +370,35 @@
           <h2><svg class="i" viewBox="0 0 24 24"><path d="M4 7h9m4 0h3M15 5v4M4 17h3m4 0h9M9 15v4"/></svg>Bedienung</h2>
           <div class="tiles">
             <label class="tile"><span>Entsperren mit</span>
-              <select data-key="unlock.mode"><option value="1">Gas unten</option><option value="2">Gas hoch, dann runter</option></select></label>
+              <select data-key="unlock.mode"></select></label>
             <label class="tile"><span>USB-Gerät, wenn ausgeschaltet</span>
-              <select data-key="usb.mode"><option value="0">Joystick</option><option value="1">Xbox-Controller</option></select></label>
+              <select data-key="usb.mode"></select></label>
+            <label class="tile"><span>LED blinkt beim Trimmen</span><input type="checkbox" class="switch" data-key="trim.led"></label>
           </div>
         </section>
         <section class="group">
           <h2><svg class="i" viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6l-5 4H4zM16.5 9a4 4 0 0 1 0 6"/></svg>Töne</h2>
           <div class="tiles">
             <label class="tile"><span>Lautstärke</span>
-              <select data-key="buzzer.on"><option value="0">Aus</option><option value="1">An</option></select></label>
-            <label class="tile"><span>Beim Entsperren</span><input type="checkbox" class="switch" data-key="unlock.beep"></label>
+              <select data-key="sound.volume"><option value="0">Aus</option><option value="1">Leise</option><option value="2">Mittel</option><option value="3">Laut</option></select>
+              <span class="icon" style="visibility: hidden"></span></label>
+            <div class="tile"><span>Trimmen</span>
+              <select data-key="sound.trim"></select>
+              <button class="icon" data-play="sound.trim" aria-label="Abspielen"><svg class="i" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button></div>
+            <div class="tile"><span>Einschalten</span><select data-key="sound.on"></select>
+              <button class="icon" data-play="sound.on" aria-label="Abspielen"><svg class="i" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button></div>
+            <div class="tile"><span>Ausschalten</span><select data-key="sound.off"></select>
+              <button class="icon" data-play="sound.off" aria-label="Abspielen"><svg class="i" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button></div>
+            <div class="tile"><span>Entsperren</span><select data-key="sound.unlock"></select>
+              <button class="icon" data-play="sound.unlock" aria-label="Abspielen"><svg class="i" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button></div>
+            <div class="tile"><span>Befehl angenommen</span><select data-key="sound.accept"></select>
+              <button class="icon" data-play="sound.accept" aria-label="Abspielen"><svg class="i" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button></div>
+            <div class="tile"><span>Erfolg</span><select data-key="sound.success"></select>
+              <button class="icon" data-play="sound.success" aria-label="Abspielen"><svg class="i" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button></div>
+            <div class="tile"><span>Abbruch</span><select data-key="sound.cancel"></select>
+              <button class="icon" data-play="sound.cancel" aria-label="Abspielen"><svg class="i" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button></div>
+            <div class="tile"><span>Fehler</span><select data-key="sound.error"></select>
+              <button class="icon" data-play="sound.error" aria-label="Abspielen"><svg class="i" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button></div>
           </div>
         </section>
       </div>
@@ -411,6 +429,7 @@
               <div class="tile"><span>Bluetooth-Joystick</span><span class="value">linke Trimm-Mitte beim Einschalten</span></div>
               <div class="tile"><span>WiFi für Modul-Update</span><span class="value">rechte Trimm-Mitte beim Einschalten</span></div>
               <div class="tile"><span>Joystick oder Xbox</span><span class="value">beide Trimm-Mitten 2 s, ausgeschaltet</span></div>
+              <div class="tile"><span>Trimmung zurücksetzen</span><span class="value">Trimm-Mitte 1 s, eingeschaltet</span></div>
               <div class="tile"><span>Kalibrieren</span><span class="value">SETUP 2 s</span></div>
             </div></section>
         </div>

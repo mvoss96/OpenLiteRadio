@@ -203,6 +203,13 @@ Outputs, observed with an output probe:
 | PB3, PB10 or PB11 held high | nothing visible |
 | Shift register 0x80, 0x20, 0x10 | nothing visible |
 
+The buzzer's loudness follows the duty cycle of the PB1 square wave, heard
+on 2026-11-20 with a test build: at 2700 Hz, 50 %, 25 % and 10 % were
+audible and quieter in that order, 5 % and below were not heard; at 989 Hz
+50 % down to 5 % were audible and quieter, 2 % and below not. The quieter
+tones sounded slightly higher; hypothesis: the narrow pulses change the
+timbre, not the frequency.
+
 The status LED accepted bit-banged data with about 0.3 us high for a 0,
 0.7 us high for a 1 and 1.25 us per bit. The stock firmware configures PB1
 as TIM3 channel 4 and PB3 as TIM2 channel 2 with the TIM2 partial remap

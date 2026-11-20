@@ -15,13 +15,21 @@ namespace settings {
 
 /* Positions of the values, in the order the list is reported. */
 enum Index {
-    UNLOCK_MODE = 0,   /* 1 throttle down, 2 throttle up and down */
-    UNLOCK_BEEP = 1,   /* tone when the output is released */
-    BUZZER_ON = 2,     /* 0 silences all tones */
-    MAP_MODE = 3,      /* the assignment in use, a core::Mapping */
-    TRIM_FIRST = 4,    /* trim of the 4 stick axes in steps, in the order of core::Axis */
-    USB_MODE = 8,      /* USB device with the radio off: 0 joystick, 1 Xbox controller */
-    CHANNEL_FIRST = 9, /* 16 channels with CHANNEL_FIELDS values each: the Custom assignment */
+    UNLOCK_MODE = 0,      /* 1 throttle down, 2 throttle up and down */
+    SOUND_VOLUME = 1,     /* 0 off, 1 quiet, 2 medium, 3 loud */
+    SOUND_TRIM = 2,       /* tones of the trim buttons, a sound::TrimStyle */
+    SOUND_POWER_ON = 3,   /* tune when the radio is switched on, a sound::TuneId */
+    SOUND_POWER_OFF = 4,  /* tune when the radio is switched off */
+    SOUND_UNLOCK = 5,     /* tune when the throttle lock releases the output */
+    SOUND_ACCEPTED = 6,   /* tune when a command starts: binding, WiFi, Bluetooth, calibration, USB form */
+    SOUND_SUCCESS = 7,    /* tune when a receiver is bound or a calibration is stored */
+    SOUND_CANCEL = 8,     /* tune when binding is cancelled */
+    SOUND_ERROR = 9,      /* tune when a command, a calibration or the USB device fails */
+    MAP_MODE = 10,        /* the assignment in use, a core::Mapping */
+    TRIM_FIRST = 11,      /* trim of the 4 stick axes in steps, in the order of core::Axis */
+    TRIM_LED = 15,        /* 1: the status LED flashes on every trim step */
+    USB_MODE = 16,        /* USB device with the radio off: 0 joystick, 1 Xbox controller */
+    CHANNEL_FIRST = 17,   /* 16 channels with CHANNEL_FIELDS values each: the Custom assignment */
     CALIBRATION_FIRST = CHANNEL_FIRST + 16 * 3, /* 4 axes with CALIBRATION_FIELDS values each */
     COUNT = CALIBRATION_FIRST + 4 * 4,
 };
@@ -51,6 +59,15 @@ struct Info {
     int16_t default_value;
     /* Number for the storage; stays the same when settings are added. */
     uint16_t id;
+    /* Name of the option list that names the values, or nullptr for a plain number. */
+    const char *options;
+};
+
+/* One named value of an option list; key is one language-neutral word the configurator translates. */
+struct Option {
+    const char *list;
+    int16_t value;
+    const char *key;
 };
 
 /* Current values. Change them through set() only. */
@@ -68,5 +85,11 @@ int find(const char *key);
 bool set(int index, int32_t value);
 
 void set_defaults();
+
+/* Number of named values over all option lists. */
+int option_count();
+
+/* The n-th named value over all option lists, list by list. */
+Option option(int n);
 
 } // namespace settings

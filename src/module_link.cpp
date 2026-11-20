@@ -8,6 +8,7 @@
 #include "board/board.h"
 #include "core/crsf.h"
 #include "core/mode.h"
+#include "core/settings.h"
 #include "indicators.h"
 #include "output.h"
 
@@ -103,7 +104,7 @@ void search_finish(bool found)
         bind_started_ms = k_uptime_get();
         output::set_module_task(command.task);
     }
-    indicators::beep(found ? 2700 : 600, found ? 150 : 600);
+    indicators::play_event(found ? settings::SOUND_ACCEPTED : settings::SOUND_ERROR);
 }
 
 /* Use a frame from the module for the running search. */
@@ -172,10 +173,10 @@ void binding_tick()
     }
     if (link_statistics_ms >= bind_started_ms + BIND_SETTLE_MS && receiver_connected()) {
         output::set_module_task(core::ModuleTask::NONE);
-        indicators::beep(3200, 500);
+        indicators::play_event(settings::SOUND_SUCCESS);
     } else if (k_uptime_get() - bind_started_ms >= BIND_TIMEOUT_MS) {
         output::set_module_task(core::ModuleTask::NONE);
-        indicators::beep(600, 600);
+        indicators::play_event(settings::SOUND_ERROR);
     }
 }
 
@@ -251,7 +252,7 @@ void bind_cancel()
 {
     if (output::module_task_now() == core::ModuleTask::BINDING) {
         output::set_module_task(core::ModuleTask::NONE);
-        indicators::beep(1800, 150);
+        indicators::play_event(settings::SOUND_CANCEL);
     }
 }
 

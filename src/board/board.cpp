@@ -524,9 +524,9 @@ void set_status_led(uint8_t red, uint8_t green, uint8_t blue)
                          DMA_CCR_EN;
 }
 
-void set_buzzer(uint32_t frequency)
+void set_buzzer(uint32_t frequency, uint32_t duty_percent)
 {
-    if (frequency == 0) {
+    if (frequency == 0 || duty_percent == 0) {
         TIM3->CR1 = 0;
         GPIOB->BRR = BIT(1);
         configure_pins(GPIOB, BIT(1), PIN_OUTPUT);
@@ -536,7 +536,7 @@ void set_buzzer(uint32_t frequency)
     uint32_t period = 1000000u / frequency;
 
     TIM3->ARR = period - 1;
-    TIM3->CCR4 = period / 2;
+    TIM3->CCR4 = period * duty_percent / 100u;
     TIM3->EGR = TIM_EGR_UG;
     TIM3->CR1 = TIM_CR1_ARPE | TIM_CR1_CEN;
     configure_pins(GPIOB, BIT(1), PIN_ALTERNATE);
