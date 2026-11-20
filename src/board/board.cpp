@@ -47,8 +47,11 @@ constexpr uint32_t PC_POWER_LATCH = BIT(15);
 
 /* Shift register outputs. */
 constexpr uint8_t SHIFT_BATTERY_LEDS = 0x0f;
-/* The stock firmware keeps this output high; its function is not established. */
-constexpr uint8_t SHIFT_STOCK_HIGH = 0x10;
+/*
+ * High except while the battery is measured with USB supply, as in the stock
+ * firmware. Hypothesis: it enables the charger (docs/HARDWARE.md).
+ */
+constexpr uint8_t SHIFT_CHARGER = 0x10;
 constexpr uint8_t SHIFT_USB_TO_CONTROLLER = 0x40;
 
 constexpr uint8_t ADC_CHANNEL_BATTERY = 8; /* PB0 */
@@ -56,7 +59,7 @@ constexpr uint8_t KEYS_ADDRESS = 0x1d;
 
 const struct device *const adc = DEVICE_DT_GET(DT_NODELABEL(adc1));
 const struct device *const module_uart = DEVICE_DT_GET(DT_NODELABEL(usart1));
-uint8_t shift_state = SHIFT_STOCK_HIGH | SHIFT_USB_TO_CONTROLLER;
+uint8_t shift_state = SHIFT_CHARGER | SHIFT_USB_TO_CONTROLLER;
 
 void configure_pins(GPIO_TypeDef *port, uint32_t pins, uint32_t mode)
 {
@@ -478,6 +481,12 @@ void set_usb_to_controller(bool controller)
 {
     shift_state = controller ? (shift_state | SHIFT_USB_TO_CONTROLLER)
                              : (shift_state & ~SHIFT_USB_TO_CONTROLLER);
+    shift_write();
+}
+
+void set_charger_enabled(bool enabled)
+{
+    shift_state = enabled ? (shift_state | SHIFT_CHARGER) : (shift_state & ~SHIFT_CHARGER);
     shift_write();
 }
 

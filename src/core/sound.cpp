@@ -14,6 +14,7 @@ const Tune TUNES[TUNE_COUNT] = {
     { 3, { { 784, 250 }, { 880, 250 }, { 988, 250 } } },
     { 3, { { 988, 250 }, { 880, 250 }, { 784, 250 } } },
     { 3, { { 1047, 120 }, { 1319, 120 }, { 1568, 200 } } },
+    { 7, { { 1480, 150 }, { 0, 150 }, { 1480, 150 }, { 0, 150 }, { 1480, 150 }, { 0, 150 }, { 1480, 150 } } },
 };
 
 /* EdgeTX (radio/src/audio.cpp): trim value * 8 + 1920 Hz, the value ranging over -128..128. */
@@ -36,6 +37,7 @@ const Tune &tune(int id)
 
 const char *const TUNE_KEYS[TUNE_COUNT] = {
     "none", "beep", "double_beep", "short_high", "low", "low_long", "rising", "falling", "triad",
+    "warning",
 };
 
 Tune trim_tone(int style, int before, int value, int limit)
@@ -100,6 +102,18 @@ Tune trim_flash(int value, int limit)
         return { 3, { { FLASH_WHITE, 60 }, { FLASH_DARK, 60 }, { FLASH_WHITE, 60 } } };
     }
     return { 1, { { FLASH_WHITE, 60 } } };
+}
+
+Tune weak_battery_flash()
+{
+    return { 7,
+             { { FLASH_ORANGE, 150 },
+               { FLASH_DARK, 150 },
+               { FLASH_ORANGE, 150 },
+               { FLASH_DARK, 150 },
+               { FLASH_ORANGE, 150 },
+               { FLASH_DARK, 150 },
+               { FLASH_ORANGE, 150 } } };
 }
 
 uint8_t volume_duty(int volume)

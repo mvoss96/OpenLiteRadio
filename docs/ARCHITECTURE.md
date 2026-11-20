@@ -161,7 +161,7 @@ stateDiagram-v2
   Off --> On: power button 1 s
   Joy --> On: power button 1 s
   Xbox --> On: power button 1 s
-  On --> Off: power button 2 s, battery empty, auto power-off without USB
+  On --> Off: power button 1.25 s, auto power-off without USB
   classDef planned stroke-dasharray: 5 5
   class HostReady planned
   class Host planned
@@ -461,7 +461,9 @@ when the power-off tune has ended, so that on battery the tune is not cut
 off when the power button is let go.
 
 The configurator plays each setting's sound on the radio with the host
-command `play KEY`. Still open: tones for a weak battery, a weak signal and
+command `play KEY`. `sound.battery` (default `warning`: four 150 ms tones
+at 1480 Hz with 150 ms pauses, the stock firmware's warning) sounds with
+every weak reading, see "Battery". Still open: tones for a weak signal and
 before the automatic power-off, which wait for those features.
 
 ### LEDs
@@ -499,9 +501,37 @@ the LED until `led auto`. The one exception to a colour per state is the
 trim flash (see "Tones"), which interrupts the state colour for at most
 300 ms.
 
-The four battery LEDs show the charge, four to one; below one the last LED
-blinks, with a warning tone if enabled. Still to be observed on the device:
-what the vendor bootloader shows on these LEDs.
+The four battery LEDs are described in "Battery". Still to be observed on
+the device: what the vendor bootloader shows on these LEDs.
+
+### Battery
+
+Taken from the stock firmware 1.1.3 (code read, docs/HARDWARE.md), with two
+changes: the leftmost LED blinks on a weak battery, and the power button is
+held 1 s to switch on without the stock firmware's click before.
+
+- A reading every 15 s and one at start (`src/battery_monitor.cpp`). With
+  USB supply, shift register output 0x10 is set low 100 ms before the
+  reading and high again after it, as the stock firmware does.
+- Levels in raw counts, `src/core/battery.cpp`: 3232, 3298, 3391 and 3552
+  for one to four LEDs, lit from the left. The LEDs are lit whenever the
+  radio is on, from 500 ms after switching on.
+- Weak battery: below one LED and no USB supply. The leftmost LED blinks
+  0.5 s on, 0.5 s off; with every reading while the radio is on, the
+  tune in `sound.battery` sounds and the status LED flashes orange four
+  times (150 ms on, 150 ms off). Nothing switches the radio off, as in the
+  stock firmware.
+- USB supply: the level with its highest LED blinking (0.5 s), at least one
+  LED; from 3800 on all four steady. Shown with the radio on and off. The
+  status LED keeps its colour.
+- Power button held with the radio off: one more LED from the left every
+  250 ms, on at 1 s. Held with the radio on: from 250 ms four LEDs, then one
+  less every 250 ms from the right, off at 1.25 s; the LEDs stay dark until
+  the power-off tune has ended. A shorter press with the radio off blinks
+  the level three times (100 ms on, 100 ms off); started from battery, the
+  power latch is set at start and released after that, so the radio
+  switches off again.
+- The host command `batleds MASK` takes the LEDs over until `batleds auto`.
 
 ## Stages
 
@@ -512,10 +542,10 @@ what the vendor bootloader shows on these LEDs.
 | 3 | settings storage, trim, calibration on the radio | storage and calibration built, trim open |
 | 4 | USB joystick, then Xbox mode | both built (DirectInput joystick and Xbox controller, each beside the serial port); per-element Xbox assignment open |
 | 5 | configuration protocol for the web tool | settings commands, the configurator's views, the USB mode and firmware update built; ELRS parameters, buttons and backup open |
-| 6 | Bluetooth, WiFi, battery display, remaining features | open |
+| 6 | Bluetooth, WiFi, battery display, remaining features | battery display built; the rest open |
 
 Stage 1 as built: the power button switches the radio on after 1 s and off
-after 2 s. The status LED follows the codes in "LEDs".
+after 1.25 s. The status LED follows the codes in "LEDs".
 
 Stage 2 as built so far:
 
@@ -601,7 +631,7 @@ From the radio:
   right horizontal), `sa`, `sd` (0 or 1), `sb`, `sc` (0, 1, 2), `se`, `sf`,
   `bind`, `setup`, `power` (1 while pressed), `tl`, `tr` (trim buttons: bit 0
   up, 1 down, 2 left, 3 right, 4 centre), `keys` (1 if the trim key device
-  answers), `battery` (raw 12-bit), `usb` (1 with USB supply), `on`, `module`,
+  answers), `battery` (raw 12-bit, the reading taken every 15 s), `usb` (1 with USB supply), `on`, `module`,
   `trim` (trim steps of throttle, yaw, pitch, roll), `ch` (channels 1 to 16
   in microseconds, 988 to 2012, trimmed while the module is on), `lock` (1 while the
   throttle lock holds the output back), `period` (frame period in
@@ -636,7 +666,7 @@ To the radio:
 | `led R G B` | status LED colour, 0 to 255 each; `led auto` returns control to the firmware |
 | `beep HZ MS` | tone at the volume in `sound.volume` |
 | `play KEY` | play what a setting sounds like: the tune chosen in `sound.on` to `sound.error`, a few trim steps away from the centre and back for `sound.trim`, one beep for `sound.volume`; answers `ok play` or `error unknown key` |
-| `batleds MASK` | battery LEDs, bit 0 is the leftmost |
+| `batleds MASK` | battery LEDs, bit 0 is the leftmost, until `batleds auto` |
 | `bind` | start binding, as holding BIND for 1 s does |
 | `wifi` | start the module's WiFi, as the right trim centre at switch-on does |
 | `ble` | start the module's Bluetooth joystick, as the left trim centre at switch-on does |

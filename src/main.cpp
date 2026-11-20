@@ -13,6 +13,7 @@
  *   storage.cpp      settings in flash
  *   calibration.cpp  stick calibration run
  *   indicators.cpp   buzzer and status LED
+ *   battery_monitor.cpp  battery readings and the battery LEDs
  */
 
 
@@ -21,8 +22,10 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
+#include "battery_monitor.h"
 #include "board/board.h"
 #include "calibration.h"
+#include "core/battery.h"
 #include "core/channels.h"
 #include "core/settings.h"
 #include "host.h"
@@ -39,8 +42,10 @@ constexpr uint32_t UPDATER_REQUEST_BAUD = 1200;
 
 constexpr int LOOP_MS = 20;
 constexpr int STATE_EVERY_LOOPS = 2;   /* 25 state lines per second */
-constexpr int POWER_ON_LOOPS = 50;     /* power button held for 1 s */
-constexpr int POWER_OFF_LOOPS = 100;   /* power button held for 2 s */
+constexpr int POWER_ON_LOOPS = battery::ON_HOLD_MS / LOOP_MS;                   /* 1 s */
+constexpr int POWER_OFF_LOOPS = (battery::OFF_HOLD_MS + LOOP_MS - 1) / LOOP_MS;  /* 1.25 s */
+/* After switching on the battery LEDs stay dark this long, as in the stock firmware. */
+constexpr int64_t BAR_AFTER_ON_MS = 500;
 constexpr int BIND_HOLD_LOOPS = 50;    /* BIND held for 1 s */
 constexpr int SETUP_HOLD_LOOPS = 100;  /* SETUP held for 2 s */
 constexpr int USB_SWITCH_LOOPS = 100;  /* both trim centres held for 2 s */
@@ -53,6 +58,8 @@ static bool radio_on;
 static bool trim_unsaved;
 /* Switched off: the power latch is released once the power-off tune has ended. */
 static bool latch_release_pending;
+/* Uptime when the radio was switched on. */
+static int64_t on_since;
 
 static void set_radio_on(bool on)
 {
@@ -70,6 +77,7 @@ static void set_radio_on(bool on)
         board::set_power_latch(true);
     }
     latch_release_pending = !on;
+    on_since = k_uptime_get();
     indicators::play_event(on ? settings::SOUND_POWER_ON : settings::SOUND_POWER_OFF);
 }
 
@@ -200,6 +208,18 @@ int main(void)
     int setup_held_loops = 0;
 
     board::init();
+    /*
+     * Started from battery by the power button: keep the power on after the
+     * button is released, so that a short press can show the battery level
+     * before the radio switches off again.
+     */
+    bool peek_pending = !board::usb_supply_present();
+    /* Uptime when the battery level started to blink after a short press; -1 while it does not. */
+    int64_t peek_since = -1;
+
+    if (peek_pending) {
+        board::set_power_latch(true);
+    }
     storage::load_settings();
     host::print_hello();
     output::start();
@@ -208,14 +228,17 @@ int main(void)
         output::snapshot(snapshot);
         board::Inputs &inputs = snapshot.inputs;
 
+        int64_t now = k_uptime_get();
+        bool usb = board::usb_supply_present();
+
         board::read_trims(inputs);
         trim_tick(inputs.trim_left, inputs.trim_right);
         usb_tick(inputs);
 
         /*
-         * Power button: hold 1 s to switch on, 2 s to switch off. Started from
-         * battery, the radio loses power again if the button is released
-         * before the latch is set.
+         * Power button: hold 1 s to switch on, 1.25 s to switch off. A shorter
+         * press with the radio off shows the battery level, then the latch is
+         * released, which on battery switches the radio off again.
          */
         if (inputs.power) {
             power_held_loops++;
@@ -233,9 +256,41 @@ int main(void)
                 power_handled = true;
             }
         } else {
+            bool short_press = power_held_loops > 0 && !power_handled;
+
+            if (!radio_on && (short_press || peek_pending)) {
+                peek_since = now;
+            }
+            peek_pending = false;
             power_held_loops = 0;
             power_handled = false;
         }
+        if (peek_since >= 0 && now - peek_since >= battery::PEEK_MS) {
+            peek_since = -1;
+            if (!radio_on && !inputs.power) {
+                board::set_power_latch(false);
+            }
+        }
+
+        /* Battery: a reading every 15 s, the warning on each weak reading while on, the LEDs. */
+        if (battery_monitor::tick(now) && radio_on && battery::weak(battery_monitor::raw(), usb)) {
+            indicators::weak_battery();
+        }
+        uint16_t battery_raw = battery_monitor::raw();
+        uint8_t bar = battery::bar(battery_raw, usb, (uint32_t)now);
+        uint32_t held_ms = (uint32_t)(power_held_loops * LOOP_MS);
+        uint8_t battery_leds = 0;
+
+        if (latch_release_pending || (power_handled && !radio_on)) {
+            battery_leds = 0; /* switched off; with USB the charge shows again after the tune */
+        } else if (inputs.power && !power_handled) {
+            battery_leds = radio_on ? battery::switching_off(held_ms, bar) : battery::switching_on(held_ms);
+        } else if (peek_since >= 0) {
+            battery_leds = battery::peek(battery_raw, (uint32_t)(now - peek_since));
+        } else if (battery_raw != 0 && (radio_on ? now - on_since >= BAR_AFTER_ON_MS : usb)) {
+            battery_leds = bar;
+        }
+        battery_monitor::show(battery_leds);
 
         /* One tune when the throttle lock is released. */
         bool module_is_on = output::module_is_on();

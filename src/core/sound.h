@@ -21,6 +21,7 @@ enum FlashColour : uint16_t {
     FLASH_DARK = 0,   // LED off
     FLASH_WHITE = 1,  // a step, or the end
     FLASH_GREEN = 2,  // the centre
+    FLASH_ORANGE = 3, // a weak battery
 };
 
 constexpr size_t MAX_NOTES = 10;
@@ -30,7 +31,7 @@ struct Tune {
     Note notes[MAX_NOTES];
 };
 
-/* The built-in tunes; the settings sound.on to sound.error hold one of these. */
+/* The built-in tunes; the settings sound.on to sound.battery hold one of these. */
 enum TuneId : uint8_t {
     TUNE_NONE = 0,     // no tune
     TUNE_BEEP,         // one short high tone
@@ -41,6 +42,7 @@ enum TuneId : uint8_t {
     TUNE_RISING,       // G5 A5 B5, the stock firmware's power-on tune
     TUNE_FALLING,      // B5 A5 G5, the stock firmware's power-off tune
     TUNE_TRIAD,        // C6 E6 G6
+    TUNE_WARNING,      // four short tones at 1480 Hz, the stock firmware's weak-battery warning
     TUNE_COUNT,        // number of tunes
 };
 
@@ -65,6 +67,9 @@ Tune trim_demo(int style);
 
 /* Status LED flash for a trim step to value: short white, long green at the centre, double white at the end. */
 Tune trim_flash(int value, int limit);
+
+/* Status LED flash while the battery is weak: orange four times, as the stock firmware shows it. */
+Tune weak_battery_flash();
 
 /* Duty cycle of the buzzer in percent for the setting sound.volume (0 off to 3 loud). */
 uint8_t volume_duty(int volume);

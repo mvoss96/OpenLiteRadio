@@ -11,7 +11,9 @@ target_sources(app PRIVATE
   src/module_link.cpp
   src/output.cpp
   src/storage.cpp
+  src/battery_monitor.cpp
   src/board/board.cpp
+  src/core/battery.cpp
   src/core/channels.cpp
   src/core/crsf.cpp
   src/core/joystick.cpp

@@ -235,6 +235,32 @@ for 100 ms and sets it high again afterwards. It compares the raw value with
 3552, 3391, 3298 and 3232 to light four, three, two or one battery LED, and
 also with 3800.
 
+Battery logic of the stock firmware 1.1.3, read from its code (2026-11-20):
+
+- Reading: the mean of 5 DMA samples (function 0x0800a00c), every 15 s; with
+  USB supply output 0x10 is set low, the value read after more than 100 ms,
+  then 0x10 set high. A first reading at boot after about 51 ms.
+- State (0x08008b9c, every 1 ms): "full" from 3800 on; "weak" below 3232
+  without USB (with USB the state is left as it is); "normal" between, set
+  only after 1 s without a reading at either end.
+- Battery LEDs (object 0x2000065c, every 25 ms): level 4 to 1 at 3552, 3391,
+  3298, 3232, lit from the left (mask `(0xF0 >> n) & 0xF`); "full" shows
+  four. Lit whenever the radio is on, 500 ms after power-on. Below 3232
+  all dark. With USB: the highest lit LED blinks 500 ms on, 500 ms off while
+  charging; four steady when full.
+- Weak: the status LED plays a pattern four times 150 ms on, 150 ms off
+  (colour bytes FF 4F 00, probably orange) and every 15 s the buzzer plays
+  four 150 ms tones (timer reload 485, about 1480 Hz if the power-on notes
+  are G5 A5 B5). No automatic power-off.
+- Power key: a hold counts only after a short click within 1 s before it.
+  While held, every 250 ms one more LED from the left; at 1250 ms the radio
+  switches on (LEDs off, 250 ms pause, G5 A5 B5). Switching off empties the
+  LEDs from the right over 1250 ms, then B5 A5 G5, PC13 high, 1050 ms,
+  PC15 low. A short click with the radio off blinks the level three times
+  (100 ms on, 100 ms off), then PC15 is set low 650 ms later.
+- Switched off with USB supply, the status LED shows the charge (code:
+  colour FF 00 00 breathing while charging, 00 FF 00 when full; not seen).
+
 Hypotheses: PB0 is the battery voltage through a divider, and the battery
 was nearly full during the test, which is why the reading sits near full
 scale. Output 0x10 enables charging; the stock code pauses it to measure.

@@ -25,11 +25,12 @@ enum Index {
     SOUND_SUCCESS = 7,    /* tune when a receiver is bound or a calibration is stored */
     SOUND_CANCEL = 8,     /* tune when binding is cancelled */
     SOUND_ERROR = 9,      /* tune when a command, a calibration or the USB device fails */
-    MAP_MODE = 10,        /* the assignment in use, a core::Mapping */
-    TRIM_FIRST = 11,      /* trim of the 4 stick axes in steps, in the order of core::Axis */
-    TRIM_LED = 15,        /* 1: the status LED flashes on every trim step */
-    USB_MODE = 16,        /* USB device with the radio off: 0 joystick, 1 Xbox controller */
-    CHANNEL_FIRST = 17,   /* 16 channels with CHANNEL_FIELDS values each: the Custom assignment */
+    SOUND_WEAK_BATTERY = 10, /* tune every 15 s while the battery is weak */
+    MAP_MODE = 11,        /* the assignment in use, a core::Mapping */
+    TRIM_FIRST = 12,      /* trim of the 4 stick axes in steps, in the order of core::Axis */
+    TRIM_LED = 16,        /* 1: the status LED flashes on every trim step */
+    USB_MODE = 17,        /* USB device with the radio off: 0 joystick, 1 Xbox controller */
+    CHANNEL_FIRST = 18,   /* 16 channels with CHANNEL_FIELDS values each: the Custom assignment */
     CALIBRATION_FIRST = CHANNEL_FIRST + 16 * 3, /* 4 axes with CALIBRATION_FIELDS values each */
     COUNT = CALIBRATION_FIRST + 4 * 4,
 };

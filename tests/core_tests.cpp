@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstring>
 
+#include "core/battery.h"
 #include "core/channels.h"
 #include "core/crsf.h"
 #include "core/joystick.h"
@@ -271,6 +272,7 @@ static void test_settings()
     CHECK(settings::find("sound.trim") == settings::SOUND_TRIM);
     CHECK(settings::find("sound.on") == settings::SOUND_POWER_ON);
     CHECK(settings::find("sound.error") == settings::SOUND_ERROR);
+    CHECK(settings::find("sound.battery") == settings::SOUND_WEAK_BATTERY);
     CHECK(settings::find("map.mode") == settings::MAP_MODE);
     CHECK(settings::find("trim.thr") == settings::TRIM_FIRST);
     CHECK(settings::find("trim.led") == settings::TRIM_LED);
@@ -690,7 +692,7 @@ static void test_options()
         }
         CHECK(expected == info.max + 1);
     }
-    CHECK(named == 11); /* unlock.mode, sound.trim, the seven event tones, map.mode, usb.mode */
+    CHECK(named == 12); /* unlock.mode, sound.trim, the eight event tones, map.mode, usb.mode */
     CHECK(settings::info(settings::SOUND_VOLUME).options == nullptr);
     CHECK(std::strcmp(settings::info(settings::SOUND_POWER_ON).options, "tune") == 0);
     CHECK(std::strcmp(settings::info(settings::SOUND_ERROR).options, "tune") == 0);
@@ -767,6 +769,48 @@ static void test_sound()
     CHECK(sound::volume_duty(4) == 0);
 }
 
+static void test_battery()
+{
+    /* Levels at the stock thresholds. */
+    CHECK(battery::level(3231) == 0);
+    CHECK(battery::level(3232) == 1);
+    CHECK(battery::level(3391) == 3);
+    CHECK(battery::level(4067) == 4);
+    CHECK(battery::weak(3000, false));
+    CHECK(!battery::weak(3000, true));
+    CHECK(!battery::weak(3300, false));
+
+    /* On battery: the level from the left; a weak battery blinks the leftmost LED. */
+    CHECK(battery::bar(3400, false, 0) == 0x07);
+    CHECK(battery::bar(3400, false, 700) == 0x07);
+    CHECK(battery::bar(3000, false, 100) == 0x01);
+    CHECK(battery::bar(3000, false, 600) == 0x00);
+
+    /* With USB: the highest LED blinks while charging, all four once charged. */
+    CHECK(battery::bar(3400, true, 100) == 0x07);
+    CHECK(battery::bar(3400, true, 600) == 0x03);
+    CHECK(battery::bar(3000, true, 100) == 0x01);
+    CHECK(battery::bar(3000, true, 600) == 0x00);
+    CHECK(battery::bar(3800, true, 600) == 0x0f);
+
+    /* Holding the power button: filling from the left while off, emptying from the right while on. */
+    CHECK(battery::switching_on(0) == 0x00);
+    CHECK(battery::switching_on(250) == 0x01);
+    CHECK(battery::switching_on(999) == 0x07);
+    CHECK(battery::switching_on(1000) == 0x0f);
+    CHECK(battery::switching_off(100, 0x03) == 0x03);
+    CHECK(battery::switching_off(250, 0x03) == 0x0f);
+    CHECK(battery::switching_off(500, 0x03) == 0x07);
+    CHECK(battery::switching_off(1000, 0x03) == 0x01);
+    CHECK(battery::switching_off(1250, 0x03) == 0x00);
+
+    /* Short press while off: the level three times. */
+    CHECK(battery::peek(3400, 50) == 0x07);
+    CHECK(battery::peek(3400, 150) == 0x00);
+    CHECK(battery::peek(3400, 450) == 0x07);
+    CHECK(battery::peek(3400, 600) == 0x00);
+}
+
 int main()
 {
     test_crc();
@@ -790,6 +834,7 @@ int main()
     test_xbox();
     test_sound();
     test_options();
+    test_battery();
 
     if (failures != 0) {
         std::printf("%d check(s) failed\n", failures);

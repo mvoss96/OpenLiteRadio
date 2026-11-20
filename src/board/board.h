@@ -86,6 +86,13 @@ void set_power_latch(bool on);
 /* Start or stop the ELRS module. */
 void set_module_enabled(bool enabled);
 
+/*
+ * Shift register output 0x10, high by default. The stock firmware sets it low
+ * for 100 ms before it reads the battery with USB supply. Hypothesis: it
+ * enables the charger, so that the reading is taken without charge current.
+ */
+void set_charger_enabled(bool enabled);
+
 /* Route the USB connector to this MCU (true) or to the CH9102 bridge (false). */
 void set_usb_to_controller(bool controller);
 

@@ -48,8 +48,8 @@ analysis kept outside this repository.
 | - | Read the factory calibration at 0x08007800 as default | - | dropped; the values do not fit the readings, see docs/HARDWARE.md |
 | M | Centre dead zone 1 %, not on throttle | manual, code | setting per axis, 0 to 10 %, default 1; shown and edited in the web tool; PC tests only |
 | M | Switches SA, SD (toggle), SB, SC (three positions), buttons SE, SF | manual; pins measured | pins known, hw |
-| M | Buttons: power, BIND, SETUP with short and long press | manual, code | missing |
-| S | Two five-way trim buttons | manual; key device on a software two-wire bus, measured | read in the test build, hw |
+| M | Buttons: power, BIND, SETUP with short and long press | manual, code | power on/off, BIND 1 s, SETUP held 2 s, hw |
+| S | Two five-way trim buttons | manual; key device on a software two-wire bus, measured | trim and the mode gestures at power-on, hw |
 | S | Stick calibration started on the radio | manual: SETUP long, short, short | SETUP held 2 s, a short press ends it, hw |
 
 ## Channels and mixing
@@ -57,7 +57,7 @@ analysis kept outside this repository.
 | Prio | Feature | Stock | Status |
 |---|---|---|---|
 | M | Channel order AETR, switches on channels 5 to 10 | manual, measured | default assignment, hw |
-| M | Channel assignment table with per-channel weight and reverse | code; table read | settings ch.N.*, editable in the web tool; defaults seen on the radio, changes only in the PC tests |
+| M | Channel assignment table with per-channel weight and reverse | code; table read | settings ch.N.*, editable in the web tool; AETR, TAER and a changed Custom seen on the channel outputs, hw |
 | S | Trim in 4 µs steps up to ±25, reset, stored | manual; steps and range agreed | built in 0.11.0, one step per press, no repeat on long press, hw |
 | S | Stick mode selection (mode 2 by default) | code: mode flag, meaning open | missing |
 | S | Response curve per stick (expo) | code: 512-entry table | missing |
@@ -69,13 +69,13 @@ analysis kept outside this repository.
 
 | Prio | Feature | Stock | Status |
 |---|---|---|---|
-| M | CRSF channel frames on USART1, 400000 baud, 16 channels | code | missing |
-| M | Frame period follows the module's packet rate (50 to 1000 Hz) | code | missing |
-| M | Receive link statistics, device info and parameter entries | code | device info received by the test build, hw |
-| M | Parameter access by name: Bind, BLE, packet rate, power, telemetry ratio, WiFi | code | missing |
-| M | Binding | manual: BIND long, up to 8 s | missing |
-| S | Bluetooth gamepad through the module | manual: BIND held at power-on | missing |
-| S | WiFi mode of the module | manual names the LED state only | missing |
+| M | CRSF channel frames on USART1, 400000 baud, 16 channels | code | hw; a Betaflight quad controlled through an ELRS 3.6.4 receiver |
+| M | Frame period follows the module's packet rate (50 to 1000 Hz) | code | timing held at +500 us, hw |
+| M | Receive link statistics, device info and parameter entries | code | rate and receiver in the status bar, every parameter in the configurator, hw |
+| M | Parameter access by name: Bind, BLE, packet rate, power, telemetry ratio, WiFi | code | Bind, WiFi and BLE from the radio and the host commands; all parameters read and written by the configurator through `crsf`, hw |
+| M | Binding | manual: BIND long, up to 8 s | BIND 1 s or `bind`, hw; not yet with a receiver in bind mode |
+| S | Bluetooth gamepad through the module | manual: BIND held at power-on | a trim centre held at power-on or `ble`, Bluetooth joystick seen on the PC, hw |
+| S | WiFi mode of the module | manual names the LED state only | the other trim centre held at power-on or `wifi`, the module's web page reached, hw |
 | S | Disconnection warning | manual: tone | missing |
 | C | Telemetry warnings (link quality, receiver voltage) | no | missing |
 
@@ -83,20 +83,20 @@ analysis kept outside this repository.
 
 | Prio | Feature | Stock | Status |
 |---|---|---|---|
-| M | No output while the throttle is not at its lower end at power-on | manual | lock seen held and released in the state lines, hw; not seen with the module on |
-| S | Unlock gesture selectable: throttle down, throttle up and down | - | setting unlock.mode; mode 2 only in the PC tests |
-| M | Power on/off: short press, then long press | manual; latch on PC15, measured | latch set and released by the test build, hw |
-| M | Battery voltage measurement and low-battery warning | manual; PB0 with the stock thresholds in raw counts, code | raw value read, hw; not checked on a discharged battery |
-| S | Battery level on the four-LED indicator on a short power press | manual; LEDs on shift register 0x0f, measured | LEDs switched by the test build, hw |
-| S | Charging and charge-complete indication | manual | missing |
+| M | No output while the throttle is not at its lower end at power-on | manual | lock seen held and released in the state lines, hw; with the module on, a quad controlled 0.14 s after unlocking |
+| S | Unlock gesture selectable: throttle down, throttle up and down | - | setting unlock.mode; both modes tested on the radio, hw |
+| M | Power on/off: short press, then long press | manual; latch on PC15, measured | on and off with the power button on battery tested on the radio, hw |
+| M | Battery voltage measurement and low-battery warning | manual; PB0 with the stock thresholds in raw counts, code | built in 0.17.0 as in the stock code: reading every 15 s, warning tone `sound.battery` and orange flash; not checked on a discharged battery |
+| S | Battery level on the four-LED indicator, filling and emptying while the power button is held | manual; LEDs on shift register 0x0f, measured; code | built in 0.17.0: level while on, three blinks on a short press while off |
+| S | Charging and charge-complete indication | manual; code | built in 0.17.0 on the battery LEDs only; the stock status-LED colours while off are left out |
 | C | Inactivity alarm and automatic power-off | no | missing |
 
 ## Indicators
 
 | Prio | Feature | Stock | Status |
 |---|---|---|---|
-| M | Status LED: blue working, purple Bluetooth, green WiFi, red throttle warning | manual; WS2812-type LED on PB3, measured | colours shown by the test build, hw |
-| M | Buzzer patterns for power, binding, calibration, warnings | manual, code; buzzer on PB1, measured | single tone in the test build, hw |
+| M | Status LED: blue working, purple Bluetooth, green WiFi, red throttle warning | manual; WS2812-type LED on PB3, measured | LED codes since 0.10.1, each looked at on the radio, hw |
+| M | Buzzer patterns for power, binding, calibration, warnings | manual, code; buzzer on PB1, measured | one tune per event since 0.15.0, hw |
 | S | Buzzer volume, off to loud | manual: on/off | setting sound.volume, four levels by duty cycle; levels heard with a test build (0.15.0) |
 | S | Tone per event chosen in the web tool, trim tones stock or EdgeTX, LED flash on trim steps | - | settings sound.*, trim.led; built in 0.15.0 |
 
@@ -107,8 +107,8 @@ analysis kept outside this repository.
 | M | Update without buttons and without unplugging | no | hw |
 | S | Firmware update from the web tool: OpenLiteRadio to a new version without buttons, to and from the stock firmware | stock uses the BETAFPV Configurator | 0.16.0 → stock 1.1.3 (connected) and stock → 0.16.0 (buttons) done from web/index.html, hw |
 | M | USB connector switching between controller and bridge | measured | hw |
-| S | Gamepad as HID (DirectInput) | measured | channels 1 to 8 as axes, 9 to 16 as buttons, beside the serial port; checked against the channels with injected inputs (0.7.1), not yet tried in a simulator |
-| S | Gamepad as XInput | manual: stick position while plugging in; class found in the image | Xbox 360 controller beside the serial port, chosen with `usb.mode` or both trim centres held 2 s with the radio off; checked against the channels with injected inputs over XInput (0.14.0), not yet tried in a game |
+| S | Gamepad as HID (DirectInput) | measured | channels 1 to 8 as axes, 9 to 16 as buttons, beside the serial port; checked against the channels with injected inputs (0.7.1), used in a simulator, hw |
+| S | Gamepad as XInput | manual: stick position while plugging in; class found in the image | Xbox 360 controller beside the serial port, chosen with `usb.mode` or both trim centres held 2 s with the radio off; checked against the channels with injected inputs over XInput (0.14.0), trim-centre change tested on the radio, not yet tried in a game |
 | S | Serial configuration interface with own protocol | stock uses the Configurator protocol | list, get, set, save, revert, defaults, hw |
 | S | Live stream of stick and switch values for the configuration tool | measured: 10 values at about 500 Hz | state lines 25 times per second, shown by web/index.html, hw |
 | S | USB serial port for configuration and update whenever a cable is plugged in | no: stock has USB only when off | hw |

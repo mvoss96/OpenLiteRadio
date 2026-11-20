@@ -68,6 +68,7 @@ const Field SOUND_FIELDS[] = {
     { "success", 0, LAST_TUNE, sound::TUNE_SHORT_HIGH, TUNE_OPTIONS },
     { "cancel", 0, LAST_TUNE, sound::TUNE_LOW, TUNE_OPTIONS },
     { "error", 0, LAST_TUNE, sound::TUNE_LOW_LONG, TUNE_OPTIONS },
+    { "battery", 0, LAST_TUNE, sound::TUNE_WARNING, TUNE_OPTIONS },
 };
 const Field MAP_FIELDS[] = { { "mode", 0, 2, 0, MAP_OPTIONS } };
 /* 0 joystick, 1 Xbox controller: the USB device with the radio off. */
@@ -83,7 +84,7 @@ const Field CALIBRATION_FIELD_LIST[] = { { "low", 0, 4095, 600 }, { "centre", 0,
 
 const Group GROUPS[] = {
     { "unlock", 0, 0, 1, UNLOCK_FIELDS, 0x100 },
-    { "sound", 0, 0, 9, SOUND_FIELDS, 0x110 },
+    { "sound", 0, 0, 10, SOUND_FIELDS, 0x110 },
     { "map", 0, 0, 1, MAP_FIELDS, 0x120 },
     { "trim", 0, 0, 5, TRIM_FIELDS, 0x130 },
     { "usb", 0, 0, 1, USB_FIELDS, 0x140 },

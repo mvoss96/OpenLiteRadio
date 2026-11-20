@@ -10,7 +10,7 @@ namespace indicators {
 namespace {
 
 /* LED colour of each sound::FlashColour, as bright as the state colours of core/led.cpp. */
-constexpr uint32_t FLASH_COLOURS[] = { 0x000000, 0x181818, 0x003000 };
+constexpr uint32_t FLASH_COLOURS[] = { 0x000000, 0x181818, 0x003000, 0x300800 };
 
 /* A tune being played, one note after the other. */
 struct Player {
@@ -77,7 +77,7 @@ bool play_setting(int setting)
         play(sound::tune(sound::TUNE_BEEP));
     } else if (setting == settings::SOUND_TRIM) {
         play(sound::trim_demo(settings::values[setting]));
-    } else if (setting >= settings::SOUND_POWER_ON && setting <= settings::SOUND_ERROR) {
+    } else if (setting >= settings::SOUND_POWER_ON && setting <= settings::SOUND_WEAK_BATTERY) {
         play_event(setting);
     } else {
         return false;
@@ -95,6 +95,12 @@ void trim_step(int before, int value, int limit)
     if (settings::values[settings::TRIM_LED] != 0) {
         start(flash, sound::trim_flash(value, limit));
     }
+}
+
+void weak_battery()
+{
+    play_event(settings::SOUND_WEAK_BATTERY);
+    start(flash, sound::weak_battery_flash());
 }
 
 bool playing()

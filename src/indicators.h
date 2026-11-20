@@ -12,7 +12,7 @@ namespace indicators {
 /* Play a tune at the volume in sound.volume; it replaces one still playing. */
 void play(const sound::Tune &tune);
 
-/* Play the tune chosen in an event's setting, settings::SOUND_POWER_ON to SOUND_ERROR. */
+/* Play the tune chosen in an event's setting, settings::SOUND_POWER_ON to SOUND_WEAK_BATTERY. */
 void play_event(int setting);
 
 /*
@@ -24,6 +24,9 @@ bool play_setting(int setting);
 
 /* Tone (sound.trim) and LED flash (trim.led) for a trim step from before to value of -limit..limit. */
 void trim_step(int before, int value, int limit);
+
+/* Weak battery: the tune in sound.battery and four orange flashes of the status LED. */
+void weak_battery();
 
 /* True while a tune is still playing on the buzzer. */
 bool playing();

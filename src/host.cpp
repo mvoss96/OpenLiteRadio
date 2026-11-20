@@ -16,9 +16,9 @@
  *   stream 0|1        stop or start the state lines
  *   led R G B         status LED colour, 0..255 each; "led auto" returns control
  *   beep HZ MS        tone at the volume in sound.volume
- *   play KEY          play what a setting sounds like: the tune of sound.on .. sound.error,
+ *   play KEY          play what a setting sounds like: the tune of sound.on .. sound.battery,
  *                     a few trim steps for sound.trim, one beep for sound.volume
- *   batleds MASK      battery LEDs, bit 0 is the leftmost
+ *   batleds MASK      battery LEDs, bit 0 is the leftmost; "batleds auto" returns control
  *   module 0|1        ELRS module off or on
  *   bind              start binding, as a long press of BIND does
  *   wifi              start the module's WiFi, as the right trim centre at switch-on does
@@ -57,6 +57,7 @@
 #include <cmsis_core.h>
 #include <zephyr/sys/util.h>
 
+#include "battery_monitor.h"
 #include "board/board.h"
 #include "calibration.h"
 #include "core/settings.h"
@@ -201,7 +202,8 @@ void handle_command(char *line)
 
         printk(indicators::play_setting(index) ? "ok play\n" : "error unknown key\n");
     } else if (strcmp(command, "batleds") == 0) {
-        board::set_battery_leds((uint8_t)number(0));
+        battery_monitor::set_from_host(arguments[0] != nullptr && strcmp(arguments[0], "auto") != 0,
+                                       (uint8_t)number(0));
     } else if (strcmp(command, "module") == 0) {
         module_link::set_module_on(number(0) != 0);
     } else if (strcmp(command, "frames") == 0) {
@@ -374,7 +376,7 @@ void print_state(const output::Snapshot &snapshot, bool radio_on)
            inputs.sticks[0], inputs.sticks[1], inputs.sticks[2], inputs.sticks[3],
            inputs.sa, inputs.sb, inputs.sc, inputs.sd, inputs.se, inputs.sf,
            inputs.bind, inputs.setup, inputs.power, inputs.trim_left,
-           inputs.trim_right, inputs.trims_valid, board::battery_raw(),
+           inputs.trim_right, inputs.trims_valid, battery_monitor::raw(),
            board::usb_supply_present(), radio_on, output::module_is_on());
     const int16_t *trim = &settings::values[settings::TRIM_FIRST];
 
