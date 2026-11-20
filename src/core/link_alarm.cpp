@@ -13,7 +13,7 @@ Event tick(State &state, bool active, bool connected)
 
     if (connected) {
         state.level = Level::GOOD;
-        return before == Level::LOST ? Event::BACK : Event::NONE;
+        return before == Level::GOOD ? Event::NONE : Event::CONNECTED;
     }
     if (before != Level::GOOD) {
         return Event::NONE; /* no receiver seen yet, or already reported as lost */

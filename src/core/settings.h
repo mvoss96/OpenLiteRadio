@@ -27,7 +27,7 @@ enum Index {
     SOUND_ERROR = 9,      /* tune when a command, a calibration or the USB device fails */
     SOUND_WEAK_BATTERY = 10, /* tune every 15 s while the battery is weak */
     SOUND_LINK_LOST = 11,    /* tune when the receiver is gone */
-    SOUND_LINK_BACK = 12,    /* tune when the receiver is back after it was gone */
+    SOUND_CONNECTED = 12,    /* tune when a receiver answers, the first time or after it was gone */
     MAP_MODE = 13,        /* the assignment in use, a core::Mapping */
     TRIM_FIRST = 14,      /* trim of the 4 stick axes in steps, in the order of core::Axis */
     TRIM_LED = 18,        /* 1: the status LED flashes on every trim step */

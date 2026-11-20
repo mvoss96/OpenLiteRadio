@@ -70,7 +70,7 @@ const Field SOUND_FIELDS[] = {
     { "error", 0, LAST_TUNE, sound::TUNE_LOW_LONG, TUNE_OPTIONS },
     { "battery", 0, LAST_TUNE, sound::TUNE_WARNING, TUNE_OPTIONS },
     { "lost", 0, LAST_TUNE, sound::TUNE_LOW_LONG, TUNE_OPTIONS },
-    { "back", 0, LAST_TUNE, sound::TUNE_TRIAD, TUNE_OPTIONS },
+    { "connect", 0, LAST_TUNE, sound::TUNE_TRIAD, TUNE_OPTIONS },
 };
 const Field MAP_FIELDS[] = { { "mode", 0, 2, 0, MAP_OPTIONS } };
 /* 0 joystick, 1 Xbox controller: the USB device with the radio off. */

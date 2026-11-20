@@ -202,9 +202,9 @@ static void trim_tick(uint8_t left, uint8_t right)
 }
 
 /*
- * Link to the receiver while the radio sends to one: the tune of sound.lost
- * once when no link statistics came for 1 s, and of sound.back when the
- * receiver answers again.
+ * Link to the receiver while the radio sends to one: the tune of
+ * sound.connect when a receiver answers, the first time or after a loss, and
+ * of sound.lost once when no link statistics came for 1 s.
  */
 static void link_tick(core::Mode mode)
 {
@@ -216,8 +216,8 @@ static void link_tick(core::Mode mode)
 
     if (event == link_alarm::Event::LOST) {
         indicators::play_event(settings::SOUND_LINK_LOST);
-    } else if (event == link_alarm::Event::BACK) {
-        indicators::play_event(settings::SOUND_LINK_BACK);
+    } else if (event == link_alarm::Event::CONNECTED) {
+        indicators::play_event(settings::SOUND_CONNECTED);
     }
 }
 

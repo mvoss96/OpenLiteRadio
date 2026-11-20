@@ -468,14 +468,15 @@ at 1480 Hz with 150 ms pauses, the stock firmware's warning) sounds with
 every weak reading, see "Battery". Still open: tones for key presses and
 before the automatic power-off, which waits for that feature.
 
-Link warning (`src/core/link_alarm.cpp`, with tests): while the radio sends
+Link tones (`src/core/link_alarm.cpp`, with tests), while the radio sends
 to a receiver (modes ELRS_LOCKED, ELRS_ACTIVE and the PC modes, no command
-being started), and only after a receiver was connected once since then:
+being started):
 
-- no link statistics with a quality above 0 for 1 s: the tune in
-  `sound.lost` (default `low_long`);
-- the receiver answering again after that: the tune in `sound.back`
-  (default `triad`), once.
+- a receiver answers, the first time since then or again after a loss: the
+  tune in `sound.connect` (default `triad`); after a successful binding it
+  follows the tune in `sound.success`;
+- no link statistics with a quality above 0 for 1 s after a receiver was
+  connected: the tune in `sound.lost` (default `low_long`).
 
 Each tune sounds once per change, as in EdgeTX. There is no warning for a low
 link quality; the battery LEDs show it on request (see "Battery"). Binding, WiFi,
@@ -685,7 +686,7 @@ To the radio:
 | `stream 0` / `stream 1` | stop or start the state lines |
 | `led R G B` | status LED colour, 0 to 255 each; `led auto` returns control to the firmware |
 | `beep HZ MS` | tone at the volume in `sound.volume` |
-| `play KEY` | play what a setting sounds like: the tune chosen in `sound.on` to `sound.back`, a few trim steps away from the centre and back for `sound.trim`, one beep for `sound.volume`; answers `ok play` or `error unknown key` |
+| `play KEY` | play what a setting sounds like: the tune chosen in `sound.on` to `sound.connect`, a few trim steps away from the centre and back for `sound.trim`, one beep for `sound.volume`; answers `ok play` or `error unknown key` |
 | `batleds MASK` | battery LEDs, bit 0 is the leftmost, until `batleds auto` |
 | `bind` | start binding, as holding BIND for 1 s does |
 | `wifi` | start the module's WiFi, as the right trim centre at switch-on does |

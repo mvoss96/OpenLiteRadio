@@ -817,20 +817,23 @@ static void test_link_alarm()
     using link_alarm::Event;
     link_alarm::State state;
 
-    /* No receiver yet: nothing, also while no link statistics come. */
+    /* No receiver yet: nothing; the first answer is a connection. */
     CHECK(link_alarm::tick(state, true, false) == Event::NONE);
+    CHECK(link_alarm::tick(state, true, true) == Event::CONNECTED);
     CHECK(link_alarm::tick(state, true, true) == Event::NONE);
 
-    /* Lost once, however long it stays lost, then back once. */
+    /* Lost once, however long it stays lost, then connected again once. */
     CHECK(link_alarm::tick(state, true, false) == Event::LOST);
     CHECK(link_alarm::tick(state, true, false) == Event::NONE);
-    CHECK(link_alarm::tick(state, true, true) == Event::BACK);
+    CHECK(link_alarm::tick(state, true, true) == Event::CONNECTED);
     CHECK(link_alarm::tick(state, true, true) == Event::NONE);
     CHECK(link_alarm::tick(state, true, false) == Event::LOST);
 
     /* Not active: reset, so a receiver that is not there after binding or WiFi does not warn. */
     CHECK(link_alarm::tick(state, false, false) == Event::NONE);
     CHECK(link_alarm::tick(state, true, false) == Event::NONE);
+    CHECK(link_alarm::tick(state, false, true) == Event::NONE);
+    CHECK(link_alarm::tick(state, true, true) == Event::CONNECTED);
 
     /* Link quality on the battery LEDs. */
     CHECK(battery::link_quality(false, 100) == 0x00);
@@ -844,7 +847,8 @@ static void test_link_alarm()
 
     /* Keys and defaults of the settings. */
     CHECK(settings::find("sound.lost") == settings::SOUND_LINK_LOST);
-    CHECK(settings::find("sound.back") == settings::SOUND_LINK_BACK);
+    CHECK(settings::find("sound.connect") == settings::SOUND_CONNECTED);
+    CHECK(settings::find("sound.back") == -1);
     CHECK(settings::find("sound.signal") == -1);
     CHECK(settings::find("sound.repeat") == -1);
 }

@@ -16,7 +16,7 @@
  *   stream 0|1        stop or start the state lines
  *   led R G B         status LED colour, 0..255 each; "led auto" returns control
  *   beep HZ MS        tone at the volume in sound.volume
- *   play KEY          play what a setting sounds like: the tune of sound.on .. sound.back,
+ *   play KEY          play what a setting sounds like: the tune of sound.on .. sound.connect,
  *                     a few trim steps for sound.trim, one beep for sound.volume
  *   batleds MASK      battery LEDs, bit 0 is the leftmost; "batleds auto" returns control
  *   module 0|1        ELRS module off or on

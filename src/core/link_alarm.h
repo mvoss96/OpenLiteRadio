@@ -1,6 +1,6 @@
 /*
- * When to warn about the link to the receiver: a lost link, and the link
- * coming back. No hardware access.
+ * When to sound for the link to the receiver: the link established, and the
+ * link lost. No hardware access.
  */
 
 #pragma once
@@ -11,16 +11,16 @@ namespace link_alarm {
 
 /* What the link looks like. */
 enum class Level : uint8_t {
-    NONE,  // no receiver seen since the warning became active
+    NONE,  // no receiver seen since the radio started sending
     GOOD,  // receiver connected
     LOST,  // receiver was connected and is gone
 };
 
 /* What to play now. */
 enum class Event : uint8_t {
-    NONE,  // nothing
-    LOST,  // the link was lost
-    BACK,  // the link came back after it was lost
+    NONE,       // nothing
+    CONNECTED,  // a receiver answers: the first time, or again after the link was lost
+    LOST,       // the link was lost
 };
 
 struct State {
