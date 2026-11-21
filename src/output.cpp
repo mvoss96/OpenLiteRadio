@@ -24,7 +24,7 @@ constexpr uint32_t DEFAULT_PERIOD_US = 4000;
 /* Period of the USB controller's reports while the module is off; the module's timing does not apply. */
 constexpr uint32_t USB_PERIOD_US = 4000;
 constexpr int64_t INJECT_MS = 10000;
-/* Pings while locked; the module drops the connection after 1 s without frames. */
+/* Pings in WiFi mode; the module drops the connection after 1 s without frames. */
 constexpr int64_t PING_INTERVAL_MS = 20;
 
 /*
@@ -32,7 +32,7 @@ constexpr int64_t PING_INTERVAL_MS = 20;
  * settings::values.
  */
 atomic_t module_on;
-/* While set no channel frames are sent: calibration run, writing to flash. */
+/* While set the output is locked and sends safe values: calibration run, writing to flash. */
 atomic_t hold_output;
 /* Set to lock the output once; the control thread clears it. */
 atomic_t relock_requested;

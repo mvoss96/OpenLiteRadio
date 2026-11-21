@@ -168,9 +168,10 @@ output, USB HID reports.
 tools/flash.py speaks the vendor updater's protocol; pyserial is already in
 the Python environment. It needs one of two starting states:
 
-- Firmware built with `CONFIG_UPDATER_ENTRY` is running and shows its USB
-  console (2FE3:0005 from 0.7.0 on, 2FE3:0004 before). The tool opens the console at 1200 baud, the firmware
-  restarts into the updater, the image is written, and the controller restarts
+- Firmware built with `CONFIG_UPDATER_ENTRY` is running with the radio
+  switched off and shows its USB console (2FE3:0005 with the joystick,
+  2FE3:0007 with the Xbox controller). The tool opens the console at 1200
+  baud, the firmware restarts into the updater, the image is written, and the controller restarts
   into it. Nothing on the radio has to be touched.
 - The updater (0483:5740) is already present after the button combination:
   USB unplugged, hold SETUP and power until the double beep, plug USB in. This
@@ -181,7 +182,7 @@ the Python environment. It needs one of two starting states:
 prj.conf. It adds src/updater_entry.c:
 
 - `updater_enter()` stores a marker in RAM and resets. The firmware calls it
-  when the serial port's baud rate is 1200.
+  when the serial port's baud rate is 1200 and the ELRS module is off.
 - `soc_early_reset_hook()`, the first code Zephyr runs after reset, finds the
   marker and continues in the bootloader's update branch. Zephyr provides this
   hook through `CONFIG_SOC_EARLY_RESET_HOOK`.

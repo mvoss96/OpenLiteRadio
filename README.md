@@ -73,20 +73,25 @@ be open in one program. The page is in German.
   "Erweitert" weight and reverse. Choosing a taken channel asks whether to
   swap or replace. In a narrow window the labels become a list below the
   drawing. "Knüppel kalibrieren" starts the stick calibration run.
-- "Einstellungen" holds the unlock gesture and the tones.
-- "System" shows firmware and battery readings, test buttons for tone,
-  module and binding, the fixed button combinations, and every setting the
-  radio reports in raw form.
+- "ELRS-Modul" shows and changes every parameter the module offers, with the
+  radio switched on.
+- "Einstellungen" holds the unlock gesture, the USB controller's form, the
+  trim LED and the tones.
+- "System" shows firmware and battery readings, the firmware update, test
+  buttons for tone and binding, the fixed button combinations, and every
+  setting the radio reports in raw form.
 
 Every change is stored on the radio at once. The page needs no installation; the browser reaches the
 radio's USB serial port through the Web Serial API.
 
 ## USB joystick
 
-Plugged in, the radio is also a game controller: channels 1 to 8 are its
-axes, channels 9 to 16 its buttons, so a simulator sees the same assignment
-as the receiver. It works as soon as USB is connected, without switching the
-radio on and without the throttle lock.
+Plugged in and switched off, the radio is a game controller: channels 1 to 8
+are its axes, channels 9 to 16 its buttons, so a simulator sees the same
+assignment as the receiver. It needs no throttle lock. The setting
+`usb.mode`, or both trim centres held for 2 s, makes it an Xbox 360
+controller instead. Switched on, the radio is the serial port only, so a
+model never follows the simulator.
 
 ```powershell
 .venv/Scripts/python tools/joystick_test.py

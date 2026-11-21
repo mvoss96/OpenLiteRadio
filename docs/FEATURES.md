@@ -20,8 +20,8 @@ analysis kept outside this repository.
 ## Decisions
 
 - Configuration uses an own protocol over the USB serial port. Compatibility
-  with the BETAFPV Configurator is not a goal. A web configuration tool is
-  planned as a separate project; a browser can reach a USB serial port through
+  with the BETAFPV Configurator is not a goal. The web configuration tool is
+  the one file `web/index.html`; a browser reaches the USB serial port through
   the Web Serial API (Chrome, Edge).
 - Button and switch assignments are settings, editable from that tool. Without
   own settings the radio behaves as the stock manual describes.

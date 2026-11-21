@@ -85,10 +85,10 @@ Each further thread would cost about 1 KiB of stack.
 Agreed on 2026-11-19. The radio is in exactly one mode at a time: off, a
 USB controller at a PC, or one of the ELRS modes. It is never a USB
 controller and a remote control for a model at once, so that a model on the
-bench does not follow the simulator. Today the logic is spread over flags in
-`src/output.cpp`; it is to become one tested state machine in
-`src/core/mode.cpp`. In the diagrams, dashed states are planned; the rest is
-built.
+bench does not follow the simulator. The mode is decided by one tested state
+machine in `src/core/mode.cpp`, which the control thread in `src/output.cpp`
+runs once per period. In the diagrams, dashed states are planned; the rest
+is built.
 
 ```mermaid
 flowchart LR
@@ -112,10 +112,10 @@ enum class Mode : uint8_t {
     OFF,              // radio off, no PC: nothing (charging only)
     USB_JOYSTICK,     // radio off at a PC: DirectInput joystick from the controls
     USB_XBOX,         // radio off at a PC: Xbox controller from the controls
-    ELRS_LOCKED,      // radio on: channel frames with safe values
-    ELRS_ACTIVE,      // radio on: frames with the controls
+    ELRS_LOCKED,      // module on: channel frames with safe values until the unlock gesture
+    ELRS_ACTIVE,      // module on: channel frames with the controls
     ELRS_HOST_READY,  // PC control allowed at the radio: as locked until the PC sends values
-    ELRS_HOST,        // frames with the values from the PC, controls ignored
+    ELRS_HOST,        // channel frames with the values from the PC, controls ignored
     ELRS_BINDING,     // bind command sent; the module looks for a receiver
     BLUETOOTH,        // module is a Bluetooth joystick: frames with the controls, no lock
     WIFI,             // module runs its web page for updates: pings only
@@ -560,11 +560,11 @@ held 1 s to switch on without the stock firmware's click before.
 | Stage | Result | State |
 |-------|--------|-------|
 | 1 | board layer, power on/off, LED, buzzer, host protocol with live view | built, see below |
-| 2 | flying: factory calibration, channels, CRSF at the module's rate, throttle lock, binding | in progress, see below |
-| 3 | settings storage, trim, calibration on the radio | storage and calibration built, trim open |
+| 2 | flying: channels, CRSF at the module's rate, throttle lock, binding | built, see below; binding not yet tried with a receiver, not flown |
+| 3 | settings storage, trim, calibration on the radio | built |
 | 4 | USB joystick, then Xbox mode | both built (DirectInput joystick and Xbox controller, each beside the serial port); per-element Xbox assignment open |
-| 5 | configuration protocol for the web tool | settings commands, the configurator's views, the USB mode and firmware update built; ELRS parameters, buttons and backup open |
-| 6 | Bluetooth, WiFi, battery display, remaining features | battery display built; the rest open |
+| 5 | configuration protocol for the web tool | settings commands, the configurator's views, the USB mode, firmware update and ELRS parameters built; button actions and backup open |
+| 6 | Bluetooth, WiFi, battery display, remaining features | Bluetooth, WiFi and the battery display built; PC control and automatic power-off open |
 
 Stage 1 as built: the power button switches the radio on after 1 s and off
 after 1.25 s. The status LED follows the codes in "LEDs".
@@ -591,8 +591,9 @@ Stage 2 as built so far:
   and +580 µs and the module sends only its regular timing frame every
   200 ms.
 - Throttle lock: the radio starts locked. After every start of the module
-  and after every changed setting no frame is sent until the unlock gesture
-  in `unlock.mode` was made: 1 throttle at its lower end (default), 2
+  and after every changed setting the module gets safe channel frames
+  instead of the controls until the unlock gesture in `unlock.mode` was
+  made: 1 throttle at its lower end (default), 2
   throttle at its upper and then its lower end. With 1 and the throttle
   already down, a lock from a changed setting or from `lock` is released in
   the next frame. The status LED is red while
@@ -616,7 +617,7 @@ Stage 2 as built so far:
   7 s and the module kept answering pings; `ble` gave the Bluetooth mode.
 - Stick calibration, taken from stage 3 because the factory calibration does
   not fit the readings (docs/HARDWARE.md): SETUP held for 2 s starts a run,
-  the status LED blinks yellow and no channel frames are sent. The sticks are
+  the status LED blinks yellow and the module gets safe channel frames. The sticks are
   moved to all ends. A short press of SETUP ends the run with the right stick
   released and the throttle left at its lower end. The released readings
   become the centres and the throttle's lower end, the other ends are the

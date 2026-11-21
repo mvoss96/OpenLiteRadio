@@ -1,7 +1,8 @@
 /*
  * The control thread: reads sticks and switches, computes the channels and
- * sends them once per frame period to the ELRS module and as a USB joystick
- * report. The other functions are called from the main thread.
+ * sends them once per frame period to the ELRS module or, with the module
+ * off, every 4 ms as a USB joystick or Xbox controller report. The other
+ * functions are called from the main thread.
  */
 
 #pragma once
@@ -20,7 +21,7 @@ struct Snapshot {
     board::Inputs inputs;
     uint16_t channels[core::CHANNEL_COUNT];
     core::Mode mode;
-    bool locked; /* no channel frames go out: every mode except ELRS active */
+    bool locked; /* the controls do not reach a model: every mode except ELRS active */
 };
 
 /* Test inputs that replace the readings, see inject(); one bit each. */
@@ -53,9 +54,10 @@ core::ModuleTask module_task_now();
 void sent_counts(uint32_t &sent, uint32_t &not_sent);
 
 /*
- * Stop or allow channel frames, e.g. for a calibration run or a flash write.
- * Returns the previous state, so that a caller can restore it. After a hold
- * the unlock gesture is needed again.
+ * Hold the output or release it, e.g. for a calibration run or a flash
+ * write; while held the module gets safe channel frames. Returns the
+ * previous state, so that a caller can restore it. After a hold the unlock
+ * gesture is needed again.
  */
 bool set_hold(bool on);
 

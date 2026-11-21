@@ -339,8 +339,7 @@ Hypotheses from these tests:
 ## Unverified in this implementation
 
 Option-byte watchdog setting, volts per count of the battery input, the
-function of the shift register outputs 0x20 and 0x80, calibrated voltage monitoring, CRSF output and timing, USB HID
-reports, and STM32 drivers other than clock, GPIO, ADC and USB device.
-No settings writes are enabled during feasibility work. The largest image
-loaded through the stock USB updater and seen running is 48516 bytes; the
-stock application is 58672 bytes.
+function of the shift register outputs 0x20 and 0x80, the battery input on a
+partly discharged battery, and thread stack high-water marks. The largest
+image loaded through the vendor USB updater and seen running is 73012 bytes
+(firmware 0.19.1); the stock application is 58672 bytes.

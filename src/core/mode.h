@@ -6,8 +6,8 @@
 
 /*
  * The mode of the radio: exactly one at a time, see "Operating modes" in
- * docs/ARCHITECTURE.md. Built so far: off, USB joystick, ELRS locked and
- * active, binding, Bluetooth and WiFi; Xbox and PC control have no
+ * docs/ARCHITECTURE.md. Built so far: off, USB joystick and Xbox controller,
+ * ELRS locked and active, binding, Bluetooth and WiFi; PC control has no
  * transitions yet.
  */
 namespace core {
@@ -17,13 +17,13 @@ enum class Mode : uint8_t {
     OFF,              // radio off, no PC: nothing (charging only)
     USB_JOYSTICK,     // radio off at a PC: DirectInput joystick from the controls
     USB_XBOX,         // radio off at a PC: Xbox controller from the controls
-    ELRS_LOCKED,      // module on: no channel frames until the unlock gesture
+    ELRS_LOCKED,      // module on: channel frames with safe values until the unlock gesture
     ELRS_ACTIVE,      // module on: channel frames with the controls
     ELRS_HOST_READY,  // PC control allowed at the radio: as locked until the PC sends values
     ELRS_HOST,        // channel frames with the values from the PC, controls ignored
     ELRS_BINDING,     // bind command sent; the module looks for a receiver
     BLUETOOTH,        // module is a Bluetooth joystick: frames with the controls, no lock
-    WIFI,             // module runs its web page for updates: no frames
+    WIFI,             // module runs its web page for updates: pings only
 };
 
 /* Name of a mode for the state line, e.g. "elrs_active". */

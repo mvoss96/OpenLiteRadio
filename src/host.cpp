@@ -30,6 +30,7 @@
  *   list              report all settings
  *   get KEY           report one setting
  *   set KEY VALUE     change a setting; it applies at once and is lost at power-off
+ *                     unless stored; usb.mode is stored at once
  *   save              store all settings
  *   revert            return to the stored settings
  *   defaults          set all settings except the stick calibration (cal.N.*) to their
