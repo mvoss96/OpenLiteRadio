@@ -2,7 +2,7 @@
 
 If the controller runs firmware built with CONFIG_UPDATER_ENTRY, its USB
 console is opened at 1200 baud, which makes the firmware restart into the
-updater. If the updater is already present (entered with SETUP + power), the
+updater while the radio is switched off (ELRS module off). If the updater is already present (entered with SETUP + power), the
 image is sent directly.
 
 Updater protocol, as used by the BETAFPV Configurator:
@@ -44,7 +44,8 @@ ACK = 0x06
 VERIFIED = 0x15
 TARGET_NAME = b"Bootloader_F.bin\x00"
 BLOCK = 1024
-MAX_IMAGE = 0x18000
+# The image must end below the settings pages at 0x0801F000.
+MAX_IMAGE = 0x17000
 
 
 def crc16_xmodem(data):
@@ -166,7 +167,7 @@ def main():
 
     image = args.image.read_bytes()
     if not 8 <= len(image) <= MAX_IMAGE:
-        sys.exit("image must fit into the 96 KiB application area")
+        sys.exit("image must fit into the 92 KiB below the settings pages")
     print(f"{args.image}: {len(image)} bytes, SHA-256 {hashlib.sha256(image).hexdigest()}")
 
     # Other STM32 devices, e.g. a Betaflight flight controller, use the updater's IDs
@@ -178,7 +179,8 @@ def main():
         updater = wait_port(UPDATER_IDS, 15, ignore=present)
         if updater is None:
             if find_port(CONSOLE_IDS):
-                sys.exit("the updater did not appear; is another program using the console port?")
+                sys.exit("the updater did not appear; switch the radio off (the firmware ignores the "
+                         "request while the ELRS module is on) and close other programs using the console port")
             sys.exit("the updater did not appear")
         time.sleep(1.0)
     elif args.port:

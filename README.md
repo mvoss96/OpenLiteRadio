@@ -53,8 +53,8 @@ vendor USB bootloader.
 ```
 
 `tools/flash.py` sends the image through the vendor USB updater, which only
-writes the application area. While this firmware is running, the tool switches
-the radio into update mode and back by itself. Otherwise enter update mode with
+writes the application area. While this firmware is running and the radio is
+switched off, the tool switches the radio into update mode and back by itself. Otherwise enter update mode with
 the buttons first: USB unplugged, hold SETUP and power until the double beep,
 plug USB in. Details are in `docs/ZEPHYR.md`.
 

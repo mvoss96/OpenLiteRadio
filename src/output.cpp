@@ -21,6 +21,8 @@ namespace {
 
 /* Frame period until the module reports its own: 250 Hz. */
 constexpr uint32_t DEFAULT_PERIOD_US = 4000;
+/* Period of the USB controller's reports while the module is off; the module's timing does not apply. */
+constexpr uint32_t USB_PERIOD_US = 4000;
 constexpr int64_t INJECT_MS = 10000;
 /* Pings while locked; the module drops the connection after 1 s without frames. */
 constexpr int64_t PING_INTERVAL_MS = 20;
@@ -118,9 +120,12 @@ void control_thread(void *, void *, void *)
          * Each frame time follows from the previous one, not from the moment
          * this loop gets here, so neither the work below nor the rounding to
          * kernel ticks (100 us) adds up from frame to frame. A correction
-         * from the module shifts one period.
+         * from the module shifts one period. With the module off the period
+         * is fixed.
          */
-        next_us += (int64_t)atomic_get(&period_us) + (int64_t)atomic_set(&frame_correction_us, 0);
+        next_us += atomic_get(&module_on) != 0
+                       ? (int64_t)atomic_get(&period_us) + (int64_t)atomic_set(&frame_correction_us, 0)
+                       : (int64_t)USB_PERIOD_US;
 
         int64_t now_us = k_ticks_to_us_floor64(k_uptime_ticks());
 
@@ -284,7 +289,7 @@ void set_frame_timing(uint32_t interval_us, int32_t offset_us)
 
 uint32_t frame_period_us()
 {
-    return (uint32_t)atomic_get(&period_us);
+    return module_is_on() ? (uint32_t)atomic_get(&period_us) : USB_PERIOD_US;
 }
 
 void snapshot(Snapshot &snapshot)

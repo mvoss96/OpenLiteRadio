@@ -25,14 +25,16 @@
  *   ble               start the module's Bluetooth joystick, as the left trim centre at
  *                     switch-on does; WiFi and Bluetooth end when the module is switched off
  *   frames 0|1        print every frame received from the module as "rx" plus hex bytes
- *   crsf HEX          send one complete CRSF frame (hex, CRC included) to the module
+ *   crsf HEX          send one complete CRSF frame (hex, CRC included) to the module: a ping,
+ *                     a parameter read or a parameter write; other types are refused
  *   list              report all settings
  *   get KEY           report one setting
  *   set KEY VALUE     change a setting; it applies at once and is lost at power-off
  *   save              store all settings
  *   revert            return to the stored settings
  *   defaults          set all settings except the stick calibration (cal.N.*) to their
- *                     defaults, without storing them
+ *                     defaults; stored at once only if usb.mode changed, since the port
+ *                     then goes away
  *   calibrate start|end|cancel   stick calibration run, as SETUP does; cancel keeps the old values
  *   inject KEY=VALUE ...   test inputs: replace sticks (a,b,c,d), sa..sf for 10 s
  *                     after the last inject line, only while the module is off;
@@ -60,6 +62,7 @@
 #include "battery_monitor.h"
 #include "board/board.h"
 #include "calibration.h"
+#include "core/crsf.h"
 #include "core/settings.h"
 #include "indicators.h"
 #include "module_link.h"
@@ -210,7 +213,7 @@ void handle_command(char *line)
         module_link::set_show_frames(number(0) != 0);
     } else if (strcmp(command, "crsf") == 0 && arguments[0] != nullptr) {
         /* One complete frame in hex, CRC included, passed to the module unchanged. */
-        uint8_t frame[26]; /* a channel frame is the longest one sent */
+        uint8_t frame[26];
         size_t size = strlen(arguments[0]) / 2;
         bool valid = size >= 4 && size <= sizeof(frame) && strlen(arguments[0]) % 2 == 0;
 
@@ -221,6 +224,9 @@ void handle_command(char *line)
             frame[i] = (uint8_t)strtoul(pair, &end, 16);
             valid = end == pair + 2;
         }
+        /* Only what reads and writes the module's parameters; channel frames come from the control thread alone. */
+        valid = valid && (frame[2] == crsf::TYPE_PING || frame[2] == crsf::TYPE_PARAMETER_READ ||
+                          frame[2] == crsf::TYPE_PARAMETER_WRITE);
         /* The control thread's frame may still be on the line; it takes less than 1 ms. */
         bool sent = false;
 
@@ -265,6 +271,8 @@ void handle_command(char *line)
     } else if (strcmp(command, "revert") == 0 || strcmp(command, "defaults") == 0) {
         /* The output locks first, and the control thread never sees half of the change. */
         output::relock();
+        int16_t usb_mode = settings::values[settings::USB_MODE];
+
         k_sched_lock();
         if (command[0] == 'r') {
             storage::load_settings();
@@ -275,7 +283,13 @@ void handle_command(char *line)
             }
         }
         k_sched_unlock();
-        printk("ok %s\n", command);
+        /* As with "set usb.mode": the port goes away with the USB form, before a "save" may arrive. */
+        if (command[0] == 'd' && settings::values[settings::USB_MODE] != usb_mode &&
+            !storage::save_settings()) {
+            printk("error storage\n");
+        } else {
+            printk("ok %s\n", command);
+        }
     } else if (strcmp(command, "calibrate") == 0 && arguments[0] != nullptr) {
         if (strcmp(arguments[0], "start") == 0) {
             calibration::start();
@@ -296,17 +310,25 @@ void handle_command(char *line)
 /* Collect characters from the host into lines. */
 void poll()
 {
-    static char line[64]; /* "crsf" with a channel frame needs 57 characters */
+    static char line[64]; /* "crsf" with a frame of 26 bytes needs 57 characters */
     static size_t length;
+    static bool too_long; /* the line did not fit and is not run */
     unsigned char character;
 
     while (uart_poll_in(console, &character) == 0) {
         if (character == '\n' || character == '\r') {
-            line[length] = '\0';
-            handle_command(line);
+            if (too_long) {
+                printk("error line too long\n");
+            } else {
+                line[length] = '\0';
+                handle_command(line);
+            }
             length = 0;
+            too_long = false;
         } else if (length < sizeof(line) - 1) {
             line[length++] = (char)character;
+        } else {
+            too_long = true;
         }
     }
 }

@@ -204,19 +204,27 @@ static void trim_tick(uint8_t left, uint8_t right)
 /*
  * Link to the receiver while the radio sends to one: the tune of
  * sound.connect when a receiver answers, the first time or after a loss, and
- * of sound.lost once when no link statistics came for 1 s.
+ * of sound.lost once when no link statistics came for 1 s. The connect tune
+ * waits for a tune still playing, such as the one after a successful binding.
  */
 static void link_tick(core::Mode mode)
 {
     static link_alarm::State state;
+    static bool connect_pending;
     bool active = (mode == core::Mode::ELRS_LOCKED || mode == core::Mode::ELRS_ACTIVE ||
                    mode == core::Mode::ELRS_HOST_READY || mode == core::Mode::ELRS_HOST) &&
                   module_link::starting_task() == core::ModuleTask::NONE;
     link_alarm::Event event = link_alarm::tick(state, active, module_link::receiver_connected());
 
+    if (event == link_alarm::Event::CONNECTED) {
+        connect_pending = true;
+    } else if (event == link_alarm::Event::LOST || !active) {
+        connect_pending = false;
+    }
     if (event == link_alarm::Event::LOST) {
         indicators::play_event(settings::SOUND_LINK_LOST);
-    } else if (event == link_alarm::Event::CONNECTED) {
+    } else if (connect_pending && !indicators::playing()) {
+        connect_pending = false;
         indicators::play_event(settings::SOUND_CONNECTED);
     }
 }
@@ -387,7 +395,8 @@ int main(void)
         uint32_t baud = 0;
 
         uart_line_ctrl_get(console, UART_LINE_CTRL_BAUD_RATE, &baud);
-        if (baud == UPDATER_REQUEST_BAUD) {
+        /* Not while the module is on: the restart would cut the link to a model. */
+        if (baud == UPDATER_REQUEST_BAUD && !output::module_is_on()) {
             updater_enter();
         }
         k_msleep(LOOP_MS);

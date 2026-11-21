@@ -833,7 +833,7 @@ setInterval(() => { if (elrs.open && elrs.moduleOn && elrs.queued === 0) elrsQue
 // an older page with newer code.
 
 // The project's version from the file VERSION; test.ps1 checks that both agree.
-const WEB_VERSION = "0.19.0";
+const WEB_VERSION = "0.19.1";
 // Protocol number of the hello line this page speaks; test.ps1 checks it against src/host.cpp.
 const PROTOCOL = 2;
 const USB_VENDOR_ID = 0x2fe3;
@@ -1327,7 +1327,7 @@ function showState(fields) {
   elrsState(fields);
   // A band on every page while the radio sends to a receiver: changes reach the model at once.
   $("band").hidden = fields.mode !== "elrs_active";
-  // The question before an update is blocked while the TX is on.
+  // The question before an update is blocked while the ELRS module is on.
   if (upd && upd.step === "ready") showUpdate();
 }
 
@@ -1685,7 +1685,8 @@ const UPD_MAX = 92 * 1024;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const isUpdater = (port) => port.getInfo().usbVendorId === UPDATER.usbVendorId &&
   port.getInfo().usbProductId === UPDATER.usbProductId;
-const txActive = () => Boolean(writer && lastFields && lastFields.mode === "elrs_active");
+// The firmware ignores the request for the updater while the ELRS module is on.
+const moduleRunning = () => Boolean(writer && lastFields && lastFields.module === "1");
 
 function crc16Xmodem(bytes) {
   let crc = 0;
@@ -1749,7 +1750,7 @@ function showUpdate() {
     title = image.name;
     next = "Aufspielen";
     const problem = image.problem || (upd.fromApp && !(writer && firmwareVersion) ? "Nicht verbunden"
-      : txActive() ? "Erst den Sender ausschalten" : "");
+      : upd.fromApp && moduleRunning() ? "Erst die Fernsteuerung ausschalten" : "");
     warn = Boolean(problem);
     note = problem ||
       (image.kind === "stock" ? "Zurück zur Original-Firmware"

@@ -36,9 +36,9 @@ checked there with fixed inputs.
 
 ## Threads
 
-- Control thread, high priority, at the module's frame rate: read sticks and
-  switches, compute channels, send the CRSF frame or the USB controller's
-  report.
+- Control thread, high priority: read sticks and switches, compute channels,
+  send the CRSF frame at the module's frame rate or, with the module off,
+  the USB controller's report every 4 ms, whatever rate the module had.
 - Main thread, low priority, 50 Hz: buttons and actions, LED and buzzer
   patterns, battery, power, CRSF parameters, host protocol.
 - Bytes from the module arrive by interrupt in a ring buffer and are parsed in
@@ -268,7 +268,6 @@ stateDiagram-v2
   Ser --> Xbox: module switched off, stored mode Xbox
   Joy --> Upd: port opened at 1200 baud
   Xbox --> Upd: port opened at 1200 baud
-  Ser --> Upd: port opened at 1200 baud
   Upd --> [*]: image written, restart
 ```
 
@@ -316,7 +315,9 @@ updater is chosen by where the update is started, not guessed:
   image is written, and `src/updater_entry.c` restarts the radio into the new
   firmware. For an OpenLiteRadio image the page reconnects and shows the
   version from the hello line. "Aufspielen" is blocked while the connection
-  is down and while the TX is on.
+  is down and while the ELRS module is on: the firmware ignores the request
+  at 1200 baud then, so that no program on the PC can cut the link to a
+  model. The radio is switched off for an update.
 - "Firmware aufspielen" in the bar of the unconnected page: the updater is
   entered with SETUP + power first, whatever firmware runs (the stock
   firmware has no command for it); the file is chosen once the updater is
@@ -636,7 +637,9 @@ recorded from the module.
 
 Text lines on the USB serial port, one message per line, fields separated by
 spaces. It is readable in a terminal and parsed by `web/index.html`. Opening
-the port at 1200 baud restarts the radio into the vendor USB updater.
+the port at 1200 baud restarts the radio into the vendor USB updater, but
+only while the ELRS module is off. A line longer than 63 characters is not
+run and answered with `error line too long`.
 
 From the radio:
 
@@ -656,7 +659,7 @@ From the radio:
   `trim` (trim steps of throttle, yaw, pitch, roll), `ch` (channels 1 to 16
   in microseconds, 988 to 2012, trimmed while the module is on), `lock` (1 while the
   throttle lock holds the output back), `period` (frame period in
-  microseconds), `frames` and `crc` (frames received from the module with a
+  microseconds; 4000 while the module is off), `frames` and `crc` (frames received from the module with a
   correct and with a wrong checksum), `lq` (percent) and `rssi` (dBm without
   the sign) from the receiver's link statistics, both 0 when none arrived
   within the last second, `offset` (microseconds, from
@@ -693,13 +696,13 @@ To the radio:
 | `ble` | start the module's Bluetooth joystick, as the left trim centre at switch-on does |
 | `module 0` / `module 1` | ELRS module off or on; channel frames follow once the throttle lock is released |
 | `frames 0` / `frames 1` | stop or start printing every frame from the module as `rx` and its bytes in hex |
-| `crsf HEX` | send one complete CRSF frame to the module, given in hex with its CRC, at most 26 bytes; answers `ok crsf` or `error crsf`. The configurator reads and writes the module's parameters with it and `frames 1` |
+| `crsf HEX` | send one complete CRSF frame to the module, given in hex with its CRC, at most 26 bytes; answers `ok crsf` or `error crsf`. Only a ping (0x28), a parameter read (0x2C) and a parameter write (0x2D) are passed on; any other type, such as a channel frame, is refused, so that the PC cannot send channel values. The configurator reads and writes the module's parameters with it and `frames 1` |
 | `list` | report all settings |
 | `get KEY` | report one setting |
 | `set KEY VALUE` | change a setting; answers `ok KEY VALUE`. It applies at once, locks the output and is lost at power-off unless stored; `usb.mode` is stored at once, since the USB device then changes its form and the port goes away |
 | `save` | store all settings |
 | `revert` | return to the stored settings |
-| `defaults` | set all settings except the stick calibration (`cal.N.*`) to their defaults without storing them |
+| `defaults` | set all settings except the stick calibration (`cal.N.*`) to their defaults without storing them. If that changes `usb.mode`, all settings are stored at once, since the port goes away with the USB form |
 | `calibrate start` / `calibrate end` | stick calibration run, as SETUP on the radio |
 | `calibrate cancel` | end the run and keep the previous calibration |
 | `inject KEY=VALUE ...` | test inputs: replace the readings of `sticks` (four raw values, comma-separated) and `sa` to `sf`, with the keys of the state line. Keys add up over several lines; the replacement ends 10 s after the last `inject` line, with `inject off`, or when the ELRS module starts. Refused with `error module on` while the module is on |
