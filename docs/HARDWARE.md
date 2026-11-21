@@ -128,8 +128,28 @@ The axis number of the stock firmware is the rank, so axis 0 to 3 are ADC
 channels 0 to 3.
 
 Hypotheses: the stored calibration was taken under conditions that shift
-the readings (stock scan mode with a short sampling time, another supply),
-or the gimbals have moved since. Which one is not established.
+the readings (another supply), or the gimbals have moved since. Which one
+is not established. The sampling time is ruled out, see below.
+
+ADC sampling time, observed 2026-11-21 with firmware 0.19.4 on USB supply:
+the firmware samples each channel for 1.5 ADC clock cycles
+(`ADC_ACQ_TIME_DEFAULT`, the first entry of the driver's table), the stock
+firmware for 13.5 (sampling time code 2). An input that does not settle in
+that time keeps part of the voltage converted before it, so each reading
+would follow the channel read just before. The control thread reads
+channels 0, 1, 2, 3 in this order; the battery (channel 8) is read after
+them. From the state lines, 25 per second:
+
+| Moved | Range of its readings | Channel read next | Its mean at the low / high end | Shift |
+|-------|-----------------------|-------------------|--------------------------------|-------|
+| channel 1, left stick left to right | 598 to 3602 | channel 2 | 2074.0 / 2074.1 (89 / 80 readings) | +0.1 |
+| channel 3, right stick held left, then right | 631 to 3590 | channel 0 | 1914.2 / 1914.7 (606 / 624 readings) | +0.4 |
+
+The battery reading stayed at 4077 to 4078 over 113 s, with channel 3 at
+631 and at 3589 before it. Noise at rest is 1 to 2 counts. The inputs
+settle within 1.5 cycles, so the readings do not depend on the sampling
+time and the stock firmware's battery thresholds apply to these readings
+as they are.
 
 Settings storage, observed 2026-11-18 with firmware 0.3.0 (59340 bytes, the
 largest image loaded so far):
