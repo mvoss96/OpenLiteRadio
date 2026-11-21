@@ -304,19 +304,19 @@ void storage_init()
 {
     struct flash_pages_info page;
 
-    storage.flash_device = FIXED_PARTITION_DEVICE(storage_partition);
-    storage.offset = FIXED_PARTITION_OFFSET(storage_partition);
+    storage.flash_device = PARTITION_DEVICE(storage_partition);
+    storage.offset = PARTITION_OFFSET(storage_partition);
     if (!device_is_ready(storage.flash_device) ||
         flash_get_page_info_by_offs(storage.flash_device, storage.offset, &page) != 0) {
         return;
     }
     storage.sector_size = (uint16_t)page.size;
-    storage.sector_count = (uint16_t)(FIXED_PARTITION_SIZE(storage_partition) / page.size);
+    storage.sector_count = (uint16_t)(PARTITION_SIZE(storage_partition) / page.size);
 
     /* Pages holding something other than NVS data are erased once. */
     if (nvs_mount(&storage) != 0) {
         if (flash_erase(storage.flash_device, storage.offset,
-                        FIXED_PARTITION_SIZE(storage_partition)) != 0 ||
+                        PARTITION_SIZE(storage_partition)) != 0 ||
             nvs_mount(&storage) != 0) {
             return;
         }
