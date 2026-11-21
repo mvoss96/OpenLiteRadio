@@ -3,8 +3,8 @@
 Experimental open controller firmware for the BETAFPV LiteRadio 4, built on
 Zephyr for the radio's Geehy APM32F103CBT6. It is not flight-ready: the
 firmware reads all controls, drives the indicators, handles power and sends
-channel frames to the ELRS module, but binding has not been tried with a
-receiver and it has not been flown. Calibrate the sticks first: hold SETUP for
+channel frames to the ELRS module and binds a receiver, but it has not been
+flown. Calibrate the sticks first: hold SETUP for
 2 s, move both sticks to all ends, release the right stick, leave the throttle
 at its lower end and press SETUP briefly.
 

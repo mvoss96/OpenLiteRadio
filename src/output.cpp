@@ -301,11 +301,19 @@ void snapshot(Snapshot &snapshot)
 
 bool send_to_module(const uint8_t *frame, size_t size)
 {
-    /* The control thread sends too and must not interrupt this call. */
-    k_sched_lock();
-    bool sent = board::module_send(frame, size);
-    k_sched_unlock();
-    return sent;
+    /* The control thread's frame may still be on the line; it takes less than 1 ms. */
+    for (int attempt = 0; attempt < 10; attempt++) {
+        /* The control thread sends too and must not interrupt the call. */
+        k_sched_lock();
+        bool sent = board::module_send(frame, size);
+        k_sched_unlock();
+
+        if (sent) {
+            return true;
+        }
+        k_usleep(200);
+    }
+    return false;
 }
 
 bool inject(const board::Inputs &values, uint32_t fields)

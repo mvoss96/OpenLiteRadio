@@ -70,7 +70,10 @@ uint32_t frame_period_us();
 
 void snapshot(Snapshot &snapshot);
 
-/* Send a frame to the module from the main thread. Returns false if the line is busy. */
+/*
+ * Send a frame to the module from the main thread. A busy line is tried
+ * again for up to 2 ms; returns false if it stays busy.
+ */
 bool send_to_module(const uint8_t *frame, size_t size);
 
 /*

@@ -565,7 +565,7 @@ held 1 s to switch on without the stock firmware's click before.
 | Stage | Result | State |
 |-------|--------|-------|
 | 1 | board layer, power on/off, LED, buzzer, host protocol with live view | built, see below |
-| 2 | flying: channels, CRSF at the module's rate, throttle lock, binding | built, see below; binding not yet tried with a receiver, not flown |
+| 2 | flying: channels, CRSF at the module's rate, throttle lock, binding | built, see below; not flown |
 | 3 | settings storage, trim, calibration on the radio | built |
 | 4 | USB joystick, then Xbox mode | both built (DirectInput joystick and Xbox controller, each beside the serial port); per-element Xbox assignment open |
 | 5 | configuration protocol for the web tool | settings commands, the configurator's views, the USB mode, firmware update and ELRS parameters built; button actions and backup open |

@@ -230,16 +230,7 @@ void handle_command(char *line)
         /* Only what reads and writes the module's parameters; channel frames come from the control thread alone. */
         valid = valid && (frame[2] == crsf::TYPE_PING || frame[2] == crsf::TYPE_PARAMETER_READ ||
                           frame[2] == crsf::TYPE_PARAMETER_WRITE);
-        /* The control thread's frame may still be on the line; it takes less than 1 ms. */
-        bool sent = false;
-
-        for (int attempt = 0; valid && !sent && attempt < 10; attempt++) {
-            sent = output::send_to_module(frame, size);
-            if (!sent) {
-                k_usleep(200);
-            }
-        }
-        printk(sent ? "ok crsf\n" : "error crsf\n");
+        printk(valid && output::send_to_module(frame, size) ? "ok crsf\n" : "error crsf\n");
     } else if (strcmp(command, "bind") == 0) {
         module_link::command_start(module_link::COMMAND_BIND);
     } else if (strcmp(command, "wifi") == 0) {
