@@ -278,6 +278,10 @@ static void test_settings()
     CHECK(settings::find("trim.thr") == settings::TRIM_FIRST);
     CHECK(settings::find("trim.led") == settings::TRIM_LED);
     CHECK(settings::find("usb.mode") == settings::USB_MODE);
+    CHECK(settings::find("xbox.lx") == settings::XBOX_FIRST + (int)xbox::ELEMENT_LEFT_X);
+    CHECK(settings::find("xbox.rt") == settings::XBOX_FIRST + (int)xbox::ELEMENT_RIGHT_TRIGGER);
+    CHECK(settings::find("xbox.start") == settings::XBOX_FIRST + (int)xbox::ELEMENT_START);
+    CHECK(settings::find("xbox.start") == settings::CHANNEL_FIRST - 1);
     CHECK(settings::find("ch.1.source") == settings::CHANNEL_FIRST);
     CHECK(settings::find("ch.16.reverse") == settings::CALIBRATION_FIRST - 1);
     CHECK(settings::find("cal.0.low") == settings::CALIBRATION_FIRST);
@@ -308,6 +312,12 @@ static void test_settings()
     CHECK(settings::values[settings::find("ch.10.source")] == core::SOURCE_SF);
     CHECK(settings::values[settings::find("ch.11.source")] == core::SOURCE_NONE);
     CHECK(settings::values[settings::find("ch.11.weight")] == 100);
+    /* The Xbox elements: sticks on the AETR channels, buttons on channels 9 to 16; 0 to 16 allowed. */
+    CHECK(settings::values[settings::find("xbox.ly")] == 3);
+    CHECK(settings::values[settings::find("xbox.a")] == 9);
+    CHECK(settings::set(settings::find("xbox.a"), 0));
+    CHECK(!settings::set(settings::find("xbox.a"), 17));
+    CHECK(settings::info(settings::find("xbox.lx")).id == 0x150);
 
     /* Values outside the range are refused. */
     CHECK(settings::set(settings::UNLOCK_MODE, 2));
@@ -656,7 +666,11 @@ static void test_xbox()
     uint8_t report[xbox::REPORT_SIZE];
     auto at = [&](int i) { return (int16_t)(report[i] | (report[i + 1] << 8)); };
 
-    xbox::fill_report(channels, report);
+    /* The default assignment: sticks on channels 4, 3, 1, 2, triggers on 5 and 6, buttons on 9 to 16. */
+    settings::set_defaults();
+    const int16_t *defaults = &settings::values[settings::XBOX_FIRST];
+
+    xbox::fill_report(channels, defaults, report);
     CHECK(report[0] == 0x00 && report[1] == 20);
     CHECK(at(2) == (int16_t)(xbox::BUTTON_A | xbox::BUTTON_Y | xbox::BUTTON_START));
     CHECK(report[4] == 0 && report[5] == 255);
@@ -665,6 +679,28 @@ static void test_xbox()
     CHECK(at(10) == 32767);  /* right X: roll right */
     CHECK(at(12) == -32767); /* right Y: pitch down */
     CHECK(report[19] == 0);
+
+    /* Every element follows the channel it is given; one channel can serve several elements. */
+    int16_t assignment[xbox::ELEMENT_COUNT] = {};
+
+    assignment[xbox::ELEMENT_LEFT_X] = 1;         /* channel 1: 2012 */
+    assignment[xbox::ELEMENT_RIGHT_Y] = 1;
+    assignment[xbox::ELEMENT_LEFT_TRIGGER] = 6;   /* channel 6: 2012 */
+    assignment[xbox::ELEMENT_LB] = 9;             /* channel 9: 2012 */
+    assignment[xbox::ELEMENT_BACK] = 2;           /* channel 2: 988 */
+    xbox::fill_report(channels, assignment, report);
+    CHECK(at(2) == (int16_t)xbox::BUTTON_LB);
+    CHECK(report[4] == 255 && report[5] == 0);
+    CHECK(at(6) == 32767 && at(12) == 32767);
+    /* Elements without a channel stay at rest. */
+    CHECK(at(8) == 0 && at(10) == 0);
+
+    /* Without any channel the controller is at rest. */
+    int16_t none[xbox::ELEMENT_COUNT] = {};
+
+    xbox::fill_report(channels, none, report);
+    CHECK(at(2) == 0 && report[4] == 0 && report[5] == 0);
+    CHECK(at(6) == 0 && at(8) == 0 && at(10) == 0 && at(12) == 0);
 }
 
 static void test_options()

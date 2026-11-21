@@ -304,10 +304,21 @@ stateDiagram-v2
   driver for interface 0; the serial port follows as interfaces 1 and 2. The
   Microsoft controller's IDs are not needed. LED and rumble commands from the
   host are read and dropped.
-- Xbox assignment, fixed in `src/core/xbox.cpp`: left stick channels 4 and 3,
-  right stick 1 and 2, triggers 5 and 6 (988..2012 as 0..255), buttons A, B,
-  X, Y, LB, RB, Back, Start channels 9 to 16 (pressed above 1500). Channels 7
-  and 8 have no element. Open: one setting per element, a channel or none.
+- Xbox assignment (0.20.0, `src/core/xbox.cpp`): each of 14 elements follows
+  one channel or none, in the settings `xbox.lx`, `xbox.ly`, `xbox.rx`,
+  `xbox.ry` (the sticks), `xbox.lt`, `xbox.rt` (the triggers, 988..2012 as
+  0..255) and `xbox.a`, `xbox.b`, `xbox.x`, `xbox.y`, `xbox.lb`, `xbox.rb`,
+  `xbox.back`, `xbox.start` (pressed above 1500). The value is the channel, 1
+  to 16, or 0 for none; an element without a channel stays at rest, and one
+  channel can serve several elements. By default the left stick follows
+  channels 4 and 3, the right stick 1 and 2, the triggers 5 and 6 and the
+  buttons 9 to 16. Channels, not controls, so that a simulator sees the
+  assignment the model gets, with weight and reverse; with AETR only
+  channels 1 to 10 carry a control, so the buttons on channels 11 to 16 do
+  nothing until they are given another channel. The configurator shows the
+  elements in "Einstellungen" under "Xbox-Controller", each with a list of
+  the channels and the control on each. The D-pad and the stick clicks have
+  no setting.
 
 ### Firmware update from the configurator
 
@@ -567,7 +578,7 @@ held 1 s to switch on without the stock firmware's click before.
 | 1 | board layer, power on/off, LED, buzzer, host protocol with live view | built, see below |
 | 2 | flying: channels, CRSF at the module's rate, throttle lock, binding | built, see below; not flown |
 | 3 | settings storage, trim, calibration on the radio | built |
-| 4 | USB joystick, then Xbox mode | both built (DirectInput joystick and Xbox controller, each beside the serial port); per-element Xbox assignment open |
+| 4 | USB joystick, then Xbox mode | both built (DirectInput joystick and Xbox controller, each beside the serial port, with a channel per Xbox element) |
 | 5 | configuration protocol for the web tool | settings commands, the configurator's views, the USB mode, firmware update and ELRS parameters built; button actions and backup open |
 | 6 | Bluetooth, WiFi, battery display, remaining features | Bluetooth, WiFi and the battery display built; PC control and automatic power-off open |
 

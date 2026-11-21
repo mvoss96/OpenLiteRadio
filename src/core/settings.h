@@ -32,7 +32,8 @@ enum Index {
     TRIM_FIRST = 14,      /* trim of the 4 stick axes in steps, in the order of core::Axis */
     TRIM_LED = 18,        /* 1: the status LED flashes on every trim step */
     USB_MODE = 19,        /* USB device with the radio off: 0 joystick, 1 Xbox controller */
-    CHANNEL_FIRST = 20,   /* 16 channels with CHANNEL_FIELDS values each: the Custom assignment */
+    XBOX_FIRST = 20,      /* channel of each xbox::Element, 14 values: 0 none, 1 to 16 */
+    CHANNEL_FIRST = 34,   /* 16 channels with CHANNEL_FIELDS values each: the Custom assignment */
     CALIBRATION_FIRST = CHANNEL_FIRST + 16 * 3, /* 4 axes with CALIBRATION_FIELDS values each */
     COUNT = CALIBRATION_FIRST + 4 * 4,
 };

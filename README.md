@@ -76,7 +76,8 @@ be open in one program. The page is in German.
 - "ELRS-Modul" shows and changes every parameter the module offers, with the
   radio switched on.
 - "Einstellungen" holds the unlock gesture, the USB controller's form, the
-  trim LED and the tones.
+  trim LED, the channel of each element of the Xbox controller and the
+  tones.
 - "System" shows firmware and battery readings, the firmware update, test
   buttons for tone and binding, the fixed button combinations, and every
   setting the radio reports in raw form.

@@ -179,7 +179,7 @@ void control_thread(void *, void *, void *)
         } else if (mode == core::Mode::USB_XBOX) {
             uint8_t report[xbox::REPORT_SIZE];
 
-            xbox::fill_report(channels, report);
+            xbox::fill_report(channels, &settings::values[settings::XBOX_FIRST], report);
             usb_xbox_send(report);
         }
 

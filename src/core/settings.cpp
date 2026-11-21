@@ -1,6 +1,7 @@
 #include "core/settings.h"
 
 #include "core/sound.h"
+#include "core/xbox.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -75,6 +76,20 @@ const Field SOUND_FIELDS[] = {
 const Field MAP_FIELDS[] = { { "mode", 0, 2, 0, MAP_OPTIONS } };
 /* 0 joystick, 1 Xbox controller: the USB device with the radio off. */
 const Field USB_FIELDS[] = { { "mode", 0, 1, 0, USB_OPTIONS } };
+/*
+ * In the order of xbox::Element: the channel each element of the Xbox
+ * controller follows, 0 for none. By default the sticks follow channels 4, 3,
+ * 1 and 2 (AETR: yaw, throttle, roll, pitch), the triggers 5 and 6, the
+ * buttons 9 to 16.
+ */
+const Field XBOX_FIELDS[] = {
+    { "lx", 0, 16, 4 },  { "ly", 0, 16, 3 },  { "rx", 0, 16, 1 },    { "ry", 0, 16, 2 },
+    { "lt", 0, 16, 5 },  { "rt", 0, 16, 6 },  { "a", 0, 16, 9 },     { "b", 0, 16, 10 },
+    { "x", 0, 16, 11 },  { "y", 0, 16, 12 },  { "lb", 0, 16, 13 },   { "rb", 0, 16, 14 },
+    { "back", 0, 16, 15 }, { "start", 0, 16, 16 },
+};
+static_assert(sizeof(XBOX_FIELDS) / sizeof(XBOX_FIELDS[0]) == xbox::ELEMENT_COUNT,
+              "one setting per xbox::Element");
 /* In the order of core::Axis; steps of core::TRIM_STEP_US. Then the LED flash on a step. */
 const Field TRIM_FIELDS[] = { { "thr", -25, 25, 0 }, { "rud", -25, 25, 0 }, { "ele", -25, 25, 0 },
                               { "ail", -25, 25, 0 }, { "led", 0, 1, 1 } };
@@ -90,6 +105,7 @@ const Group GROUPS[] = {
     { "map", 0, 0, 1, MAP_FIELDS, 0x120 },
     { "trim", 0, 0, 5, TRIM_FIELDS, 0x130 },
     { "usb", 0, 0, 1, USB_FIELDS, 0x140 },
+    { "xbox", 0, 0, xbox::ELEMENT_COUNT, XBOX_FIELDS, 0x150 },
     { "ch", 16, 1, 3, CHANNEL_FIELD_LIST, 0x200 },
     { "cal", 4, 0, 4, CALIBRATION_FIELD_LIST, 0x300 },
 };

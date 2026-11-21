@@ -383,16 +383,38 @@
     <div class="page">
       <h1>Einstellungen</h1>
       <div class="cols2">
-        <section class="group">
-          <h2><svg class="i" viewBox="0 0 24 24"><path d="M4 7h9m4 0h3M15 5v4M4 17h3m4 0h9M9 15v4"/></svg>Bedienung</h2>
-          <div class="tiles">
-            <label class="tile"><span>Entsperren mit</span>
-              <select data-key="unlock.mode"></select></label>
-            <label class="tile"><span>USB-Gerät, wenn ausgeschaltet</span>
-              <select data-key="usb.mode"></select></label>
-            <label class="tile"><span>LED blinkt beim Trimmen</span><input type="checkbox" class="switch" data-key="trim.led"></label>
-          </div>
-        </section>
+        <div class="stack">
+          <section class="group">
+            <h2><svg class="i" viewBox="0 0 24 24"><path d="M4 7h9m4 0h3M15 5v4M4 17h3m4 0h9M9 15v4"/></svg>Bedienung</h2>
+            <div class="tiles">
+              <label class="tile"><span>Entsperren mit</span>
+                <select data-key="unlock.mode"></select></label>
+              <label class="tile"><span>USB-Gerät, wenn ausgeschaltet</span>
+                <select data-key="usb.mode"></select></label>
+              <label class="tile"><span>LED blinkt beim Trimmen</span><input type="checkbox" class="switch" data-key="trim.led"></label>
+            </div>
+          </section>
+          <!-- The channel each element of the Xbox controller follows (usb.mode Xbox-Controller). -->
+          <section class="group">
+            <h2><svg class="i" viewBox="0 0 24 24"><path d="M7 8h10a4 4 0 0 1 4 4l-1 5a2 2 0 0 1-3.5 1L14 15h-4l-2.5 3A2 2 0 0 1 4 17l-1-5a4 4 0 0 1 4-4zM8 11v3M6.5 12.5h3M16 12h.01M18 13.5h.01"/></svg>Xbox-Controller</h2>
+            <div class="tiles">
+              <label class="tile"><span>Linker Stick X</span><select data-key="xbox.lx" data-channel></select></label>
+              <label class="tile"><span>Linker Stick Y</span><select data-key="xbox.ly" data-channel></select></label>
+              <label class="tile"><span>Rechter Stick X</span><select data-key="xbox.rx" data-channel></select></label>
+              <label class="tile"><span>Rechter Stick Y</span><select data-key="xbox.ry" data-channel></select></label>
+              <label class="tile"><span>LT</span><select data-key="xbox.lt" data-channel></select></label>
+              <label class="tile"><span>RT</span><select data-key="xbox.rt" data-channel></select></label>
+              <label class="tile"><span>A</span><select data-key="xbox.a" data-channel></select></label>
+              <label class="tile"><span>B</span><select data-key="xbox.b" data-channel></select></label>
+              <label class="tile"><span>X</span><select data-key="xbox.x" data-channel></select></label>
+              <label class="tile"><span>Y</span><select data-key="xbox.y" data-channel></select></label>
+              <label class="tile"><span>LB</span><select data-key="xbox.lb" data-channel></select></label>
+              <label class="tile"><span>RB</span><select data-key="xbox.rb" data-channel></select></label>
+              <label class="tile"><span>Back</span><select data-key="xbox.back" data-channel></select></label>
+              <label class="tile"><span>Start</span><select data-key="xbox.start" data-channel></select></label>
+            </div>
+          </section>
+        </div>
         <section class="group">
           <h2><svg class="i" viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6l-5 4H4zM16.5 9a4 4 0 0 1 0 6"/></svg>Töne</h2>
           <div class="tiles">
@@ -850,7 +872,7 @@ setInterval(() => { if (elrs.open && elrs.moduleOn && elrs.queued === 0) elrsQue
 // an older page with newer code.
 
 // The project's version from the file VERSION; test.ps1 checks that both agree.
-const WEB_VERSION = "0.19.5";
+const WEB_VERSION = "0.20.0";
 // Protocol number of the hello line this page speaks; test.ps1 checks it against src/host.cpp.
 const PROTOCOL = 3;
 const USB_VENDOR_ID = 0x2fe3;
@@ -1458,6 +1480,21 @@ function fillOptionLists() {
   }
 }
 
+// Every list that chooses a channel (data-channel): "–" for none, then the 16 channels, each with
+// the control the assignment in use puts on it.
+function fillChannelLists() {
+  const names = Array.from({ length: CHANNEL_COUNT }, (_, i) => {
+    const control = controlOf(chValue(i + 1, "source"));
+    return control ? `${i + 1} · ${control.name}` : String(i + 1);
+  });
+  const options = `<option value="0">–</option>` +
+    names.map((name, i) => `<option value="${i + 1}">${name}</option>`).join("");
+  for (const select of document.querySelectorAll("select[data-channel]")) {
+    select.innerHTML = options;
+    if (settings.has(select.dataset.key)) select.value = settings.get(select.dataset.key).value;
+  }
+}
+
 function buildRawTable() {
   $("rawRows").innerHTML = [...settings].map(([key, s]) =>
     `<div class="rawrow"><b>${key}</b><span><input type="number" min="${s.min}" max="${s.max}" data-key="${key}" aria-label="${key}"></span>` +
@@ -1508,6 +1545,7 @@ function listEnded(expected) {
   send("stream 1");
   checkOptionLists();
   fillOptionLists();
+  fillChannelLists();
   buildRawTable();
   showLabels();
   showDetail();
@@ -1592,6 +1630,7 @@ function handleOk(words) {
       showLabels();
       if (document.activeElement !== $("dWeight") && document.activeElement !== $("dDead")) showDetail();
       showMapping();
+      fillChannelLists();
     }
   }
 }

@@ -28,15 +28,22 @@ uint8_t trigger(uint16_t channel)
 
 } // namespace
 
-void fill_report(const uint16_t channels[16], uint8_t report[REPORT_SIZE])
+void fill_report(const uint16_t channels[16], const int16_t assignment[ELEMENT_COUNT],
+                 uint8_t report[REPORT_SIZE])
 {
-    /* Channels 9 to 16 in order. */
+    /* In the order of the button elements, ELEMENT_A to ELEMENT_START. */
     static const uint16_t BUTTONS[8] = { BUTTON_A,  BUTTON_B,  BUTTON_X,    BUTTON_Y,
                                          BUTTON_LB, BUTTON_RB, BUTTON_BACK, BUTTON_START };
+    /* The channel an element follows; at_rest for an element without one. */
+    auto value = [&](int element, uint16_t at_rest) {
+        int channel = assignment[element];
+
+        return (channel >= 1 && channel <= 16) ? channels[channel - 1] : at_rest;
+    };
     uint16_t buttons = 0;
 
     for (int i = 0; i < 8; i++) {
-        if (channels[8 + i] > 1500) {
+        if (value(ELEMENT_A + i, 988) > 1500) {
             buttons |= BUTTONS[i];
         }
     }
@@ -44,12 +51,12 @@ void fill_report(const uint16_t channels[16], uint8_t report[REPORT_SIZE])
     report[0] = 0x00; /* message type: input report */
     report[1] = REPORT_SIZE;
     put16(&report[2], buttons);
-    report[4] = trigger(channels[4]);
-    report[5] = trigger(channels[5]);
-    put16(&report[6], (uint16_t)stick(channels[3]));  /* left X: yaw */
-    put16(&report[8], (uint16_t)stick(channels[2]));  /* left Y: throttle */
-    put16(&report[10], (uint16_t)stick(channels[0])); /* right X: roll */
-    put16(&report[12], (uint16_t)stick(channels[1])); /* right Y: pitch */
+    report[4] = trigger(value(ELEMENT_LEFT_TRIGGER, 988));
+    report[5] = trigger(value(ELEMENT_RIGHT_TRIGGER, 988));
+    put16(&report[6], (uint16_t)stick(value(ELEMENT_LEFT_X, 1500)));
+    put16(&report[8], (uint16_t)stick(value(ELEMENT_LEFT_Y, 1500)));
+    put16(&report[10], (uint16_t)stick(value(ELEMENT_RIGHT_X, 1500)));
+    put16(&report[12], (uint16_t)stick(value(ELEMENT_RIGHT_Y, 1500)));
 }
 
 } // namespace xbox
