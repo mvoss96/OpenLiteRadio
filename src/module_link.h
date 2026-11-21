@@ -1,7 +1,9 @@
 /*
  * What the ELRS module sends: timing frames set the frame period, link
  * statistics are kept, and parameter answers drive the search for the
- * module's commands (bind, WiFi, Bluetooth joystick).
+ * module's commands (bind, WiFi, Bluetooth joystick). The search itself is
+ * in src/core/module_command.cpp; this file sends its frames and reports
+ * its result.
  */
 
 #pragma once
@@ -9,8 +11,13 @@
 #include <stdint.h>
 
 #include "core/mode.h"
+#include "core/module_command.h"
 
 namespace module_link {
+
+/* The commands under this namespace's name, e.g. module_link::COMMAND_BIND. */
+using module_command::Command;
+using enum module_command::Command;
 
 struct Status {
     uint32_t frames;      /* frames received with a correct checksum */
@@ -19,14 +26,6 @@ struct Status {
     uint8_t rssi;         /* dBm without the sign */
     int32_t timing_offset_us;
     uint8_t bind_parameter; /* 0 until it was searched */
-};
-
-/* Commands of the module that the radio starts. */
-enum Command {
-    COMMAND_BIND,       // "Bind": BIND held 1 s, or "bind" from the host
-    COMMAND_WIFI,       // "Enable WiFi": right trim centre at switch-on, or "wifi"
-    COMMAND_BLUETOOTH,  // "BLE Joystick": left trim centre at switch-on, or "ble"
-    COMMAND_COUNT,
 };
 
 /* Switch the module on or off; a running search and the module's task end. */

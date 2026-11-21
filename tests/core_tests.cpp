@@ -10,6 +10,7 @@
 #include "core/joystick.h"
 #include "core/led.h"
 #include "core/mode.h"
+#include "core/module_command.h"
 #include "core/settings.h"
 #include "core/sound.h"
 #include "core/xbox.h"
@@ -180,6 +181,140 @@ static void test_parameters()
     const uint8_t open_name[] = { 0xEA, 0x00, 0x2B, 0xEA, 0xEE, 16, 0, 0, 13, 'B', 'i', 'n', 'd' };
 
     CHECK(!crsf::decode_parameter_entry(open_name, sizeof(open_name), index, type, name));
+}
+
+/* A parameter entry frame as the module sends it: index, type and name. */
+static size_t entry_frame(uint8_t *frame, uint8_t index, uint8_t type, const char *name)
+{
+    const uint8_t head[] = { 0xEA, 0x00, 0x2B, 0xEA, 0xEE, index, 0, 0, type };
+    size_t length = std::strlen(name);
+
+    std::memcpy(frame, head, sizeof(head));
+    std::memcpy(frame + sizeof(head), name, length + 1);
+    /* Status, timeout and info text of a command, then the CRC, which the parser has checked. */
+    std::memset(frame + sizeof(head) + length + 1, 0, 4);
+    return sizeof(head) + length + 1 + 4;
+}
+
+static void test_module_command()
+{
+    using namespace module_command;
+
+    /* Device information with 4 parameters. */
+    const uint8_t info[] = { 0xEA, 0x00, 0x29, 0xEA, 0xEE, 'L', 'R', '4', 0, 'E', 'L', 'R',
+                             'S',  0,    0,    0,    0,    0,   3,   6,   4, 4,   0,   0 };
+    uint8_t ping[crsf::PING_FRAME_SIZE];
+    uint8_t expected[crsf::PARAMETER_FRAME_SIZE];
+    uint8_t entry[32];
+    size_t size;
+
+    crsf::encode_ping(ping);
+    CHECK(task_of(COMMAND_BIND) == core::ModuleTask::BINDING);
+    CHECK(task_of(COMMAND_WIFI) == core::ModuleTask::WIFI);
+    CHECK(task_of(COMMAND_BLUETOOTH) == core::ModuleTask::BLUETOOTH);
+
+    /* The search: ping, then the entries one by one until the wanted name comes. */
+    {
+        CommandSearch search;
+        Step step = search.start(COMMAND_BIND, true, 0);
+
+        CHECK(!search.idle() && search.wanted() == COMMAND_BIND);
+        CHECK(step.result == Result::NONE && step.size == sizeof(ping));
+        CHECK(std::memcmp(step.frame, ping, sizeof(ping)) == 0);
+        /* A second start while one runs does nothing. */
+        CHECK(search.start(COMMAND_WIFI, true, 0).size == 0 && search.wanted() == COMMAND_BIND);
+
+        step = search.frame(info, sizeof(info));
+        crsf::encode_parameter_read(1, expected);
+        CHECK(step.result == Result::NONE && std::memcmp(step.frame, expected, sizeof(expected)) == 0);
+
+        /* An entry that is no command, even with a command's name, is passed over. */
+        size = entry_frame(entry, 1, 9, "Bind");
+        step = search.frame(entry, size);
+        crsf::encode_parameter_read(2, expected);
+        CHECK(step.result == Result::NONE && std::memcmp(step.frame, expected, sizeof(expected)) == 0);
+        CHECK(search.parameter(COMMAND_BIND) == 0);
+
+        /* An answer for another entry than the one asked for is ignored. */
+        size = entry_frame(entry, 3, crsf::PARAMETER_TYPE_COMMAND, "Bind");
+        CHECK(search.frame(entry, size).size == 0 && search.parameter(COMMAND_BIND) == 0);
+
+        /* Another command met on the way is kept. */
+        size = entry_frame(entry, 2, crsf::PARAMETER_TYPE_COMMAND, "Enable WiFi");
+        step = search.frame(entry, size);
+        crsf::encode_parameter_read(3, expected);
+        CHECK(step.result == Result::NONE && std::memcmp(step.frame, expected, sizeof(expected)) == 0);
+        CHECK(search.parameter(COMMAND_WIFI) == 2);
+
+        /* The wanted one: the search ends with the frame that starts it, written as 1. */
+        size = entry_frame(entry, 3, crsf::PARAMETER_TYPE_COMMAND, "Bind");
+        step = search.frame(entry, size);
+        crsf::encode_parameter_write(3, crsf::COMMAND_START, expected);
+        CHECK(step.result == Result::STARTED && std::memcmp(step.frame, expected, sizeof(expected)) == 0);
+        CHECK(search.idle() && search.parameter(COMMAND_BIND) == 3);
+
+        /* Known commands start at once, WiFi written as confirmed (4). */
+        step = search.start(COMMAND_WIFI, true, 0);
+        crsf::encode_parameter_write(2, crsf::COMMAND_CONFIRM, expected);
+        CHECK(step.result == Result::STARTED && std::memcmp(step.frame, expected, sizeof(expected)) == 0);
+        CHECK(search.idle() && search.wanted() == COMMAND_WIFI);
+
+        /* A command the module does not have fails after its last parameter. */
+        step = search.start(COMMAND_BLUETOOTH, true, 0);
+        CHECK(step.result == Result::NONE && step.size == sizeof(ping));
+        search.frame(info, sizeof(info));
+        for (uint8_t index = 1; index <= 3; index++) {
+            size = entry_frame(entry, index, 9, "Packet Rate");
+            CHECK(search.frame(entry, size).result == Result::NONE);
+        }
+        size = entry_frame(entry, 4, 9, "Packet Rate");
+        step = search.frame(entry, size);
+        CHECK(step.result == Result::FAILED && step.size == 0 && search.idle());
+    }
+
+    /* A request without an answer is sent ATTEMPTS times, ANSWER_TICKS apart, then the search fails. */
+    {
+        CommandSearch search;
+        int requests = 1; /* the one start() returned */
+        int ticks = 0;
+        Step step = search.start(COMMAND_BIND, true, 0);
+
+        while (step.result == Result::NONE && ticks < 100) {
+            step = search.tick(true, 0);
+            ticks++;
+            requests += step.size > 0 ? 1 : 0;
+        }
+        CHECK(requests == ATTEMPTS && ticks == ATTEMPTS * ANSWER_TICKS);
+        CHECK(step.result == Result::FAILED && search.idle());
+    }
+
+    /* Before the module's first frame the search waits, and gives up after WAIT_MS. */
+    {
+        CommandSearch search;
+
+        CHECK(search.start(COMMAND_BIND, false, 1000).size == 0 && !search.idle());
+        CHECK(search.tick(false, 1000 + WAIT_MS).result == Result::NONE);
+        CHECK(search.tick(false, 1000 + WAIT_MS + 1).result == Result::FAILED && search.idle());
+
+        CHECK(search.start(COMMAND_BIND, false, 0).size == 0);
+        Step step = search.tick(true, 100);
+
+        CHECK(step.result == Result::NONE && std::memcmp(step.frame, ping, sizeof(ping)) == 0);
+        /* Switching the module off ends the search; frames after that do nothing. */
+        search.reset();
+        CHECK(search.idle() && search.frame(info, sizeof(info)).size == 0);
+        CHECK(search.tick(true, 200).size == 0);
+    }
+
+    /* Binding: over once a receiver answers at least BIND_SETTLE_MS after the start, else after BIND_TIMEOUT_MS. */
+    CHECK(binding_state(1000, 0, -1, false) == Binding::RUNNING);
+    /* Link statistics from before the module has bound do not count, connected or not. */
+    CHECK(binding_state(1600, 0, 1400, true) == Binding::RUNNING);
+    CHECK(binding_state(1600, 0, BIND_SETTLE_MS, true) == Binding::BOUND);
+    CHECK(binding_state(3000, 0, 2000, false) == Binding::RUNNING);
+    CHECK(binding_state(BIND_TIMEOUT_MS - 1, 0, -1, false) == Binding::RUNNING);
+    CHECK(binding_state(BIND_TIMEOUT_MS, 0, -1, false) == Binding::TIMED_OUT);
+    CHECK(binding_state(5000 + BIND_TIMEOUT_MS, 5000, 4000, false) == Binding::TIMED_OUT);
 }
 
 static void test_link_statistics()
@@ -897,6 +1032,7 @@ int main()
     test_parser();
     test_frame_delay();
     test_parameters();
+    test_module_command();
     test_link_statistics();
     test_scale_axis();
     test_calibration_from_sweep();

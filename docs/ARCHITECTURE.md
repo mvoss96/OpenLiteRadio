@@ -615,7 +615,8 @@ Stage 2 as built so far:
   the next frame. The status LED is red while
   locked; the tune of `sound.unlock` marks the release.
 - Switching the radio on starts the module, switching it off stops it.
-- Module commands (0.12.0, `src/module_link.cpp`): binding (BIND held 1 s,
+- Module commands (0.12.0; the search in `src/core/module_command.cpp` with
+  tests, sending and tones in `src/module_link.cpp`): binding (BIND held 1 s,
   host `bind`), WiFi (right trim centre held at switch-on, host `wifi`) and
   the Bluetooth joystick (left trim centre held at switch-on, host `ble`).
   Once the module answers after switching on, the firmware asks it for its

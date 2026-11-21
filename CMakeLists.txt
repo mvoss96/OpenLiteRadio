@@ -20,6 +20,7 @@ target_sources(app PRIVATE
   src/core/link_alarm.cpp
   src/core/led.cpp
   src/core/mode.cpp
+  src/core/module_command.cpp
   src/core/settings.cpp
   src/core/sound.cpp
   src/core/xbox.cpp
