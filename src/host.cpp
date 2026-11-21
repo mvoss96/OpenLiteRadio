@@ -1,51 +1,8 @@
 /*
- * Host protocol, one message per line.
- * From the radio:
- *   hello OpenLiteRadio <version> proto=3
- *   setting KEY TYPE MIN MAX DEFAULT VALUE   one per setting after "list"; TYPE bool, int or
- *                                            the name of the option list naming the values
- *   option LIST VALUE KEY                    one per named value after the settings; KEY is one
- *                                            language-neutral word
- *   end N                                    after the last option; N counts the setting and
- *                                            option lines sent, so the host can tell a lost line
- *   value KEY VALUE                          answer to "get"
- *   ok ... / error REASON                    answer to the other settings commands
- *   state sticks=a,b,c,d sa= sb= sc= sd= se= sf= bind= setup= power= tl= tr=
- *         keys= battery= usb= on= module= trim=t,r,e,a ch=c1,...,c16 lock= period= frames=
- *         crc= lq= rssi= offset= bindpar= tx= txbusy= mode= led=RRGGBB calib=
- * To the radio:
- *   hello             ask for the hello line
- *   stream 0|1        stop or start the state lines
- *   led R G B         status LED colour, 0..255 each; "led auto" returns control
- *   beep HZ MS        tone at the volume in sound.volume
- *   play KEY          play what a setting sounds like: the tune of sound.on .. sound.connect,
- *                     a few trim steps for sound.trim, one beep for sound.volume
- *   batleds MASK      battery LEDs, bit 0 is the leftmost; "batleds auto" returns control
- *   module 0|1        ELRS module off or on
- *   bind              start binding, as a long press of BIND does; binding and
- *                     "calibrate start" answer "error receiver connected" while a
- *                     receiver is connected, also when started with the buttons
- *   wifi              start the module's WiFi, as the right trim centre at switch-on does
- *   ble               start the module's Bluetooth joystick, as the left trim centre at
- *                     switch-on does; WiFi and Bluetooth end when the module is switched off
- *   frames 0|1        print every frame received from the module as "rx" plus hex bytes
- *   crsf HEX          send one complete CRSF frame (hex, CRC included) to the module: a ping,
- *                     a parameter read or a parameter write; other types are refused
- *   list              report all settings
- *   get KEY           report one setting
- *   set KEY VALUE     change a setting; it applies at once and is lost at power-off
- *                     unless stored; usb.mode is stored at once
- *   save              store all settings
- *   revert            return to the stored settings
- *   defaults          set all settings except the stick calibration (cal.N.*) to their
- *                     defaults; stored at once only if usb.mode changed, since the port
- *                     then goes away
- *   calibrate start|end|cancel   stick calibration run, as SETUP does; cancel keeps the old values
- *   inject KEY=VALUE ...   test inputs: replace sticks (a,b,c,d), sa..sf for 10 s
- *                     after the last inject line, only while the module is off;
- *                     "inject off" ends it
- *
- * Every change of a setting locks the channel output again.
+ * Host protocol on the USB serial port: text lines, one message per line.
+ * Every line and command is described in docs/ARCHITECTURE.md, "Host
+ * protocol"; that section is the one description, to be changed with the
+ * code here.
  */
 
 #include "host.h"
