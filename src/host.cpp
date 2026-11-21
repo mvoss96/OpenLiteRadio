@@ -1,11 +1,13 @@
 /*
  * Host protocol, one message per line.
  * From the radio:
- *   hello OpenLiteRadio <version> proto=2
+ *   hello OpenLiteRadio <version> proto=3
  *   setting KEY TYPE MIN MAX DEFAULT VALUE   one per setting after "list"; TYPE bool, int or
  *                                            the name of the option list naming the values
- *   option LIST VALUE KEY                    one per named value after the settings, then "end";
- *                                            KEY is one language-neutral word
+ *   option LIST VALUE KEY                    one per named value after the settings; KEY is one
+ *                                            language-neutral word
+ *   end N                                    after the last option; N counts the setting and
+ *                                            option lines sent, so the host can tell a lost line
  *   value KEY VALUE                          answer to "get"
  *   ok ... / error REASON                    answer to the other settings commands
  *   state sticks=a,b,c,d sa= sb= sc= sd= se= sf= bind= setup= power= tl= tr=
@@ -95,7 +97,10 @@ void print_setting(int index)
            info.min, info.max, info.default_value, settings::values[index]);
 }
 
-/* Report a few lines per loop so that the USB buffer keeps up: the settings, then the options. */
+/*
+ * Report a few lines per loop so that the USB buffer keeps up: the settings,
+ * then the options, then "end" with the number of lines.
+ */
 void list_tick()
 {
     int lines = settings::COUNT + settings::option_count();
@@ -109,7 +114,7 @@ void list_tick()
             printk("option %s %d %s\n", option.list, option.value, option.key);
         }
         if (++list_next == lines) {
-            printk("end\n");
+            printk("end %d\n", lines);
             list_next = -1;
         }
     }
@@ -351,7 +356,7 @@ const char IMAGE_ID[] = "OpenLiteRadio " APP_VERSION_STRING;
 void print_hello()
 {
     /* The protocol number changes with every change of a message; test.ps1 checks web/index.html against it. */
-    printk("hello %s proto=2\n", IMAGE_ID);
+    printk("hello %s proto=3\n", IMAGE_ID);
     if (fault_marker == FAULT_MARKER) {
         printk("fault reason=%u pc=0x%08x lr=0x%08x\n", (unsigned int)fault_reason,
                (unsigned int)fault_pc, (unsigned int)fault_lr);

@@ -649,7 +649,7 @@ run and answered with `error line too long`.
 
 From the radio:
 
-- `hello OpenLiteRadio <version> proto=2`, at start and on request. "OpenLiteRadio
+- `hello OpenLiteRadio <version> proto=3`, at start and on request. "OpenLiteRadio
   <version>" is `IMAGE_ID`, by which the configurator also recognises a firmware file. After
   a fatal error the radio restarts instead of halting; the next hello line is
   followed once by `fault reason=N pc=0x... lr=0x...` (Zephyr's reason code
@@ -680,7 +680,13 @@ From the radio:
   TYPE is `bool`, `int`, or the name of the option list that names the
   values by keys (e.g. `tune`, shared by the seven event tones).
 - `option LIST VALUE KEY`, one line per named value after the settings,
-  followed by `end`. KEY is one language-neutral word, e.g. `option tune 2
+  followed by `end N`. N is the number of `setting` and `option` lines the
+  radio sent. The serial port drops output when its buffer is full, so a
+  line can be lost; the configurator counts the lines, asks for the list
+  again up to three times when the count differs, and then shows a band
+  instead of empty fields. On connecting it sends `stream 0` first and
+  `stream 1` once the list is complete, so that the state lines do not
+  compete with the list. KEY is one language-neutral word, e.g. `option tune 2
   double_beep`; the configurator fills every choice of a setting from the
   list its TYPE names and translates the keys. Lists: `unlock`, `trimtone`,
   `tune`, `map`, `usb`.

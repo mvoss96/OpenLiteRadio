@@ -263,6 +263,12 @@
   <b>Konfigurator passt nicht zur Firmware</b><span>Seite neu laden: Strg + Umschalt + R</span>
 </div>
 
+<!-- The list of settings did not arrive complete, also after asking again. -->
+<div class="band" id="incomplete" hidden>
+  <svg class="i" viewBox="0 0 24 24"><path d="M12 8v5m0 3.5v.5M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+  <b>Einstellungen unvollständig geladen</b><span>Trennen und neu verbinden</span>
+</div>
+
 <main>
   <!-- Assignment: AETR, TAER or Custom, the drawing with one label per control, the detail card of one control. -->
   <section class="view" id="view-assign">
@@ -833,9 +839,9 @@ setInterval(() => { if (elrs.open && elrs.moduleOn && elrs.queued === 0) elrsQue
 // an older page with newer code.
 
 // The project's version from the file VERSION; test.ps1 checks that both agree.
-const WEB_VERSION = "0.19.3";
+const WEB_VERSION = "0.19.4";
 // Protocol number of the hello line this page speaks; test.ps1 checks it against src/host.cpp.
-const PROTOCOL = 2;
+const PROTOCOL = 3;
 const USB_VENDOR_ID = 0x2fe3;
 const CHANNEL_COUNT = 16;
 const BATTERY_THRESHOLDS = [3232, 3298, 3391, 3552];   // stock firmware: 1, 2, 3, 4 LEDs
@@ -1378,7 +1384,7 @@ function showCalibration(fractions, running) {
     showView("calibration");
   }
   if (!running && calibrating) {
-    send("list");
+    requestList();
     showView("assign");
   }
   calibrating = running;
@@ -1457,6 +1463,46 @@ function showMessage(text) {
 
 // ---- Lines from the radio
 
+// The radio ends its list with "end N", N being the "setting" and "option" lines it sent. A list
+// that arrives with another number of lines is asked for again, at most LIST_TRIES times in a row.
+const LIST_TRIES = 3;
+const LIST_TIMEOUT_MS = 3000;      // a whole list takes about 0.6 s
+let listLines = 0;                 // "setting" and "option" lines since the last "list" was sent
+let listTries = 0;                 // lists asked for again in a row
+let listTimer = 0;                 // ends a list whose "end" line does not arrive
+
+function requestList() {
+  listLines = 0;
+  clearTimeout(listTimer);
+  listTimer = setTimeout(() => listEnded(-1), LIST_TIMEOUT_MS);
+  send("list");
+}
+
+// The list ended with "end N" (expected = N) or without it in time (expected = -1). An incomplete
+// list is asked for again; after the last try the band shows, with what did arrive in the views.
+function listEnded(expected) {
+  clearTimeout(listTimer);
+  const complete = listLines === expected;
+  if (!complete) {
+    console.warn(`Liste unvollständig: ${listLines} von ${expected} Zeilen`);
+    if (listTries < LIST_TRIES) {
+      listTries++;
+      requestList();
+      return;
+    }
+  }
+  listTries = 0;
+  $("incomplete").hidden = complete;
+  // The state lines start once the list is through, so that they do not compete with it.
+  send("stream 1");
+  checkOptionLists();
+  fillOptionLists();
+  buildRawTable();
+  showLabels();
+  showDetail();
+  showMapping();
+}
+
 // The radio's hello line arrived on this connection; lines before it may be cut off and are not checked.
 let helloSeen = false;
 
@@ -1493,19 +1539,16 @@ function handleLine(line) {
     if (rest[2] !== `proto=${PROTOCOL}`) warnMismatch(rest[2]);
     if (upd && upd.step === "restart") updateRestarted();
   } else if (kind === "setting") {
+    listLines++;
     const [key, type, min, max, def, value] = rest;
     settings.set(key, { type, min: Number(min), max: Number(max), def: Number(def), value: Number(value) });
   } else if (kind === "option") {
+    listLines++;
     const [list, value, optionKey] = rest;
     if (!optionLists.has(list)) optionLists.set(list, new Map());
     optionLists.get(list).set(Number(value), optionKey);
   } else if (kind === "end") {
-    checkOptionLists();
-    fillOptionLists();
-    buildRawTable();
-    showLabels();
-    showDetail();
-    showMapping();
+    listEnded(Number(rest[0]));
   } else if (kind === "ok") {
     handleOk(rest);
   } else if (kind === "error") {
@@ -1517,7 +1560,7 @@ function handleLine(line) {
       : reason === "receiver connected"
       ? "Ein Empfänger ist verbunden: Binden und Kalibrieren gehen nur ohne Verbindung."
       : "Die Fernsteuerung hat abgelehnt: " + reason);
-    send("list");
+    requestList();
   } else if (kind === "value" || kind === "fault") {
     // Known lines this page does not use: the answer to "get", and a crash reported after hello.
   } else if (helloSeen && kind !== "") {
@@ -1528,7 +1571,7 @@ function handleLine(line) {
 function handleOk(words) {
   if (words[0] === "defaults") {
     send("save");
-    send("list");
+    requestList();
   } else if (words[0] === "calibrate" && words[1] === "end") {
     showMessage("Kalibrierung übernommen und gespeichert.");
   } else if (settings.has(words[0])) {
@@ -1548,6 +1591,8 @@ function setConnected(connected) {
   document.body.classList.toggle("offline", !connected);
   helloSeen = false;
   $("mismatch").hidden = true;
+  $("incomplete").hidden = true;
+  clearTimeout(listTimer);
   if (!connected) {
     resetDrawing();
     settings.clear();
@@ -1586,9 +1631,11 @@ async function connect(known) {
   portClosed = new Promise((resolve) => { markClosed = resolve; });
   resumeWanted = false;
   setConnected(true);
+  // The state lines stay off until the list has arrived, see the "end" line.
+  await send("stream 0");
   await send("hello");
-  await send("stream 1");
-  await send("list");
+  listTries = 0;
+  requestList();
 
   const decoder = new TextDecoder();
   let pending = "";
