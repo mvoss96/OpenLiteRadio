@@ -602,6 +602,8 @@ function elrsFrame(type, payload) {
 function elrsRequest(type, payload, accept) {
   return new Promise((resolve) => {
     const attempt = (left) => {
+      // The tab was left: the radio no longer prints the module's frames, so no answer can come.
+      if (!elrs.open) { resolve(null); return; }
       const timer = setTimeout(() => {
         elrs.waiting = null;
         if (left > 1) attempt(left - 1); else resolve(null);
@@ -666,17 +668,24 @@ async function readEntry(index) {
   return null;
 }
 
+// A request stayed unanswered. With the tab left that is no fault of the module.
+function elrsUnanswered() {
+  if (!elrs.open) return;
+  elrs.failed = true;
+  showElrs();
+}
+
 // Read the device info and every entry, then show them.
 async function readModule() {
   if (!elrs.open || !elrs.moduleOn) return;
   const info = await elrsRequest(0x28, [], (f) => f[2] === 0x29);
-  if (!info) { elrs.failed = true; showElrs(); return; }
+  if (!info) { elrsUnanswered(); return; }
   const [name, at] = elrsString(info, 5);
   elrs.device = { name, count: info[at + 12] };
   const entries = [];
   for (let index = 1; index <= elrs.device.count; index++) {
     const entry = await readEntry(index);
-    if (!entry) { elrs.failed = true; showElrs(); return; }
+    if (!entry) { elrsUnanswered(); return; }
     entries[index] = entry;
   }
   // Redrawing would close a list that is open for choosing; the next reading shows the news.
@@ -796,6 +805,8 @@ function elrsState(fields) {
 function elrsShow(open) {
   if (open === elrs.open) return;
   elrs.open = open;
+  // Leaving ends the request that still waits, so that it is not sent again.
+  if (!open && elrs.waiting) elrs.waiting.done(null);
   send(open ? "frames 1" : "frames 0");
   if (open) { showElrs(); elrsQueue(readModule); }
 }
