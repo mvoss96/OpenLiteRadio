@@ -20,7 +20,9 @@
  *                     a few trim steps for sound.trim, one beep for sound.volume
  *   batleds MASK      battery LEDs, bit 0 is the leftmost; "batleds auto" returns control
  *   module 0|1        ELRS module off or on
- *   bind              start binding, as a long press of BIND does
+ *   bind              start binding, as a long press of BIND does; binding and
+ *                     "calibrate start" answer "error receiver connected" while a
+ *                     receiver is connected, also when started with the buttons
  *   wifi              start the module's WiFi, as the right trim centre at switch-on does
  *   ble               start the module's Bluetooth joystick, as the left trim centre at
  *                     switch-on does; WiFi and Bluetooth end when the module is switched off
@@ -293,8 +295,10 @@ void handle_command(char *line)
         }
     } else if (strcmp(command, "calibrate") == 0 && arguments[0] != nullptr) {
         if (strcmp(arguments[0], "start") == 0) {
-            calibration::start();
-            printk("ok calibrate start\n");
+            /* A refused start has reported its reason already. */
+            if (calibration::start()) {
+                printk("ok calibrate start\n");
+            }
         } else if (strcmp(arguments[0], "end") == 0) {
             output::Snapshot snapshot;
 

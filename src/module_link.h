@@ -36,6 +36,8 @@ void set_module_on(bool on);
  * Start a command on the module, once it answers after switching on: find it
  * by name, write it, and set the module's task, which sets the mode. Nothing
  * happens while another command runs. A tone tells whether it started.
+ * Binding is refused while a receiver is connected, with the error tune and
+ * the host line "error receiver connected".
  */
 void command_start(Command command);
 

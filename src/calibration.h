@@ -1,8 +1,8 @@
 /*
  * Stick calibration run: started with SETUP held for 2 s or by the host.
- * During the run the sticks are moved to all ends and no channel frames go
- * out. At the end the self-centring axes are released and the throttle is at
- * its lower end.
+ * During the run the sticks are moved to all ends and the module gets safe
+ * channel frames. At the end the self-centring axes are released and the
+ * throttle is at its lower end.
  */
 
 #pragma once
@@ -13,7 +13,12 @@
 
 namespace calibration {
 
-void start();
+/*
+ * Start a run; true if one is running afterwards. Refused while a receiver
+ * is connected, with the error tune and the host line "error receiver
+ * connected": a run takes the controls away from a model.
+ */
+bool start();
 bool running();
 
 /* Call every loop during a run with the raw stick readings. */

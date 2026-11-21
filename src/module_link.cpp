@@ -230,6 +230,12 @@ void command_start(Command command)
         output::module_task_now() != core::ModuleTask::NONE) {
         return;
     }
+    /* Binding drops the link, so not while a model is connected. */
+    if (command == COMMAND_BIND && receiver_connected()) {
+        indicators::play_event(settings::SOUND_ERROR);
+        printk("error receiver connected\n");
+        return;
+    }
     wanted = command;
     if (command_parameter[command] != 0) {
         search_finish(true);

@@ -833,7 +833,7 @@ setInterval(() => { if (elrs.open && elrs.moduleOn && elrs.queued === 0) elrsQue
 // an older page with newer code.
 
 // The project's version from the file VERSION; test.ps1 checks that both agree.
-const WEB_VERSION = "0.19.1";
+const WEB_VERSION = "0.19.2";
 // Protocol number of the hello line this page speaks; test.ps1 checks it against src/host.cpp.
 const PROTOCOL = 2;
 const USB_VENDOR_ID = 0x2fe3;
@@ -1514,6 +1514,8 @@ function handleLine(line) {
     if (reason === "crsf") return;
     showMessage(reason === "calibration rejected"
       ? "Kalibrierung verworfen: Ein Knüppel war nicht an allen Enden oder am Schluss nicht losgelassen."
+      : reason === "receiver connected"
+      ? "Ein Empfänger ist verbunden: Binden und Kalibrieren gehen nur ohne Verbindung."
       : "Die Fernsteuerung hat abgelehnt: " + reason);
     send("list");
   } else if (kind === "value" || kind === "fault") {

@@ -1,9 +1,11 @@
 #include "calibration.h"
 
+#include <zephyr/sys/printk.h>
 #include <zephyr/sys/util.h>
 
 #include "core/settings.h"
 #include "indicators.h"
+#include "module_link.h"
 #include "output.h"
 #include "storage.h"
 
@@ -17,10 +19,15 @@ uint16_t sweep_max[core::AXIS_COUNT];
 
 } // namespace
 
-void start()
+bool start()
 {
     if (active) {
-        return;
+        return true;
+    }
+    if (module_link::receiver_connected()) {
+        indicators::play_event(settings::SOUND_ERROR);
+        printk("error receiver connected\n");
+        return false;
     }
     for (int axis = 0; axis < core::AXIS_COUNT; axis++) {
         sweep_min[axis] = UINT16_MAX;
@@ -29,6 +36,7 @@ void start()
     active = true;
     output::set_hold(true);
     indicators::play_event(settings::SOUND_ACCEPTED);
+    return true;
 }
 
 bool running()

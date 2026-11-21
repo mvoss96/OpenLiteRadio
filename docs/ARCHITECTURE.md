@@ -143,8 +143,8 @@ stateDiagram-v2
     HostReady --> Host: PC sends values
     HostReady --> Locked: BIND + SETUP, USB removed, 30 s without PC values
     Host --> Locked: BIND + SETUP, PC releases, USB removed, 200 ms without PC values
-    Locked --> Binding: BIND 1 s
-    Active --> Binding: BIND 1 s
+    Locked --> Binding: BIND 1 s, no receiver connected
+    Active --> Binding: BIND 1 s, no receiver connected
     Binding --> Locked: receiver answers, 8 s, or BIND short
     [*] --> Ble: left trim centre held at switch-on, or configurator
     [*] --> Wifi: right trim centre held at switch-on, or configurator
@@ -242,6 +242,11 @@ mapping, weight and reverse; channels without a source stay centred.
   keep a model moving.
 - Calibration and storing are not modes of their own: while they hold the
   output, Locked does not evaluate the unlock gesture.
+- Binding and a calibration run start only while no receiver is connected,
+  from the buttons and from the host alike: binding drops the link and a
+  run takes the controls away, which a model in the air must not meet by a
+  button held by mistake. A refused start gives the tune of `sound.error`
+  and the host line `error receiver connected`.
 - Every change of mode while the radio is on gives a tone.
 
 ### USB device
@@ -692,7 +697,7 @@ To the radio:
 | `beep HZ MS` | tone at the volume in `sound.volume` |
 | `play KEY` | play what a setting sounds like: the tune chosen in `sound.on` to `sound.connect`, a few trim steps away from the centre and back for `sound.trim`, one beep for `sound.volume`; answers `ok play` or `error unknown key` |
 | `batleds MASK` | battery LEDs, bit 0 is the leftmost, until `batleds auto` |
-| `bind` | start binding, as holding BIND for 1 s does |
+| `bind` | start binding, as holding BIND for 1 s does; `error receiver connected` while a receiver is connected |
 | `wifi` | start the module's WiFi, as the right trim centre at switch-on does |
 | `ble` | start the module's Bluetooth joystick, as the left trim centre at switch-on does |
 | `module 0` / `module 1` | ELRS module off or on; channel frames follow once the throttle lock is released |
@@ -704,7 +709,7 @@ To the radio:
 | `save` | store all settings |
 | `revert` | return to the stored settings |
 | `defaults` | set all settings except the stick calibration (`cal.N.*`) to their defaults without storing them. If that changes `usb.mode`, all settings are stored at once, since the port goes away with the USB form |
-| `calibrate start` / `calibrate end` | stick calibration run, as SETUP on the radio |
+| `calibrate start` / `calibrate end` | stick calibration run, as SETUP on the radio; the start answers `error receiver connected` while a receiver is connected |
 | `calibrate cancel` | end the run and keep the previous calibration |
 | `inject KEY=VALUE ...` | test inputs: replace the readings of `sticks` (four raw values, comma-separated) and `sa` to `sf`, with the keys of the state line. Keys add up over several lines; the replacement ends 10 s after the last `inject` line, with `inject off`, or when the ELRS module starts. Refused with `error module on` while the module is on |
 
