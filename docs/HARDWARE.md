@@ -323,6 +323,32 @@ Hypotheses from these tests:
 - The USART1 driver reports ready; nothing was transmitted and no CRSF timing
   was measured.
 
+## Thread stacks, 2026-11-21
+
+Observed with a test build of firmware 0.19.2 that fills every stack with
+0xaa at start (`CONFIG_INIT_STACKS`) and reports how much stayed untouched.
+Bytes, highest use since start:
+
+| Stack | Size | Used | Unused |
+|-------|------|------|--------|
+| Control thread | 1024 | 504 | 520 |
+| USB device stack (`usbd`) | 1024 | 488 | 536 |
+| USB driver | 512 | 272 | 240 |
+| System work queue | 1024 | 272 | 752 |
+| Main thread | 2048 | 864 | 1184 |
+| Interrupts | 1024 | 224 | 800 |
+| Idle | 256 | 72 | 184 |
+
+Run before the reading: state lines and joystick reports, `list`, `save`,
+`revert`, `play`, a rejected calibration run, the USB form changed to the
+Xbox controller and back, and with `module 1` channel frames to the module
+(4776 sent, 88 frames received), `crsf` and `save`.
+
+Not run: ELRS active (the output stayed locked), Bluetooth, WiFi, the
+command search of binding, an accepted calibration run with its storing,
+the trim buttons, switching on with the power button. All of these run in
+the main thread.
+
 ## Common contract with the ELRS target repository
 
 - ESP32 module hardware JSON stays identical for stock and custom controllers.
@@ -339,7 +365,7 @@ Hypotheses from these tests:
 ## Unverified in this implementation
 
 Option-byte watchdog setting, volts per count of the battery input, the
-function of the shift register outputs 0x20 and 0x80, the battery input on a
-partly discharged battery, and thread stack high-water marks. The largest
+function of the shift register outputs 0x20 and 0x80, and the battery input
+on a partly discharged battery. The largest
 image loaded through the vendor USB updater and seen running is 73012 bytes
 (firmware 0.19.1); the stock application is 58672 bytes.
