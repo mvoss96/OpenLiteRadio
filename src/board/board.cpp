@@ -357,11 +357,16 @@ void init()
     configure_pins(GPIOB, BIT(0), PIN_ANALOG);
     static const uint8_t adc_channels[] = { 0, 1, 2, 3, ADC_CHANNEL_BATTERY };
 
+    /*
+     * 13.5 ADC clock cycles of sampling, as the stock firmware uses; the
+     * driver's table names them 14. The driver's default of 1.5 cycles only
+     * suits inputs of very low impedance.
+     */
     for (uint8_t channel : adc_channels) {
         struct adc_channel_cfg config = {
             .gain = ADC_GAIN_1,
             .reference = ADC_REF_INTERNAL,
-            .acquisition_time = ADC_ACQ_TIME_DEFAULT,
+            .acquisition_time = ADC_ACQ_TIME(ADC_ACQ_TIME_TICKS, 14),
             .channel_id = channel,
         };
 

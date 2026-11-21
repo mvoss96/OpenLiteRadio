@@ -151,6 +151,14 @@ settle within 1.5 cycles, so the readings do not depend on the sampling
 time and the stock firmware's battery thresholds apply to these readings
 as they are.
 
+Since firmware 0.19.5 the channels are sampled for 13.5 cycles as in the
+stock firmware, as a margin for other units, gimbals and temperatures; this
+radio did not need it. Observed with the sticks at rest, means of 170
+readings before and 363 after the change: channel 0 679.1 and 678.4,
+channel 1 2074.2 and 2073.1, channel 2 2077.8 and 2078.0, channel 3 2077.8
+and 2077.5; the battery 4077 to 4078 before and 4081 after. The stored
+stick calibration stays valid.
+
 Settings storage, observed 2026-11-18 with firmware 0.3.0 (59340 bytes, the
 largest image loaded so far):
 
