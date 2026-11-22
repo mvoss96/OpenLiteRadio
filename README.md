@@ -1,9 +1,14 @@
 # OpenLiteRadio
 
-Open firmware for the BETAFPV LiteRadio 4, set up in the browser.
+Open firmware for the BETAFPV LiteRadio 4, built on
+[Zephyr](https://zephyrproject.org/) and set up in the browser.
 
 **Configurator: <https://mvoss96.github.io/OpenLiteRadio/>** (Chrome or Edge,
 in English and German)
+
+It works with the ExpressLRS firmware the radio ships with. To update
+ExpressLRS, see
+[literadio4-elrs-target](https://github.com/mvoss96/literadio4-elrs-target).
 
 **Experimental:** tested on the bench with a Betaflight quad, not flown yet.
 
@@ -44,7 +49,6 @@ Details and test status: [docs/FEATURES.md](docs/FEATURES.md).
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): firmware layers and the USB protocol
 - [docs/WIRING.md](docs/WIRING.md), [docs/HARDWARE.md](docs/HARDWARE.md): pins and measurements
 - [docs/ZEPHYR.md](docs/ZEPHYR.md): Zephyr setup
-- [literadio4-elrs-target](https://github.com/mvoss96/literadio4-elrs-target): ELRS target for the module
 
 ## License
 
