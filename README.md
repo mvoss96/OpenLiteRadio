@@ -53,15 +53,20 @@ vendor USB bootloader.
 ```
 
 `tools/flash.py` sends the image through the vendor USB updater, which only
-writes the application area. While this firmware is running and the radio is
+writes the application area from 0x08008000. Do not write below that address
+by any other way (SWD, option bytes): the area holds the vendor bootloader and
+the factory calibration, and without the bootloader the radio can only be
+recovered with a debug probe. While this firmware is running and the radio is
 switched off, the tool switches the radio into update mode and back by itself. Otherwise enter update mode with
 the buttons first: USB unplugged, hold SETUP and power until the double beep,
 plug USB in. Details are in `docs/ZEPHYR.md`.
 
 ## Configurator
 
-Open `web/index.html` in Chrome or Edge, plug the radio in and press
-"Verbinden". Press "Trennen" before loading firmware; the serial port can only
+Open <https://mvoss96.github.io/OpenLiteRadio/> in Chrome or Edge, plug the
+radio in and press "Verbinden". The page is `web/index.html`, published by
+`.github/workflows/pages.yml` on every push to `master`; opened as a local
+file it works the same. Press "Trennen" before loading firmware; the serial port can only
 be open in one program. The page is in German.
 
 - "Belegung" shows the assignment in use and a drawing of the radio. The
@@ -109,3 +114,7 @@ joystick with the channel outputs.
 A successful build does not establish that something works on the radio; what
 has been observed on hardware is recorded in `docs/HARDWARE.md`. No vendor
 binaries, personal settings, or device dumps belong in this repo.
+
+## License
+
+GPL-3.0, see [LICENSE](LICENSE).
