@@ -43,6 +43,41 @@ Details and test status: [docs/FEATURES.md](docs/FEATURES.md).
 `LiteRadio_4_ELRS_…bin` file from
 [BETAFPV's download page](https://support.betafpv.com/hc/en-us/articles/36869017436953-LiteRadio-4).
 
+## Buttons
+
+| Action | Buttons |
+|---|---|
+| Power on | hold power 1 s |
+| Power off | hold power until the LEDs are out |
+| Unlock | throttle down (or up, then down, if set) |
+| Bind | hold BIND 1 s; a short press cancels |
+| Bluetooth joystick | hold the left trim centre while switching on |
+| WiFi of the ELRS module | hold the right trim centre while switching on |
+| Joystick or Xbox controller | hold both trim centres 2 s, radio off and at a PC |
+| Reset trim | hold a trim centre 1 s |
+| Calibrate sticks | hold SETUP 2 s; a short press ends it |
+| Show link quality on the battery LEDs | short press on SETUP |
+| Update mode | USB unplugged, hold SETUP and switch on |
+
+## Status LED
+
+| Colour | Meaning |
+|---|---|
+| Blue | sending, receiver connected |
+| Blue, blinking | sending, no receiver |
+| Red | locked, receiver connected |
+| Red, blinking | locked, no receiver |
+| Cyan, blinking | binding |
+| Yellow, blinking | calibration |
+| Green, blinking | WiFi |
+| Purple | Bluetooth joystick |
+| White | off, USB joystick |
+| Yellow | off, Xbox controller |
+| Orange flashes | low battery |
+
+The four small LEDs show the battery level. The highest one blinks while USB
+powers the radio; the leftmost blinks when the battery is low.
+
 ## Development
 
 - [docs/BUILD.md](docs/BUILD.md): build, tests, command-line tools
