@@ -1,10 +1,9 @@
-# Publish the configurator in web/ as the GitHub Pages site.
+# Build the firmware and publish it with the configurator in web/ as the GitHub Pages site.
 name: Pages
 
 on:
   push:
     branches: [master]
-    paths: [web/**, .github/workflows/pages.yml]
   workflow_dispatch:
 
 permissions:
@@ -23,8 +22,29 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      ZEPHYR_BASE: ${{ github.workspace }}/.deps/zephyr
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # The steps of "Setup" in docs/ZEPHYR.md. The SDK's host tools (dtc, QEMU) are not needed.
+      - name: Set up the Zephyr workspace
+        run: |
+          pip install west
+          west init -l west
+          west update --narrow -o=--depth=1
+          pip install -r .deps/zephyr/scripts/requirements-base.txt cmake ninja
+          west sdk install -t arm-zephyr-eabi --no-hosttools
+      - name: Build the firmware
+        run: |
+          west build --no-sysbuild -b openliteradio -d build . -- -DBOARD_ROOT=$PWD
+          python tools/check_image.py build/zephyr/zephyr.bin --elf build/zephyr/zephyr.elf
+      - name: Put the firmware next to the configurator
+        run: |
+          mkdir web/firmware
+          cp build/zephyr/zephyr.bin web/firmware/openliteradio.bin
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
