@@ -24,15 +24,15 @@ Details and test status: [docs/FEATURES.md](docs/FEATURES.md).
 ## Install
 
 1. Open the [configurator](https://mvoss96.github.io/OpenLiteRadio/) and press
-   "Load firmware".
+   "Flash firmware".
 2. Switch the radio off and unplug USB. Hold SETUP and switch it on until the
    double beep. Plug USB in.
 3. Press "Next" and choose the updater in the browser's window.
-4. Press "Load".
+4. Press "Flash".
 5. When it is done, unplug USB.
 6. Calibrate the sticks: press "Connect", then "Calibrate sticks".
 
-**Update:** switch the radio off, connect, then System → "Update" → "Load".
+**Update:** switch the radio off, connect, then System → "Update" → "Flash".
 
 **Back to stock:** System → "Update" → "Other file", choose the
 `LiteRadio_4_ELRS_…bin` file from
