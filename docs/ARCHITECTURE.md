@@ -344,6 +344,16 @@ port picker; the page asks for that click when no allowed updater appears
 within 10 s. Updater ports that were present before the request, such as a
 flight controller with the same IDs, are not taken in the connected case.
 
+The page reads `firmware/openliteradio.bin` beside it when it opens, the
+image the Pages workflow publishes, and offers it first; "Andere Datei"
+chooses a file instead. Opened as a local file the page has no such image
+and asks for a file.
+
+While that image is newer than the firmware of the connected radio, a band
+"Firmware x.y.z verfügbar" with the button "Aktualisieren" shows on every
+page. It replaces the band about a configurator that does not match the
+firmware: a radio older than the page needs the update, not a reload.
+
 A file is shown as "OpenLiteRadio x.y.z" (the string `IMAGE_ID` in
 `src/host.cpp`), "BETAFPV-Original" (the USB product name "BETAFPV Joystick"
 in the image; the stock firmware has no version string) or "Unbekannte
@@ -380,9 +390,9 @@ pings the module, reads the device information and every entry with all its
 chunks (`crsf` with 0x28 and 0x2C, answers 0x29 and 0x2B in `rx` lines), and
 reads the list again every 2 s and after every change. A choice is written
 with 0x2D; a command is started by writing 1, and while the module asks for
-confirmation (status 3) its button sends 4. Known ELRS 3.6 names get German
-labels and fixed groups (Funk, Sendeleistung, Videosender, Empfänger,
-Modul); any other entry appears under its folder's name or in Modul. Hidden
+confirmation (status 3) its button sends 4. Known ELRS 3.6 names get own
+labels, in the page's language, and fixed groups (Funk, Sendeleistung,
+Videosender, Empfänger, Modul); any other entry appears under its folder's name or in Modul. Hidden
 entries and folders themselves are not shown. The receiver's link comes
 from the state line. Bind, WiFi and the Bluetooth joystick are started
 through the radio's own commands `bind`, `wifi` and `ble`, so that the radio

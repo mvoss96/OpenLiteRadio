@@ -248,6 +248,7 @@
   </nav>
   <div class="spacer"></div>
   <div class="device"><i></i><span id="deviceText"></span></div>
+  <button id="language" class="btn subtle"></button>
   <button id="connect" class="btn subtle">Trennen</button>
 </header>
 
@@ -261,6 +262,13 @@
 <div class="band" id="mismatch" hidden>
   <svg class="i" viewBox="0 0 24 24"><path d="M12 8v5m0 3.5v.5M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
   <b>Konfigurator passt nicht zur Firmware</b><span>Seite neu laden: Strg + Umschalt + R</span>
+</div>
+
+<!-- The page brings a newer firmware than the radio runs. -->
+<div class="band" id="newer" hidden>
+  <svg class="i" viewBox="0 0 24 24"><path d="M12 16V4m-5 5 5-5 5 5M5 20h14"/></svg>
+  <b id="newerText"></b>
+  <button class="btn" id="newerOpen">Aktualisieren</button>
 </div>
 
 <!-- The list of settings did not arrive complete, also after asking again. -->
@@ -571,7 +579,8 @@ const ELRS_START_MS = 5000;   // "antwortet nicht" only once the module has been
 const ELRS_TYPE = { UINT8: 0, SELECT: 9, STRING: 10, FOLDER: 11, INFO: 12, COMMAND: 13 };
 const COMMAND = { READY: 0, START: 1, PROGRESS: 2, CONFIRM_NEEDED: 3, CONFIRM: 4 };
 
-// German labels and groups of the names ELRS 3.6 uses; other names are shown as the module sends them.
+// German labels and groups of the names ELRS 3.6 uses, shown through t(); other names are shown as
+// the module sends them.
 const ELRS_LABELS = {
   "Packet Rate": ["Paketrate", "Funk"], "Telem Ratio": ["Telemetrie", "Funk"], "Switch Mode": ["Schaltermodus", "Funk"],
   "Link Mode": ["Verbindung", "Funk"], "Model Match": ["Modell-Abgleich", "Funk"],
@@ -750,7 +759,7 @@ function elrsTile(entry, label) {
     const confirm = entry.status === COMMAND.CONFIRM_NEEDED;
     const text = entry.text && entry.status !== COMMAND.READY ? `<span class="value">${escapeHtml(entry.text)}</span>` : "";
     return `<div class="tile"><span>${name}</span>${text}<button class="btn" data-command="${entry.index}" data-confirm="${confirm}">` +
-           `${confirm ? "Bestätigen" : ELRS_BUTTONS[entry.name] || "Starten"}</button></div>`;
+           `${t(confirm ? "Bestätigen" : ELRS_BUTTONS[entry.name] || "Starten")}</button></div>`;
   }
   return `<div class="tile"><span>${name}</span><span class="value mono">${escapeHtml(entry.text || "")}</span></div>`;
 }
@@ -761,7 +770,7 @@ function elrsHeader() {
   const shown = !$("elrsGroups").hidden;
   const texts = { elrs_active: "TX aktiv", elrs_locked: "TX gesperrt", elrs_binding: "bindet",
                   wifi: "WiFi läuft – zum Beenden ausschalten", bluetooth: "Bluetooth-Joystick – zum Beenden ausschalten" };
-  $("elrsState").textContent = shown ? texts[mode] || "" : "";
+  $("elrsState").textContent = shown ? t(texts[mode] || "") : "";
   // The same colours as the status LED in the drawing: blue while sending, orange while locked.
   $("elrsState").style.color = mode === "elrs_active" ? ACCENT : mode === "elrs_locked" ? WARN : "";
 }
@@ -773,8 +782,8 @@ function showElrs() {
   const shown = on && elrs.device !== null && elrs.entries.length > 0 && !silent;
   $("elrsGroups").hidden = !shown;
   $("elrsOff").hidden = shown;
-  $("elrsNoteTitle").textContent = !on ? "Fernsteuerung ist aus" : silent ? "Modul antwortet nicht" : "Modul wird gelesen …";
-  $("elrsNoteText").textContent = !on ? "Zum Einstellen die Fernsteuerung einschalten." : silent ? "Es wird weiter gefragt." : "";
+  $("elrsNoteTitle").textContent = t(!on ? "Fernsteuerung ist aus" : silent ? "Modul antwortet nicht" : "Modul wird gelesen …");
+  $("elrsNoteText").textContent = t(!on ? "Zum Einstellen die Fernsteuerung einschalten." : silent ? "Es wird weiter gefragt." : "");
   elrsHeader();
   if (!shown) return;
 
@@ -788,19 +797,19 @@ function showElrs() {
     if (entry.type === ELRS_TYPE.INFO && /^\d+\.\d+/.test(entry.name)) continue;
     const [label, group] = elrsPlace(entry);
     if (!groups.has(group)) groups.set(group, []);
-    groups.get(group).push(elrsTile(entry, label));
+    groups.get(group).push(elrsTile(entry, t(label)));
   }
   // The receiver's link from the state line, above what the module lists.
   groups.get("Empfänger").unshift(
-    `<div class="tile"><span>Verbunden</span><span class="value" id="elrsLinked">–</span></div>`,
-    `<div class="tile"><span>Qualität</span><span class="value" id="elrsQuality">–</span></div>`);
+    `<div class="tile"><span>${t("Verbunden")}</span><span class="value" id="elrsLinked">–</span></div>`,
+    `<div class="tile"><span>${t("Qualität")}</span><span class="value" id="elrsQuality">–</span></div>`);
   const version = elrs.entries.find((e) => e && e.type === ELRS_TYPE.INFO && /^\d+\.\d+/.test(e.name));
   if (version) groups.get("Modul").push(`<div class="tile"><span>Version</span><span class="value mono">${escapeHtml(version.name)}</span></div>`);
 
   const known = ELRS_COLUMNS.flat();
   const columns = [ELRS_COLUMNS[0].concat([...groups.keys()].filter((g) => !known.includes(g))), ELRS_COLUMNS[1]];
   $("elrsGroups").innerHTML = columns.map((names) => `<div class="stack">` + names.filter((g) => groups.get(g).length).map((g) =>
-    `<section class="group"><h2><svg class="i" viewBox="0 0 24 24"><path d="${ELRS_ICONS[g] || ELRS_ICONS.Modul}"/></svg>${escapeHtml(g)}</h2>` +
+    `<section class="group"><h2><svg class="i" viewBox="0 0 24 24"><path d="${ELRS_ICONS[g] || ELRS_ICONS.Modul}"/></svg>${escapeHtml(t(g))}</h2>` +
     `<div class="tiles">${groups.get(g).join("")}</div></section>`).join("") + `</div>`).join("");
   if (lastFields) elrsState(lastFields);
 }
@@ -819,7 +828,7 @@ function elrsState(fields) {
   if (!elrs.open) return;
   elrsHeader();
   if (!$("elrsLinked")) return;
-  $("elrsLinked").textContent = fields.lq === "0" ? "nein" : "ja";
+  $("elrsLinked").textContent = t(fields.lq === "0" ? "nein" : "ja");
   $("elrsQuality").textContent = fields.lq + " %";
 }
 
@@ -872,7 +881,7 @@ setInterval(() => { if (elrs.open && elrs.moduleOn && elrs.queued === 0) elrsQue
 // an older page with newer code.
 
 // The project's version from the file VERSION; test.ps1 checks that both agree.
-const WEB_VERSION = "0.20.1";
+const WEB_VERSION = "0.21.0";
 // Protocol number of the hello line this page speaks; test.ps1 checks it against src/host.cpp.
 const PROTOCOL = 3;
 const USB_VENDOR_ID = 0x2fe3;
@@ -909,7 +918,7 @@ const MAPPINGS = [
 ];
 const MAPPING_CUSTOM = 2;
 
-// Texts for the keys of the radio's option lists ("option LIST VALUE KEY"), per list.
+// German texts for the keys of the radio's option lists ("option LIST VALUE KEY"), per list.
 // A key without a text here is shown as it is.
 const OPTION_TEXTS = {
   unlock: { throttle_low: "Gas unten", throttle_up_down: "Gas hoch, dann runter" },
@@ -927,6 +936,288 @@ const TRIM_KEYS = ["trim.thr", "trim.rud", "trim.ele", "trim.ail"];
 const TRIM_STEP_US = 4;
 
 const $ = (id) => document.getElementById(id);
+
+// ---- Language
+//
+// The page is written in German. EN holds the English text of every German one; t() gives a text
+// in the chosen language. The choice is kept in this browser; without one, the browser's language
+// decides.
+const EN = {
+  "Bereiche": "Sections",
+  "Belegung": "Assignment",
+  "ELRS-Modul": "ELRS module",
+  "Einstellungen": "Settings",
+  "Trennen": "Disconnect",
+  "TX aktiv": "TX active",
+  "Konfigurator passt nicht zur Firmware": "Configurator does not match the firmware",
+  "Seite neu laden: Strg + Umschalt + R": "Reload the page: Ctrl + Shift + R",
+  "Einstellungen unvollständig geladen": "Settings loaded incompletely",
+  "Trennen und neu verbinden": "Disconnect and connect again",
+  "Nicht verbunden": "Not connected",
+  "Konfigurator": "Configurator",
+  "Automatisch verbinden": "Connect automatically",
+  "Firmware aufspielen": "Load firmware",
+  "Verbinden": "Connect",
+  "LiteRadio 4 · Firmware {0} · Konfigurator {1}": "LiteRadio 4 · Firmware {0} · Configurator {1}",
+  "Akku": "Battery",
+  "Knüppel kalibrieren": "Calibrate sticks",
+  "Fernsteuerung mit ihren Bedienelementen": "Radio with its controls",
+  "Bedienelement einstellen": "Set up a control",
+  "{0} einstellen": "Set up {0}",
+  "Schließen": "Close",
+  "Kanal": "Channel",
+  "Kanal {0}": "Channel {0}",
+  "kein Kanal": "no channel",
+  "frei": "free",
+  "Kennlinie": "Response",
+  "Erweitert": "Advanced",
+  "Gewicht": "Weight",
+  "Umkehren": "Reverse",
+  "Abbrechen": "Cancel",
+  "Ersetzen": "Replace",
+  "Tauschen": "Swap",
+  "Totzone": "Dead zone",
+  "Stellungen": "Positions",
+  "Trimmung": "Trim",
+  "Trimm {0}": "Trim {0}",
+  "Zurücksetzen": "Reset",
+  "Custom-Belegung ersetzen?": "Replace the Custom assignment?",
+  "Kanal {0} ist belegt von <b>{1}</b>": "Channel {0} is taken by <b>{1}</b>",
+  "Hebel links": "Left lever",
+  "Hebel rechts": "Right lever",
+  "Taste links": "Left button",
+  "Taste rechts": "Right button",
+  "Wippe links": "Left rocker",
+  "Wippe rechts": "Right rocker",
+  "Linker Knüppel, senkrecht": "Left stick, vertical",
+  "Linker Knüppel, waagerecht": "Left stick, horizontal",
+  "Rechter Knüppel, senkrecht": "Right stick, vertical",
+  "Rechter Knüppel, waagerecht": "Right stick, horizontal",
+  "oben": "up",
+  "Mitte": "centre",
+  "unten": "down",
+  "losgelassen": "released",
+  "gedrückt": "pressed",
+  "aus": "off",
+  "gesperrt": "locked",
+  "aktiv": "active",
+  "bindet": "binding",
+  "kein Empfänger": "no receiver",
+  "Empfänger {0} %, -{1} dBm": "receiver {0} %, -{1} dBm",
+  "{0} von 4": "{0} of 4",
+  "Gesperrt: Gas hoch, dann runter": "Locked: throttle up, then down",
+  "Gesperrt: Gas nach unten": "Locked: throttle down",
+  "Funk": "Link",
+  "Sendeleistung": "TX power",
+  "Videosender": "Video transmitter",
+  "Empfänger": "Receiver",
+  "Modul": "Module",
+  "Paketrate": "Packet rate",
+  "Telemetrie": "Telemetry",
+  "Schaltermodus": "Switch mode",
+  "Verbindung": "Link mode",
+  "Modell-Abgleich": "Model match",
+  "Höchstens": "Maximum",
+  "Dynamisch": "Dynamic",
+  "Leistung": "Power",
+  "An den Videosender": "Send to the video transmitter",
+  "Verloren / gut": "Lost / good",
+  "Neuen Empfänger binden": "Bind a new receiver",
+  "WiFi für Modul-Update": "WiFi for module update",
+  "WiFi für Empfänger-Update": "WiFi for receiver update",
+  "Bluetooth-Joystick": "Bluetooth joystick",
+  "Binden": "Bind",
+  "Senden": "Send",
+  "Bestätigen": "Confirm",
+  "Starten": "Start",
+  "TX gesperrt": "TX locked",
+  "WiFi läuft – zum Beenden ausschalten": "WiFi running – switch off to end",
+  "Bluetooth-Joystick – zum Beenden ausschalten": "Bluetooth joystick – switch off to end",
+  "Fernsteuerung ist aus": "The radio is off",
+  "Modul antwortet nicht": "The module does not answer",
+  "Modul wird gelesen …": "Reading the module …",
+  "Zum Einstellen die Fernsteuerung einschalten.": "Switch the radio on to change its settings.",
+  "Es wird weiter gefragt.": "Still asking.",
+  "Verbunden": "Connected",
+  "Qualität": "Quality",
+  "nein": "no",
+  "ja": "yes",
+  "Bedienung": "Operation",
+  "Entsperren mit": "Unlock with",
+  "USB-Gerät, wenn ausgeschaltet": "USB device when switched off",
+  "LED blinkt beim Trimmen": "LED flashes on trim",
+  "Xbox-Controller": "Xbox controller",
+  "Linker Stick X": "Left stick X",
+  "Linker Stick Y": "Left stick Y",
+  "Rechter Stick X": "Right stick X",
+  "Rechter Stick Y": "Right stick Y",
+  "Töne": "Tones",
+  "Lautstärke": "Volume",
+  "Aus": "Off",
+  "Leise": "Quiet",
+  "Mittel": "Medium",
+  "Laut": "Loud",
+  "Trimmen": "Trim",
+  "Abspielen": "Play",
+  "Einschalten": "Power on",
+  "Ausschalten": "Power off",
+  "Entsperren": "Unlock",
+  "Befehl angenommen": "Command accepted",
+  "Erfolg": "Success",
+  "Abbruch": "Cancelled",
+  "Fehler": "Error",
+  "Akku schwach": "Battery low",
+  "Verbindung weg": "Link lost",
+  "Gas unten": "Throttle down",
+  "Gas hoch, dann runter": "Throttle up, then down",
+  "Original": "Stock",
+  "Piep": "Beep",
+  "Doppelpiep": "Double beep",
+  "Kurz hoch": "Short high",
+  "Tief": "Low",
+  "Tief lang": "Low long",
+  "Aufsteigend": "Rising",
+  "Absteigend": "Falling",
+  "Dreiklang": "Triad",
+  "Warnung": "Warning",
+  "Gerät": "Device",
+  "Aktualisieren": "Update",
+  "Akku-Eingang": "Battery input",
+  "USB-Versorgung": "USB supply",
+  "vorhanden": "present",
+  "fehlt": "absent",
+  "Zustandszeilen pro Sekunde": "State lines per second",
+  "Ton": "Tone",
+  "Tasten": "Buttons",
+  "BIND 1 s, kurz BIND bricht ab": "BIND 1 s, a short BIND cancels",
+  "linke Trimm-Mitte beim Einschalten": "left trim centre at power-on",
+  "rechte Trimm-Mitte beim Einschalten": "right trim centre at power-on",
+  "Joystick oder Xbox": "Joystick or Xbox",
+  "beide Trimm-Mitten 2 s, ausgeschaltet": "both trim centres 2 s, switched off",
+  "Trimmung zurücksetzen": "Reset trim",
+  "Trimm-Mitte 1 s, eingeschaltet": "trim centre 1 s, switched on",
+  "Kalibrieren": "Calibrate",
+  "Alle Einstellungen": "All settings",
+  "Wert": "Value",
+  "Bereich": "Range",
+  "Vorgabe": "Default",
+  "Alles auf Vorgabe": "Reset all to defaults",
+  "Links": "Left",
+  "Rechts": "Right",
+  "Schritt {0} von 2": "Step {0} of 2",
+  "In alle Ecken bewegen": "Move to all corners",
+  "Rechts loslassen, Gas ganz nach unten": "Release the right stick, throttle all the way down",
+  "Weiter": "Next",
+  "Fertig": "Done",
+  "fertig": "done",
+  "links fehlt": "left missing",
+  "rechts fehlt": "right missing",
+  "oben fehlt": "top missing",
+  "unten fehlt": "bottom missing",
+  "Gas nach unten": "Move throttle down",
+  "loslassen": "release",
+  "Kalibrierung verworfen: Ein Knüppel war nicht an allen Enden oder am Schluss nicht losgelassen.": "Calibration rejected: a stick did not reach all ends or was not released at the end.",
+  "Ein Empfänger ist verbunden: Binden und Kalibrieren gehen nur ohne Verbindung.": "A receiver is connected: binding and calibration only work without a link.",
+  "Die Fernsteuerung hat abgelehnt: {0}": "The radio refused: {0}",
+  "Kalibrierung übernommen und gespeichert.": "Calibration accepted and stored.",
+  "Dieser Browser kann keine seriellen Geräte ansprechen. Bitte Chrome oder Edge verwenden.": "This browser cannot reach serial devices. Please use Chrome or Edge.",
+  "Die Fernsteuerung hat sich als anderes USB-Gerät angemeldet. Einmal auf Verbinden klicken und sie auswählen, danach verbindet der Konfigurator bei diesem Wechsel von selbst.": "The radio has appeared as a different USB device. Click Connect once and choose it; after that the configurator connects by itself on this change.",
+  "1. Ausschalten, USB abziehen": "1. Switch off, unplug USB",
+  "2. SETUP halten, einschalten bis zum Doppelton": "2. Hold SETUP, switch on until the double beep",
+  "3. USB einstecken": "3. Plug USB in",
+  "Andere Datei": "Other file",
+  "Unbekannte Firmware": "Unknown firmware",
+  "BETAFPV-Original": "BETAFPV stock",
+  "Zu groß: {0} KiB, höchstens {1} KiB": "Too large: {0} KiB, at most {1} KiB",
+  "Keine Firmware für diese Fernsteuerung": "Not a firmware for this radio",
+  "Firmware-Datei wählen": "Choose the firmware file",
+  "Datei wählen": "Choose file",
+  "Aufspielen": "Load",
+  "Erst die Fernsteuerung ausschalten": "Switch the radio off first",
+  "Zurück zur Original-Firmware": "Back to the stock firmware",
+  "Weder OpenLiteRadio noch die bekannte Original-Firmware": "Neither OpenLiteRadio nor the known stock firmware",
+  "Diese Version läuft schon": "This version is already running",
+  "Einstellungen bleiben erhalten": "Settings are kept",
+  "Update-Modus einschalten": "Enter update mode",
+  "Updater startet": "Updater is starting",
+  "Updater freigeben": "Allow the updater",
+  "Im Auswahlfenster den Updater wählen": "Choose the updater in the port window",
+  "Freigeben": "Allow",
+  "Wird geschrieben": "Writing",
+  "USB nicht abziehen": "Do not unplug USB",
+  "Startet neu": "Restarting",
+  "Firmware {0} läuft": "Firmware {0} is running",
+  "Firmware {0} verfügbar": "Firmware {0} available",
+  "Erwartet war {0}": "Expected {0}",
+  "Geschrieben und geprüft": "Written and verified",
+  "USB abziehen, damit die Firmware startet": "Unplug USB to start the firmware",
+  "Original-Firmware aufgespielt": "Stock firmware loaded",
+  "Nach dem Neustart keine Verbindung: Verbinden von Hand": "No connection after the restart: connect by hand",
+  "Nicht geschrieben": "Not written",
+  "Erneut versuchen": "Try again",
+  "installiert {0}": "installed {0}",
+  "Keine Antwort vom Updater": "No answer from the updater",
+  "Kopfdaten nicht bestätigt": "Header not acknowledged",
+  "Block {0} von {1} nicht bestätigt": "Block {0} of {1} not acknowledged",
+  "Prüfung des Updaters fehlgeschlagen": "The updater's check failed",
+};
+
+let lang = "de";
+try { lang = localStorage.getItem("lang") || (navigator.language.startsWith("de") ? "de" : "en"); } catch {}
+
+// A text in the chosen language; {0}, {1} stand for the arguments.
+function t(text, ...args) {
+  const out = lang === "en" && EN[text] !== undefined ? EN[text] : text;
+  return out.replace(/\{(\d)\}/g, (_, i) => args[i]);
+}
+
+// The texts written in the page itself: [node, attribute or null, its German value, the German text in it].
+const staticTexts = [];
+function collectStaticTexts() {
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    const text = node.nodeValue.trim();
+    if (EN[text] !== undefined && !node.parentElement.closest("script")) staticTexts.push([node, null, node.nodeValue, text]);
+  }
+  for (const element of document.querySelectorAll("[aria-label]")) {
+    const text = element.getAttribute("aria-label");
+    if (EN[text] !== undefined) staticTexts.push([element, "aria-label", text, text]);
+  }
+}
+
+function showStaticTexts() {
+  document.documentElement.lang = lang;
+  // The button names the other language.
+  $("language").textContent = lang === "de" ? "English" : "Deutsch";
+  for (const [node, attribute, whole, text] of staticTexts) {
+    const value = whole.replace(text, t(text));
+    if (attribute) node.setAttribute(attribute, value); else node.nodeValue = value;
+  }
+}
+
+// Change the language and show everything again that scripts have written.
+function setLanguage(next) {
+  lang = next;
+  try { localStorage.setItem("lang", lang); } catch {}
+  showStaticTexts();
+  buildLabels();
+  for (const element of document.querySelectorAll("[data-source]")) {
+    element.classList.toggle("selected", Number(element.dataset.source) === selected);
+  }
+  fillOptionLists();
+  for (const key of settings.keys()) showSetting(key);
+  showMapping();
+  showLabels();
+  showDetail();
+  showCalStage();
+  showElrs();
+  if (firmwareVersion) showDevice();
+  if (lastFields) showState(lastFields);
+  if (upd) showUpdate();
+  showVersionBands();
+}
+
 const ICON = { check: "m5 12 5 5 9-10" };
 const icon = (name) => `<svg class="i" viewBox="0 0 24 24"><path d="${ICON[name]}"/></svg>`;
 
@@ -1037,7 +1328,7 @@ function buildLabels() {
   $("callouts").innerHTML = CONTROLS.map((c) => {
     const [x0, x1] = c.side === "L" ? [-350, -90] : [730, 990];
     const near = c.side === "L" ? x1 : x0;
-    return `<g class="callout" tabindex="0" role="button" data-source="${c.source}" aria-label="${c.name} einstellen">
+    return `<g class="callout" tabindex="0" role="button" data-source="${c.source}" aria-label="${t("{0} einstellen", c.name)}">
       <rect class="hit" id="coHit${c.source}" x="${x0 - 14}" y="${c.y - 34}" width="${x1 - x0 + 28}" height="46" rx="10"></rect>
       <text id="coName${c.source}" x="${x0}" y="${c.y - 10}" font-size="17" font-weight="600" fill="${FG1}">${c.name}</text>
       <text id="coChannel${c.source}" x="${x0 + 14 + 10 * c.name.length}" y="${c.y - 10}" font-size="14" fill="${FG3}"></text>
@@ -1058,7 +1349,7 @@ function buildLabels() {
 
 function channelText(source) {
   const channels = channelsOf(source);
-  return channels.length ? "Kanal " + channels.join(", ") : "kein Kanal";
+  return channels.length ? t("Kanal {0}", channels.join(", ")) : t("kein Kanal");
 }
 
 // Live value of each control: the output of the first channel that follows it.
@@ -1081,7 +1372,7 @@ function showLabels() {
     const centre = output(1500 + steps * TRIM_STEP_US, shapeOf(c.source));
     $("coTrim" + c.source).setAttribute("x", x0 + (x1 - x0) * (centre - 988) / 1024 - 1);
     $("coTrim" + c.source).setAttribute("visibility", steps ? "visible" : "hidden");
-    $("coTrimText" + c.source).textContent = steps ? "Trimm " + trimText(steps) : "";
+    $("coTrimText" + c.source).textContent = steps ? t("Trimm {0}", trimText(steps)) : "";
     $("coHit" + c.source).setAttribute("height", steps ? 64 : 46);
   }
 }
@@ -1118,7 +1409,7 @@ function showDetail() {
   if (!open) return;
 
   $("dName").textContent = control.name;
-  $("dHint").textContent = control.hint;
+  $("dHint").textContent = t(control.hint);
 
   // Chips: while asking, they preview the swap.
   const names = {};
@@ -1134,7 +1425,7 @@ function showDetail() {
   for (let n = 1; n <= CHANNEL_COUNT; n++) {
     const c = names[n];
     const state = c === control ? "own" : n === target ? "taken target" : c ? "taken" : "free";
-    chips += `<button class="chip ${state}" data-channel="${n}">${n}<small>${c ? c.name : "frei"}</small></button>`;
+    chips += `<button class="chip ${state}" data-channel="${n}">${n}<small>${c ? c.name : t("frei")}</small></button>`;
   }
   $("dChips").innerHTML = chips;
 
@@ -1142,19 +1433,19 @@ function showDetail() {
   let middle = "";
   if (control.axis) {
     const dead = setting(`cal.${control.axis}.deadzone`);
-    middle = `<div class="cap">Totzone</div><div class="big" id="dDeadOut">${dead} %</div>` +
-             `<input type="range" id="dDead" min="0" max="10" value="${dead}" aria-label="Totzone">`;
+    middle = `<div class="cap">${t("Totzone")}</div><div class="big" id="dDeadOut">${dead} %</div>` +
+             `<input type="range" id="dDead" min="0" max="10" value="${dead}" aria-label="${t("Totzone")}">`;
   } else if (control.positions) {
     const now = lastFields ? Number(lastFields[STATE_KEY[control.source]]) : -1;
     const raw = control.positions.length === 3 ? [988, 1500, 2012] : [988, 2012];
-    middle = `<div class="cap">Stellungen</div><div class="positions">` + control.positions.map((word, i) =>
-      `<div class="mitem${i === now ? " sel" : ""}"><span>${word}</span><span class="sec">${output(raw[i], shape)}</span></div>`).join("") + `</div>`;
+    middle = `<div class="cap">${t("Stellungen")}</div><div class="positions">` + control.positions.map((word, i) =>
+      `<div class="mitem${i === now ? " sel" : ""}"><span>${t(word)}</span><span class="sec">${output(raw[i], shape)}</span></div>`).join("") + `</div>`;
   }
   const steps = trimOf(control);
   shownTrim = steps;
   if (steps) {
-    middle += `<div class="trimblock"><div class="cap">Trimmung</div><div class="weightrow">` +
-              `<div class="big">${trimText(steps)}</div><button class="btn subtle" id="dTrimReset">Zurücksetzen</button></div></div>`;
+    middle += `<div class="trimblock"><div class="cap">${t("Trimmung")}</div><div class="weightrow">` +
+              `<div class="big">${trimText(steps)}</div><button class="btn subtle" id="dTrimReset">${t("Zurücksetzen")}</button></div></div>`;
   }
   $("dMiddle").innerHTML = middle;
   if ($("dDead")) fill($("dDead"));
@@ -1174,12 +1465,12 @@ function showDetail() {
   $("detail").insertBefore($("dToggle"), advancedOpen ? $("dAdvancedRow") : $("dAsk"));
   $("dAsk").hidden = !question;
   if (pendingChange) {
-    $("dAskText").textContent = "Custom-Belegung ersetzen?";
+    $("dAskText").textContent = t("Custom-Belegung ersetzen?");
     $("askReplace").classList.add("primary");
     $("askSwap").hidden = true;
   } else if (asking) {
     const occupant = controlOf(chValue(asking, "source"));
-    $("dAskText").innerHTML = `Kanal ${asking} ist belegt von <b>${occupant.name}</b>`;
+    $("dAskText").innerHTML = t("Kanal {0} ist belegt von <b>{1}</b>", asking, occupant.name);
     $("askReplace").classList.remove("primary");
     $("askSwap").hidden = own.length === 0;
   }
@@ -1335,20 +1626,20 @@ function showState(fields) {
   setFill("statusLed", ledColour(fields));
 
   $("lockNote").hidden = fields.mode !== "elrs_locked";
-  $("lockNote").textContent = setting("unlock.mode") === 2 ? "Gesperrt: Gas hoch, dann runter" : "Gesperrt: Gas nach unten";
-  const link = fields.lq === "0" ? "kein Empfänger" : `Empfänger ${fields.lq} %, -${fields.rssi} dBm`;
+  $("lockNote").textContent = t(setting("unlock.mode") === 2 ? "Gesperrt: Gas hoch, dann runter" : "Gesperrt: Gas nach unten");
+  const link = fields.lq === "0" ? t("kein Empfänger") : t("Empfänger {0} %, -{1} dBm", fields.lq, fields.rssi);
   const rate = `${Math.round(1e6 / Number(fields.period))} Hz`;
   // The module's own modes need no rate or receiver: it does not send to a model then.
   const special = { elrs_binding: "bindet", wifi: "WiFi", bluetooth: "Bluetooth-Joystick" }[fields.mode];
-  $("stModule").textContent = !moduleOn ? "aus" : special
-    || `${locked ? "gesperrt" : "aktiv"} · ${rate} · ${link}`;
-  $("stBattery").textContent = `${level} von 4`;
+  $("stModule").textContent = !moduleOn ? t("aus") : special ? t(special)
+    : `${t(locked ? "gesperrt" : "aktiv")} · ${rate} · ${link}`;
+  $("stBattery").textContent = t("{0} von 4", level);
   // Named with the keys of the setting usb.mode, so the texts exist once.
   const usbForm = { usb_joystick: "joystick", usb_xbox: "xbox" }[fields.mode];
   $("stUsbItem").hidden = !usbForm;
-  if (usbForm) $("stUsb").textContent = OPTION_TEXTS.usb[usbForm];
+  if (usbForm) $("stUsb").textContent = t(OPTION_TEXTS.usb[usbForm]);
   $("sysBattery").textContent = battery;
-  $("sysUsb").textContent = fields.usb === "1" ? "vorhanden" : "fehlt";
+  $("sysUsb").textContent = t(fields.usb === "1" ? "vorhanden" : "fehlt");
 
   lastChannels = fields.ch.split(",").map(Number);
   showLabels();
@@ -1402,9 +1693,9 @@ function missingEnd([minX, maxX, minY, maxY]) {
 }
 
 function showCalStage() {
-  $("calStep").textContent = `Schritt ${calStage} von 2`;
-  $("calTitle").textContent = calStage === 1 ? "In alle Ecken bewegen" : "Rechts loslassen, Gas ganz nach unten";
-  $("calNext").textContent = calStage === 1 ? "Weiter" : "Fertig";
+  $("calStep").textContent = t("Schritt {0} von 2", calStage);
+  $("calTitle").textContent = t(calStage === 1 ? "In alle Ecken bewegen" : "Rechts loslassen, Gas ganz nach unten");
+  $("calNext").textContent = t(calStage === 1 ? "Weiter" : "Fertig");
   for (const pad of ["padLeft", "padRight"]) $(pad).querySelector(".seen").hidden = calStage === 2;
 }
 
@@ -1440,11 +1731,11 @@ function showCalibration(fractions, running) {
     if (calStage === 1) {
       const missing = missingEnd(range);
       complete = complete && !missing;
-      note.textContent = missing || "fertig";
+      note.textContent = t(missing || "fertig");
       note.className = missing ? "missing" : "ok";
     } else {
       const centred = Math.abs(x - 0.5) < 0.1 && Math.abs(y - 0.5) < 0.1;
-      note.textContent = index === 0 ? (y > 0.85 ? "Gas unten" : "Gas nach unten") : centred ? "Mitte" : "loslassen";
+      note.textContent = t(index === 0 ? (y > 0.85 ? "Gas unten" : "Gas nach unten") : centred ? "Mitte" : "loslassen");
       note.className = "";
     }
   });
@@ -1468,7 +1759,7 @@ function optionsOf(key) {
   const list = s && optionLists.get(s.type);
   if (!list) return [];
   const texts = OPTION_TEXTS[s.type] || {};
-  return [...list].map(([value, optionKey]) => [value, texts[optionKey] ?? optionKey]);
+  return [...list].map(([value, optionKey]) => [value, texts[optionKey] !== undefined ? t(texts[optionKey]) : optionKey]);
 }
 
 // Every list bound to a setting with named values gets them as the radio reports them.
@@ -1555,10 +1846,28 @@ function listEnded(expected) {
 // The radio's hello line arrived on this connection; lines before it may be cut off and are not checked.
 let helloSeen = false;
 
-// The radio sent something this page does not know: show the band that asks to reload the page.
+// The radio sent something this page does not know, on this connection.
+let mismatch = false;
 function warnMismatch(what) {
   console.warn("Konfigurator passt nicht zur Firmware:", what);
-  $("mismatch").hidden = false;
+  mismatch = true;
+  showVersionBands();
+}
+
+// True if version a ("x.y.z") is newer than version b.
+function newerVersion(a, b) {
+  const [x, y] = [a, b].map((version) => version.split(".").map(Number));
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i];
+  return false;
+}
+
+// The bands about versions. A firmware beside the page that is newer than the radio's is offered;
+// that also settles a radio too old for this page. Otherwise a mismatch asks to reload the page.
+function showVersionBands() {
+  const newer = Boolean(publishedImage && firmwareVersion && newerVersion(publishedImage.version, firmwareVersion));
+  $("newer").hidden = !newer;
+  if (newer) $("newerText").textContent = t("Firmware {0} verfügbar", publishedImage.version);
+  $("mismatch").hidden = !mismatch || newer;
 }
 
 // After "end": every setting type must be a number or a known option list, and every key must have a text.
@@ -1582,9 +1891,10 @@ function handleLine(line) {
     elrsReceived(rest);
   } else if (kind === "hello") {
     helloSeen = true;
-    $("deviceText").textContent = `LiteRadio 4 · Firmware ${rest[1]} · Konfigurator ${WEB_VERSION}`;
     $("sysFirmware").textContent = rest[1];
     firmwareVersion = rest[1];
+    showDevice();
+    showVersionBands();
     if (rest[2] !== `proto=${PROTOCOL}`) warnMismatch(rest[2]);
     if (upd && upd.step === "restart") updateRestarted();
   } else if (kind === "setting") {
@@ -1605,10 +1915,10 @@ function handleLine(line) {
     // A module frame the radio could not pass on; the ELRS tab asks again by itself.
     if (reason === "crsf") return;
     showMessage(reason === "calibration rejected"
-      ? "Kalibrierung verworfen: Ein Knüppel war nicht an allen Enden oder am Schluss nicht losgelassen."
+      ? t("Kalibrierung verworfen: Ein Knüppel war nicht an allen Enden oder am Schluss nicht losgelassen.")
       : reason === "receiver connected"
-      ? "Ein Empfänger ist verbunden: Binden und Kalibrieren gehen nur ohne Verbindung."
-      : "Die Fernsteuerung hat abgelehnt: " + reason);
+      ? t("Ein Empfänger ist verbunden: Binden und Kalibrieren gehen nur ohne Verbindung.")
+      : t("Die Fernsteuerung hat abgelehnt: {0}", reason));
     requestList();
   } else if (kind === "value" || kind === "fault") {
     // Known lines this page does not use: the answer to "get", and a crash reported after hello.
@@ -1617,12 +1927,17 @@ function handleLine(line) {
   }
 }
 
+// The radio and both versions, next to the connection light.
+function showDevice() {
+  $("deviceText").textContent = t("LiteRadio 4 · Firmware {0} · Konfigurator {1}", firmwareVersion, WEB_VERSION);
+}
+
 function handleOk(words) {
   if (words[0] === "defaults") {
     send("save");
     requestList();
   } else if (words[0] === "calibrate" && words[1] === "end") {
-    showMessage("Kalibrierung übernommen und gespeichert.");
+    showMessage(t("Kalibrierung übernommen und gespeichert."));
   } else if (settings.has(words[0])) {
     settings.get(words[0]).value = Number(words[1]);
     showSetting(words[0]);
@@ -1640,7 +1955,7 @@ function handleOk(words) {
 function setConnected(connected) {
   document.body.classList.toggle("offline", !connected);
   helloSeen = false;
-  $("mismatch").hidden = true;
+  mismatch = false;
   $("incomplete").hidden = true;
   clearTimeout(listTimer);
   if (!connected) {
@@ -1655,13 +1970,14 @@ function setConnected(connected) {
     firmwareVersion = "";
     $("band").hidden = true;
   }
+  showVersionBands();
   if (upd && upd.step === "ready") showUpdate();
 }
 
 // Connect to known, a port this page may already use, or let the user pick one.
 async function connect(known) {
   if (!("serial" in navigator)) {
-    showMessage("Dieser Browser kann keine seriellen Geräte ansprechen. Bitte Chrome oder Edge verwenden.");
+    showMessage(t("Dieser Browser kann keine seriellen Geräte ansprechen. Bitte Chrome oder Edge verwenden."));
     return;
   }
   if (opening || writer) return;
@@ -1740,8 +2056,8 @@ async function resume() {
   if (Date.now() >= resumeUntil) {
     // Mostly a USB form this browser has not allowed yet: only the port picker can allow it.
     resumeWanted = false;
-    showMessage("Die Fernsteuerung hat sich als anderes USB-Gerät angemeldet. Einmal auf Verbinden " +
-      "klicken und sie auswählen, danach verbindet der Konfigurator bei diesem Wechsel von selbst.");
+    showMessage(t("Die Fernsteuerung hat sich als anderes USB-Gerät angemeldet. Einmal auf Verbinden klicken " +
+      "und sie auswählen, danach verbindet der Konfigurator bei diesem Wechsel von selbst."));
     autoConnect();
     return;
   }
@@ -1818,22 +2134,37 @@ function updaterHeader(size) {
 async function inspectImage(bytes) {
   const text = new TextDecoder("latin1").decode(bytes);
   const own = text.match(/OpenLiteRadio (\d+\.\d+\.\d+)/);
-  const image = { bytes, kind: "other", name: "Unbekannte Firmware", version: "", problem: "" };
+  const image = { bytes, kind: "other", name: t("Unbekannte Firmware"), version: "", problem: "" };
   if (own) Object.assign(image, { kind: "open", name: `OpenLiteRadio ${own[1]}`, version: own[1] });
   // The stock firmware has no version string; its USB product name identifies it.
-  if (!own && text.includes("BETAFPV Joystick")) Object.assign(image, { kind: "stock", name: "BETAFPV-Original" });
+  if (!own && text.includes("BETAFPV Joystick")) Object.assign(image, { kind: "stock", name: t("BETAFPV-Original") });
   if (bytes.length > UPD_MAX) {
-    image.problem = `Zu groß: ${Math.ceil(bytes.length / 1024)} KiB, höchstens ${UPD_MAX / 1024} KiB`;
+    image.problem = t("Zu groß: {0} KiB, höchstens {1} KiB", Math.ceil(bytes.length / 1024), UPD_MAX / 1024);
   } else {
     // The bootloader's own test of the stack pointer, and a Thumb reset vector inside the image.
     const view = new DataView(bytes.buffer);
     const stack = bytes.length >= 8 ? view.getUint32(0, true) : 0;
     const reset = bytes.length >= 8 ? view.getUint32(4, true) : 0;
     if ((stack & 0x2ffe0000) !== 0x20000000 || reset < 0x08008000 || reset >= 0x08008000 + bytes.length || !(reset & 1)) {
-      image.problem = "Keine Firmware für diese Fernsteuerung";
+      image.problem = t("Keine Firmware für diese Fernsteuerung");
     }
   }
   return image;
+}
+
+// The firmware published beside the page as firmware/openliteradio.bin, read when the page opens.
+// It stays null when there is none, as with the page opened as a local file.
+let publishedImage = null;
+async function loadPublishedImage() {
+  try {
+    const response = await fetch("firmware/openliteradio.bin", { cache: "no-store" });
+    if (!response.ok) return;
+    const image = await inspectImage(new Uint8Array(await response.arrayBuffer()));
+    if (image.kind === "open" && !image.problem) publishedImage = image;
+    showVersionBands();
+  } catch {
+    // No file there, or the page is a local file.
+  }
 }
 
 // Steps of the run; each shows a title, maybe a note, and the buttons it needs.
@@ -1873,8 +2204,8 @@ function showUpdate() {
   } else if (step === "done") {
     next = "Fertig";
     if (upd.running) {
-      title = `Firmware ${upd.running} läuft`;
-      if (upd.running !== image.version) { note = `Erwartet war ${image.version}`; warn = true; }
+      title = t("Firmware {0} läuft", upd.running);
+      if (upd.running !== image.version) { note = t("Erwartet war {0}", image.version); warn = true; }
     } else if (!upd.fromApp) {
       title = "Geschrieben und geprüft";
       note = "USB abziehen, damit die Firmware startet";
@@ -1889,27 +2220,30 @@ function showUpdate() {
     next = "Erneut versuchen";
   }
   $("updSub").textContent = step === "choose" || step === "ready"
-    ? (upd.installed ? `installiert ${upd.installed}` : "") : image ? image.name : "";
-  $("updTitle").textContent = title;
-  $("updNote").textContent = note;
+    ? (upd.installed ? t("installiert {0}", upd.installed) : "") : image ? image.name : "";
+  // Texts built above from parts are in the chosen language already and pass through t() unchanged.
+  $("updTitle").textContent = t(title);
+  $("updNote").textContent = t(note);
   $("updNote").className = warn ? "warn" : "muted";
   $("updProgress").hidden = step !== "writing";
   $("updProgress").textContent = `${upd.progress} %`;
   $("updSteps").hidden = step !== "manual";
   $("updNext").hidden = !next;
-  $("updNext").textContent = next;
+  $("updNext").textContent = t(next);
   $("updNext").disabled = step === "ready" && warn;
   $("updOther").hidden = step !== "ready";
   $("updCancel").hidden = !["choose", "ready", "manual", "permit", "writing", "failed"].includes(step);
   $("updCancel").disabled = step === "writing";
-  $("updCancel").textContent = step === "failed" ? "Schließen" : "Abbrechen";
+  $("updCancel").textContent = t(step === "failed" ? "Schließen" : "Abbrechen");
 }
 
 // fromApp: opened from the connected radio, which the page sends into the updater after the file is
 // chosen. Opened without a connection, the updater is entered with the buttons first, whatever
 // firmware the radio runs, and the file is chosen once the updater is there.
 function openUpdate(fromApp) {
-  upd = { step: fromApp ? "choose" : "manual", image: null, installed: firmwareVersion, fromApp,
+  // The published firmware is offered first; "Andere Datei" still chooses a file.
+  const image = publishedImage;
+  upd = { step: !fromApp ? "manual" : image ? "ready" : "choose", image, installed: firmwareVersion, fromApp,
           before: new Set(), port: null, progress: 0, error: "", running: "" };
   document.body.classList.add("updating");
   showView("update");
@@ -2050,19 +2384,19 @@ async function sendImage(port, image) {
   const blocks = Math.ceil(image.length / UPD_BLOCK);
   try {
     await portWriter.write(new TextEncoder().encode("update\r\n"));
-    if (!await waitByte(UPD_READY, 3000)) return "Keine Antwort vom Updater";
+    if (!await waitByte(UPD_READY, 3000)) return t("Keine Antwort vom Updater");
     await portWriter.write(updaterHeader(image.length));
-    if (!await waitByte(UPD_ACK, 10000)) return "Kopfdaten nicht bestätigt";
+    if (!await waitByte(UPD_ACK, 10000)) return t("Kopfdaten nicht bestätigt");
     for (let number = 1; number <= blocks; number++) {
       const data = new Uint8Array(UPD_BLOCK);
       data.set(image.subarray((number - 1) * UPD_BLOCK, number * UPD_BLOCK));
       await portWriter.write(updaterPacket(0x02, number, data));
-      if (!await waitByte(UPD_ACK, 10000)) return `Block ${number} von ${blocks} nicht bestätigt`;
+      if (!await waitByte(UPD_ACK, 10000)) return t("Block {0} von {1} nicht bestätigt", number, blocks);
       upd.progress = Math.round((number * 100) / blocks);
       $("updProgress").textContent = `${upd.progress} %`;
     }
     await portWriter.write(new Uint8Array([0x04]));
-    if (!await waitByte(UPD_VERIFIED, 20000)) return "Prüfung des Updaters fehlgeschlagen";
+    if (!await waitByte(UPD_VERIFIED, 20000)) return t("Prüfung des Updaters fehlgeschlagen");
     // Closing packet; firmware from this project may already restart.
     await portWriter.write(updaterPacket(0x01, 0x00, new Uint8Array(128))).catch(() => {});
     return "";
@@ -2076,6 +2410,7 @@ async function sendImage(port, image) {
 }
 
 $("updOpen").addEventListener("click", () => openUpdate(true));
+$("newerOpen").addEventListener("click", () => openUpdate(true));
 $("updOpenOffline").addEventListener("click", () => openUpdate(false));
 $("updCancel").addEventListener("click", closeUpdate);
 $("updOther").addEventListener("click", () => $("updFile").click());
@@ -2118,10 +2453,13 @@ function fitStage() {
 }
 
 for (const element of document.querySelectorAll(".webVersion")) element.textContent = WEB_VERSION;
+collectStaticTexts();
+showStaticTexts();
 buildLabels();
 fitStage();
 narrow.addEventListener("change", fitStage);
 setConnected(false);
+loadPublishedImage();
 
 // Closing the port picker without a choice is no error.
 $("connectBig").addEventListener("click", () => connect().catch((error) => {
@@ -2143,6 +2481,7 @@ $("connect").addEventListener("click", () => {
   userDisconnected = true;
   reader.cancel();
 });
+$("language").addEventListener("click", () => setLanguage(lang === "de" ? "en" : "de"));
 $("nav").addEventListener("click", (event) => {
   if (event.target.dataset.view && !calibrating) showView(event.target.dataset.view);
 });
