@@ -29,7 +29,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      # The steps of "Setup" in docs/ZEPHYR.md. The SDK's host tools (dtc, QEMU) are not needed.
+      # The steps of "Setup" in docs/BUILD.md. The SDK's host tools (dtc, QEMU) are not needed.
       - name: Set up the Zephyr workspace
         run: |
           pip install west

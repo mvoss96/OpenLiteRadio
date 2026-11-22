@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = $PSScriptRoot.Replace('\', '/')
 $python = "$repoRoot/.venv/Scripts/python.exe"
 if (-not (Test-Path $python) -or -not (Test-Path "$repoRoot/.deps/zephyr/VERSION")) {
-    throw "Workspace is not set up. Follow the setup steps in docs/ZEPHYR.md first."
+    throw "Workspace is not set up. Follow the setup steps in docs/BUILD.md first."
 }
 # CMake and Ninja are installed in the venv.
 $env:PATH = "$repoRoot/.venv/Scripts;$env:PATH"

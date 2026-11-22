@@ -1,7 +1,8 @@
 # Controller hardware and module contract
 
-Evidence source: the parent investigation's analysis/CONTROLLER.md, especially
-section 10a (SWD readback, 2026-11-16). Earlier sections contain superseded claims.
+What was observed on one LiteRadio 4 and read from its bootloader and stock
+firmware 1.1.3, taken from the radio with an SWD readback. Hypotheses are
+marked as such and are not established.
 
 ## Observed
 
@@ -15,8 +16,7 @@ section 10a (SWD readback, 2026-11-16). Earlier sections contain superseded clai
   this does not prove that no firmware path can ever use it.
 - Calibration contains descending endpoints and centre in 12-bit ADC units.
 - CDC fields identify AETR physically; the throttle does not self-centre.
-- The application works with erased flash above 0x08016530. Earlier claims
-  about required compressed initialization data are superseded.
+- The application works with erased flash above 0x08016530.
 - Vendor USB updater recovered the application after an experimental dumper.
 
 ## Bootloader (static analysis of the SWD readback, 2026-11-16)
@@ -131,33 +131,15 @@ Hypotheses: the stored calibration was taken under conditions that shift
 the readings (another supply), or the gimbals have moved since. Which one
 is not established. The sampling time is ruled out, see below.
 
-ADC sampling time, observed 2026-11-21 with firmware 0.19.4 on USB supply:
-the firmware samples each channel for 1.5 ADC clock cycles
-(`ADC_ACQ_TIME_DEFAULT`, the first entry of the driver's table), the stock
-firmware for 13.5 (sampling time code 2). An input that does not settle in
-that time keeps part of the voltage converted before it, so each reading
-would follow the channel read just before. The control thread reads
-channels 0, 1, 2, 3 in this order; the battery (channel 8) is read after
-them. From the state lines, 25 per second:
-
-| Moved | Range of its readings | Channel read next | Its mean at the low / high end | Shift |
-|-------|-----------------------|-------------------|--------------------------------|-------|
-| channel 1, left stick left to right | 598 to 3602 | channel 2 | 2074.0 / 2074.1 (89 / 80 readings) | +0.1 |
-| channel 3, right stick held left, then right | 631 to 3590 | channel 0 | 1914.2 / 1914.7 (606 / 624 readings) | +0.4 |
-
-The battery reading stayed at 4077 to 4078 over 113 s, with channel 3 at
-631 and at 3589 before it. Noise at rest is 1 to 2 counts. The inputs
-settle within 1.5 cycles, so the readings do not depend on the sampling
-time and the stock firmware's battery thresholds apply to these readings
-as they are.
-
-Since firmware 0.19.5 the channels are sampled for 13.5 cycles as in the
-stock firmware, as a margin for other units, gimbals and temperatures; this
-radio did not need it. Observed with the sticks at rest, means of 170
-readings before and 363 after the change: channel 0 679.1 and 678.4,
-channel 1 2074.2 and 2073.1, channel 2 2077.8 and 2078.0, channel 3 2077.8
-and 2077.5; the battery 4077 to 4078 before and 4081 after. The stored
-stick calibration stays valid.
+ADC sampling time, observed 2026-11-21 on USB supply: with 1.5 ADC clock
+cycles per channel instead of the stock firmware's 13.5, a reading did not
+follow the channel converted just before it. Moving one stick over its whole
+range shifted the mean of the channel read next by 0.1 and 0.4 counts, and
+the battery reading stayed at 4077 to 4078. The readings therefore do not
+depend on the sampling time, and the stock firmware's battery thresholds
+apply as they are. The firmware samples for 13.5 cycles as the stock
+firmware does, as a margin for other units; at rest the readings changed by
+at most 1.1 counts with that.
 
 Settings storage, observed 2026-11-18 with firmware 0.3.0 (59340 bytes, the
 largest image loaded so far):
@@ -337,6 +319,31 @@ the module's timing request; 0x9C40 is 40000 units of 0.1 us, the 4 ms
 interval of the 250 Hz packet rate. Whether the module transmits RF while it only receives pings
 was not checked.
 
+Module and receiver without channel frames, observed 2026-11-19:
+
+- The module answers requests only while valid CRSF frames keep arriving, of
+  any type: with one channel frame and then pings every 20 ms it answered
+  for 5.6 s; without frames it does not answer. Without frames it drops the
+  connection to the radio after 1 s and searches the baud rate again (ELRS
+  3.6.4 source). A bound receiver then enters the failsafe configured for
+  that model, while the module still answers parameter requests.
+- With a Betaflight 2026.6.1 quad (BETAFPV Air65, ELRS 3.6.4 receiver,
+  powered from USB only) read over MSP: with the output held and no frames
+  at all, Betaflight entered failsafe 1.4 s after the last channel frame and
+  the link returned 3.6 s after the output was released; with pings every
+  20 ms instead, failsafe came after 1.35 s, the module kept answering, and
+  the link returned 0.6 s after the release.
+- After the module is switched on, the first link takes about 4.8 s. With
+  safe frames until the module answers and pings every 20 ms after that, and
+  the module switched on while held, Betaflight stayed in failsafe for 8 s
+  and never received channel values, the module answered throughout, and the
+  radio controlled the quad 0.14 s after the release.
+- A receiver that has been without a link for 60 s starts its WiFi and does
+  not connect until it is restarted.
+- Module commands: binding started 0.6 s after the command and the radio was
+  back to locked after 8 s without a receiver in bind mode; in WiFi mode the
+  module's web page answered after 7 s and the module kept answering pings.
+
 Other observations from the scanner:
 
 - The bootloader's pin setup at application start, as CRL/CRH values:
@@ -395,5 +402,5 @@ the main thread.
 Option-byte watchdog setting, volts per count of the battery input, the
 function of the shift register outputs 0x20 and 0x80, and the battery input
 on a partly discharged battery. The largest
-image loaded through the vendor USB updater and seen running is 73012 bytes
-(firmware 0.19.1); the stock application is 58672 bytes.
+image loaded through the vendor USB updater and seen running is 73772 bytes
+(firmware 0.21.0); the stock application is 58672 bytes.

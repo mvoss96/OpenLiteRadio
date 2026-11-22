@@ -24,7 +24,7 @@ ExpressLRS, see
 - Tones and volume, battery level, link and low-battery warnings
 - Firmware update from the browser
 
-Details and test status: [docs/FEATURES.md](docs/FEATURES.md).
+What is still missing: [docs/FEATURES.md](docs/FEATURES.md).
 
 ## Install
 
@@ -80,10 +80,9 @@ powers the radio; the leftmost blinks when the battery is low.
 
 ## Development
 
-- [docs/BUILD.md](docs/BUILD.md): build, tests, command-line tools
+- [docs/BUILD.md](docs/BUILD.md): setup, build, tests, command-line tools
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): firmware layers and the USB protocol
 - [docs/WIRING.md](docs/WIRING.md), [docs/HARDWARE.md](docs/HARDWARE.md): pins and measurements
-- [docs/ZEPHYR.md](docs/ZEPHYR.md): Zephyr setup
 
 ## License
 

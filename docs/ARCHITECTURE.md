@@ -1,7 +1,7 @@
 # Firmware architecture
 
-Agreed on 2026-11-17. The scope is in [FEATURES.md](FEATURES.md), the hardware
-in [WIRING.md](WIRING.md).
+The hardware is in [WIRING.md](WIRING.md), the observations behind it in
+[HARDWARE.md](HARDWARE.md), what is still missing in [FEATURES.md](FEATURES.md).
 
 ## Constraints
 
@@ -60,14 +60,15 @@ Each further thread would cost about 1 KiB of stack.
   stand for choices (`unlock.mode`, a tune) also reports a language-neutral
   key for each value, so the firmware alone defines what can be chosen and
   holds no text for people. A quantity stays a plain number (`sound.volume`).
-  The configurator adds all texts: the labels of the settings, the texts of
-  the keys (a key without a text is shown as it is) and the layout; it is to
-  be localized later. It shows a setting it has no label for on its Advanced
-  tab. Each setting is a 16-bit value with its own NVS id; only
+  The configurator adds all texts, in German and English: the labels of the
+  settings, the texts of the keys (a key without a text is shown as it is)
+  and the layout. A setting it has no label for appears among the raw values
+  on its System tab. Each setting is a 16-bit value with its own NVS id; only
   values that differ from the default are stored, so settings added later do
   not disturb stored ones.
 - The configurator is the one file `web/index.html`: plain HTML, CSS and
-  JavaScript without a build step, opened from the file system. Page and code
+  JavaScript without a build step, served from GitHub Pages or opened from
+  the file system. Page and code
   are one file so that a browser can never combine an older page with newer
   code, which left a page without the elements its code expected. Its main view
   edits the assignment from the control's side ("SE sends on channel 9");
@@ -82,7 +83,7 @@ Each further thread would cost about 1 KiB of stack.
 
 ## Operating modes
 
-Agreed on 2026-11-19. The radio is in exactly one mode at a time: off, a
+The radio is in exactly one mode at a time: off, a
 USB controller at a PC, or one of the ELRS modes. It is never a USB
 controller and a remote control for a model at once, so that a model on the
 bench does not follow the simulator. The mode is decided by one tested state
@@ -208,29 +209,12 @@ mapping, weight and reverse; channels without a source stay centred.
   ELRS receiver starts its WiFi after 60 s without a link and does not
   connect until restarted, and the link quality is unknown while locked. The
   status LED blinks red without a receiver.
-- **What the module does with pings only.** The
-  module answers requests only while valid CRSF frames keep arriving, of any
-  type (measured 2026-11-19: with one channel frame and then pings every
-  20 ms it answered for 5.6 s; without frames it does not answer). Without
-  frames it drops the connection to the radio after 1 s and searches the baud
-  rate again. It stops sending channel data over the air once its last
-  channel frame is older than 1 s; before its first channel frame it would
-  send the zero-initialised `ChannelData` array, all channels at the lower end
-  (ELRS 3.6.4 source). A bound receiver then enters the failsafe configured
-  for that model, while the module still answers parameter requests.
-- Measured on 2026-11-19 with a Betaflight 2026.6.1 quad (BETAFPV Air65, ELRS
-  3.6.4 receiver, powered from USB only) read over MSP: with the output held
-  and no frames at all, Betaflight entered failsafe 1.4 s after the last
-  channel frame and the link returned 3.6 s after the output was released;
-  with pings every 20 ms instead, failsafe came after 1.35 s, the module kept
-  answering, and the link returned 0.6 s after the release. After the module
-  is switched on, the first link takes about 4.8 s. With safe frames until
-  the module answers and pings every 20 ms after that, and the module
-  switched on while held, Betaflight stayed in failsafe for 8 s and never
-  received channel values, the module answered throughout, and the radio
-  controlled the quad 0.14 s after the release. A receiver that has been
-  without a link for 60 s starts its WiFi and does not connect until it is
-  restarted.
+- **What the module does without channel frames.** It answers requests only
+  while valid CRSF frames keep arriving, and stops sending channel data over
+  the air once its last channel frame is older than 1 s; before its first
+  channel frame it would send all channels at the lower end (ELRS 3.6.4
+  source). The measurements are in HARDWARE.md, "Module and receiver without
+  channel frames".
 - PC control is allowed only at the radio: with the radio on and USB
   connected, BIND and SETUP held together for 3 to 5 s (the exact time is
   open). The PC alone can never take over. While both buttons are down,
@@ -304,7 +288,7 @@ stateDiagram-v2
   driver for interface 0; the serial port follows as interfaces 1 and 2. The
   Microsoft controller's IDs are not needed. LED and rumble commands from the
   host are read and dropped.
-- Xbox assignment (0.20.0, `src/core/xbox.cpp`): each of 14 elements follows
+- Xbox assignment (`src/core/xbox.cpp`): each of 14 elements follows
   one channel or none, in the settings `xbox.lx`, `xbox.ly`, `xbox.rx`,
   `xbox.ry` (the sticks), `xbox.lt`, `xbox.rt` (the triggers, 988..2012 as
   0..255) and `xbox.a`, `xbox.b`, `xbox.x`, `xbox.y`, `xbox.lb`, `xbox.rb`,
@@ -371,15 +355,14 @@ and WiFi are commands of the module (modes above). The module leaves
 Bluetooth and WiFi only by a restart, so the radio returns from them by
 switching the module off.
 
-Read from the module on 2026-11-19: "BETAFPV LiteRadi", ELRS 3.6.4 ISM2G4,
-21 parameters: Packet Rate, Telem Ratio, Switch Mode, Link Mode, Model Match,
+The module in the tested radio reports "BETAFPV LiteRadi", ELRS 3.6.4 ISM2G4
+and 21 parameters: Packet Rate, Telem Ratio, Switch Mode, Link Mode, Model Match,
 the folder TX Power (Max Power 25/50/100 mW, Dynamic), the folder VTX
 Administrator (Band, Channel, Pwr Lvl, Pitmode, Send VTx), the folder WiFi
 Connectivity (Enable WiFi, Enable Rx WiFi), the commands BLE Joystick and
 Bind, and the read-only entries Bad/Good and the version.
 
-The configurator gets a tab "ELRS-Modul" that shows everything the module
-offers. It reads the list from the module through the radio, which only
+The configurator's tab "ELRS-Modul" shows everything the module offers. It reads the list from the module through the radio, which only
 passes the frames on, so another ELRS version with other parameters needs no
 change. The module is configured with the radio switched on, also while
 locked; with the radio off the tab shows no values and asks to switch the
@@ -410,7 +393,7 @@ frame, so greying out until a lock would leave nothing changeable.
   mapping (channels, weight, reverse). The choice and the Custom mapping are
   stored and changed only from the PC. Changing AETR or TAER turns it into
   Custom with the template as starting point; an existing Custom mapping is
-  replaced after a question. There are no profiles. Built in 0.9.0: the
+  replaced after a question. There are no profiles. The
   setting `map.mode` (0 AETR, 1 TAER, 2 Custom, default AETR) chooses the
   mapping; `core::compute_channels()` takes AETR and TAER from fixed tables
   (weight 100, no reverse) and Custom from the settings `ch.N.*`, which keep
@@ -426,8 +409,7 @@ frame, so greying out until a lock would leave nothing changeable.
   and yaw, right pitch and roll), with the centre's tone and LED flash; it
   counts only once the centre was released after switching on, since a
   centre held at switch-on starts Bluetooth or WiFi. The configurator resets
-  single axes. Built in
-  0.11.0: the settings `trim.thr`, `trim.rud`, `trim.ele`, `trim.ail` (−25..25
+  single axes. The settings `trim.thr`, `trim.rud`, `trim.ele`, `trim.ail` (−25..25
   steps of `core::TRIM_STEP_US`) are added to the stick source before weight
   and reverse, and every channel is limited to 988..2012. Left trim button up
   and down trim the throttle, left and right the yaw; the right button pitch
@@ -439,7 +421,7 @@ frame, so greying out until a lock would leave nothing changeable.
 
 ### Tones
 
-Built in 0.15.0. The buzzer's loudness follows the duty cycle of its square
+The buzzer's loudness follows the duty cycle of its square
 wave (docs/HARDWARE.md): `sound.volume` 0 off, 1 quiet (10 %), 2 medium
 (25 %), 3 loud (50 %, default). Every tone goes through
 `indicators::play()`, which plays a `sound::Tune` (up to eight notes or
@@ -581,79 +563,62 @@ held 1 s to switch on without the stock firmware's click before.
   90 %, all dark without a receiver. The weak-battery tone still sounds.
 - The host command `batleds MASK` takes the LEDs over until `batleds auto`.
 
-## Stages
+## From the controls to the module
 
-| Stage | Result | State |
-|-------|--------|-------|
-| 1 | board layer, power on/off, LED, buzzer, host protocol with live view | built, see below |
-| 2 | flying: channels, CRSF at the module's rate, throttle lock, binding | built, see below; not flown |
-| 3 | settings storage, trim, calibration on the radio | built |
-| 4 | USB joystick, then Xbox mode | both built (DirectInput joystick and Xbox controller, each beside the serial port, with a channel per Xbox element) |
-| 5 | configuration protocol for the web tool | settings commands, the configurator's views, the USB mode, firmware update and ELRS parameters built; button actions and backup open |
-| 6 | Bluetooth, WiFi, battery display, remaining features | Bluetooth, WiFi and the battery display built; PC control and automatic power-off open |
-
-Stage 1 as built: the power button switches the radio on after 1 s and off
-after 1.25 s. The status LED follows the codes in "LEDs".
-
-Stage 2 as built so far:
-
-- `src/core/channels.cpp` scales the sticks with the calibration in the
-  settings `cal.N.*`. Each of the 16 channels follows the source in
-  `ch.N.source` (0 none, 1 aileron, 2 elevator, 3 throttle, 4 rudder, 5 to 10
-  SA to SF), scaled around the centre by `ch.N.weight` percent and reversed
-  with `ch.N.reverse`. By default channels 1 to 10 follow sources 1 to 10.
-  Self-centring axes have a dead zone around the centre, set per axis in
-  `cal.N.deadzone` as a percentage of the half range (0 to 10, default 1);
-  inside it the output is exactly 1500. The throttle has none.
-- `src/core/crsf.cpp` builds channel frames and parses what the module sends.
-- The control thread sends one channel frame per frame period while the
-  module is on. The period starts at 4 ms and follows the interval in the
-  module's timing frames. The offset in those frames says how early or late
-  the last frame arrived. The radio holds it at +500 µs: one frame period is
-  stretched or shortened by half the difference, by at most a quarter of the
-  interval. Each frame time is carried forward from the previous one, so the
-  time the control thread spends and the rounding to 100 µs kernel ticks do
-  not add up. Measured with a bound receiver: the offset stays between +400
-  and +580 µs and the module sends only its regular timing frame every
-  200 ms.
-- Throttle lock: the radio starts locked. After every start of the module
-  and after every changed setting the module gets safe channel frames
+- **Channels.** `src/core/channels.cpp` scales the sticks with the
+  calibration in the settings `cal.N.*`. Each of the 16 channels follows the
+  source in `ch.N.source` (0 none, 1 aileron, 2 elevator, 3 throttle, 4
+  rudder, 5 to 10 SA to SF), scaled around the centre by `ch.N.weight`
+  percent and reversed with `ch.N.reverse`. By default channels 1 to 10
+  follow sources 1 to 10. Self-centring axes have a dead zone around the
+  centre, set per axis in `cal.N.deadzone` as a percentage of the half range
+  (0 to 10, default 1); inside it the output is exactly 1500. The throttle
+  has none.
+- **Frames.** `src/core/crsf.cpp` builds channel frames and parses what the
+  module sends. The control thread sends one channel frame per frame period
+  while the module is on. The period starts at 4 ms and follows the interval
+  in the module's timing frames. The offset in those frames says how early
+  or late the last frame arrived. The radio holds it at +500 µs: one frame
+  period is stretched or shortened by half the difference, by at most a
+  quarter of the interval. Each frame time is carried forward from the
+  previous one, so the time the control thread spends and the rounding to
+  100 µs kernel ticks do not add up. Measured with a bound receiver: the
+  offset stays between +400 and +580 µs and the module sends only its
+  regular timing frame every 200 ms.
+- **Throttle lock.** The radio starts locked. After every start of the
+  module and after every changed setting the module gets safe channel frames
   instead of the controls until the unlock gesture in `unlock.mode` was
-  made: 1 throttle at its lower end (default), 2
-  throttle at its upper and then its lower end. With 1 and the throttle
-  already down, a lock from a changed setting or from `lock` is released in
-  the next frame. The status LED is red while
+  made: 1 throttle at its lower end (default), 2 throttle at its upper and
+  then its lower end. With 1 and the throttle already down, a lock from a
+  changed setting is released in the next frame. The status LED is red while
   locked; the tune of `sound.unlock` marks the release.
-- Switching the radio on starts the module, switching it off stops it.
-- Module commands (0.12.0; the search in `src/core/module_command.cpp` with
-  tests, sending and tones in `src/module_link.cpp`): binding (BIND held 1 s,
-  host `bind`), WiFi (right trim centre held at switch-on, host `wifi`) and
-  the Bluetooth joystick (left trim centre held at switch-on, host `ble`).
-  Once the module answers after switching on, the firmware asks it for its
-  number of parameters, reads the entries until the command's name comes
-  ("Bind", "Enable WiFi", "BLE Joystick"), keeps every command number met on
-  the way until the next reset, and writes 1 for Bind and 4 (confirmed) for
-  WiFi and Bluetooth, which the module would otherwise ask about while a
-  receiver is connected. Then the module's task sets the mode. A tone reports
-  that the command was sent, a low one that the search failed. Binding ends
-  when link statistics arrive at least 1.5 s after the start (high tone),
-  after 8 s (low tone) or with a short press of BIND; ELRS 3.6.4 itself binds
-  for 25 bind packets, about 1 s, and reports no end. Measured with
-  `module 1`: binding after 0.6 s, back to locked after 8 s without a
-  receiver in bind mode; with `wifi` the module's web page answered after
-  7 s and the module kept answering pings; `ble` gave the Bluetooth mode.
-- Stick calibration, taken from stage 3 because the factory calibration does
-  not fit the readings (docs/HARDWARE.md): SETUP held for 2 s starts a run,
-  the status LED blinks yellow and the module gets safe channel frames. The sticks are
-  moved to all ends. A short press of SETUP ends the run with the right stick
-  released and the throttle left at its lower end. The released readings
-  become the centres and the throttle's lower end, the other ends are the
-  extremes moved inward by 25 counts. A high tone reports that the result is
-  in the settings `cal.N.*` and all settings are stored, a low tone that it
-  was rejected or not stored. Without a run the built-in values 600, 2048
-  and 3500 apply.
-- Missing from stage 2: the other module parameters (packet rate, power,
-  telemetry ratio), averaging of the stick readings.
+- **Power.** The power button switches the radio on after 1 s and off after
+  1.25 s. Switching on starts the module, switching off stops it.
+- **Module commands.** Binding (BIND held 1 s, host `bind`), WiFi (right
+  trim centre held at switch-on, host `wifi`) and the Bluetooth joystick
+  (left trim centre held at switch-on, host `ble`); the search is in
+  `src/core/module_command.cpp` with tests, sending and tones in
+  `src/module_link.cpp`. Once the module answers after switching on, the
+  firmware asks it for its number of parameters, reads the entries until the
+  command's name comes ("Bind", "Enable WiFi", "BLE Joystick"), keeps every
+  command number met on the way until the next reset, and writes 1 for Bind
+  and 4 (confirmed) for WiFi and Bluetooth, which the module would otherwise
+  ask about while a receiver is connected. Then the module's task sets the
+  mode. A tone reports that the command was sent, a low one that the search
+  failed. Binding ends when link statistics arrive at least 1.5 s after the
+  start (high tone), after 8 s (low tone) or with a short press of BIND;
+  ELRS 3.6.4 itself binds for 25 bind packets, about 1 s, and reports no
+  end. A frame the main thread sends to the module is tried again for up to
+  2 ms while the line is busy with a channel frame.
+- **Stick calibration.** SETUP held for 2 s starts a run, the status LED
+  blinks yellow and the module gets safe channel frames. The sticks are
+  moved to all ends. A short press of SETUP ends the run with the right
+  stick released and the throttle left at its lower end. The released
+  readings become the centres and the throttle's lower end, the other ends
+  are the extremes moved inward by 25 counts. A high tone reports that the
+  result is in the settings `cal.N.*` and all settings are stored, a low
+  tone that it was rejected or not stored. Without a run the built-in values
+  600, 2048 and 3500 apply.
 
 ## Tests
 
