@@ -248,7 +248,6 @@
   </nav>
   <div class="spacer"></div>
   <div class="device"><i></i><span id="deviceText"></span></div>
-  <button id="language" class="btn subtle"></button>
   <button id="connect" class="btn subtle">Trennen</button>
 </header>
 
@@ -400,6 +399,8 @@
               <label class="tile"><span>USB-Gerät, wenn ausgeschaltet</span>
                 <select data-key="usb.mode"></select></label>
               <label class="tile"><span>LED blinkt beim Trimmen</span><input type="checkbox" class="switch" data-key="trim.led"></label>
+              <label class="tile"><span>Sprache</span>
+                <select id="language"><option value="">Automatisch</option><option value="de">Deutsch</option><option value="en">English</option></select></label>
             </div>
           </section>
           <!-- The channel each element of the Xbox controller follows (usb.mode Xbox-Controller). -->
@@ -940,8 +941,7 @@ const $ = (id) => document.getElementById(id);
 // ---- Language
 //
 // The page is written in German. EN holds the English text of every German one; t() gives a text
-// in the chosen language. The choice is kept in this browser; without one, the browser's language
-// decides.
+// in the chosen language. The language follows the browser unless one is chosen in the settings.
 const EN = {
   "Bereiche": "Sections",
   "Belegung": "Assignment",
@@ -956,6 +956,8 @@ const EN = {
   "Nicht verbunden": "Not connected",
   "Konfigurator": "Configurator",
   "Automatisch verbinden": "Connect automatically",
+  "Sprache": "Language",
+  "Automatisch": "Automatic",
   "Firmware aufspielen": "Load firmware",
   "Verbinden": "Connect",
   "LiteRadio 4 · Firmware {0} · Konfigurator {1}": "LiteRadio 4 · Firmware {0} · Configurator {1}",
@@ -1162,8 +1164,9 @@ const EN = {
   "Prüfung des Updaters fehlgeschlagen": "The updater's check failed",
 };
 
-let lang = "de";
-try { lang = localStorage.getItem("lang") || (navigator.language.startsWith("de") ? "de" : "en"); } catch {}
+const browserLanguage = () => (navigator.language.startsWith("de") ? "de" : "en");
+let lang = browserLanguage();
+try { lang = localStorage.getItem("lang") || lang; } catch {}
 
 // A text in the chosen language; {0}, {1} stand for the arguments.
 function t(text, ...args) {
@@ -1188,8 +1191,6 @@ function collectStaticTexts() {
 
 function showStaticTexts() {
   document.documentElement.lang = lang;
-  // The button names the other language.
-  $("language").textContent = lang === "de" ? "English" : "Deutsch";
   for (const [node, attribute, whole, text] of staticTexts) {
     const value = whole.replace(text, t(text));
     if (attribute) node.setAttribute(attribute, value); else node.nodeValue = value;
@@ -1199,7 +1200,6 @@ function showStaticTexts() {
 // Change the language and show everything again that scripts have written.
 function setLanguage(next) {
   lang = next;
-  try { localStorage.setItem("lang", lang); } catch {}
   showStaticTexts();
   buildLabels();
   for (const element of document.querySelectorAll("[data-source]")) {
@@ -2481,7 +2481,13 @@ $("connect").addEventListener("click", () => {
   userDisconnected = true;
   reader.cancel();
 });
-$("language").addEventListener("click", () => setLanguage(lang === "de" ? "en" : "de"));
+// The language follows the browser unless one is chosen; the choice is kept in this browser only.
+try { $("language").value = localStorage.getItem("lang") || ""; } catch {}
+$("language").addEventListener("change", () => {
+  const choice = $("language").value;
+  try { if (choice) localStorage.setItem("lang", choice); else localStorage.removeItem("lang"); } catch {}
+  setLanguage(choice || browserLanguage());
+});
 $("nav").addEventListener("click", (event) => {
   if (event.target.dataset.view && !calibrating) showView(event.target.dataset.view);
 });
