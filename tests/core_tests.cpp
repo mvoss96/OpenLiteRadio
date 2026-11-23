@@ -270,6 +270,14 @@ static void test_module_command()
         CHECK(step.result == Result::STARTED && std::memcmp(step.frame, expected, sizeof(expected)) == 0);
         CHECK(search.idle() && search.wanted() == COMMAND_WIFI);
 
+        /* A known command waits for the module's first frame after it was switched on. */
+        search.reset();
+        CHECK(search.start(COMMAND_WIFI, false, 0).size == 0 && !search.idle());
+        CHECK(search.tick(false, 100).size == 0);
+        step = search.tick(true, 200);
+        CHECK(step.result == Result::STARTED && std::memcmp(step.frame, expected, sizeof(expected)) == 0);
+        CHECK(search.idle());
+
         /* A command the module does not have fails after its last parameter. */
         step = search.start(COMMAND_BLUETOOTH, true, 0);
         CHECK(step.result == Result::NONE && step.size == sizeof(ping));

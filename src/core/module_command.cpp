@@ -68,13 +68,20 @@ Step CommandSearch::start(Command command, bool module_answered, int64_t now_ms)
         return NOTHING;
     }
     wanted_ = command;
-    if (parameter_[command] != 0) {
-        return finish(true);
-    }
+    /* Also with a known parameter: a module still starting up drops the write. */
     if (!module_answered) {
         step_ = SEARCH_WAIT;
         wait_since_ms_ = now_ms;
         return NOTHING;
+    }
+    return begin();
+}
+
+/* With the module answering: start a known command at once, else search for it. */
+Step CommandSearch::begin()
+{
+    if (parameter_[wanted_] != 0) {
+        return finish(true);
     }
     step_ = SEARCH_COUNT;
     attempts_ = ATTEMPTS;
@@ -85,9 +92,7 @@ Step CommandSearch::tick(bool module_answered, int64_t now_ms)
 {
     if (step_ == SEARCH_WAIT) {
         if (module_answered) {
-            step_ = SEARCH_COUNT;
-            attempts_ = ATTEMPTS;
-            return request();
+            return begin();
         }
         return now_ms - wait_since_ms_ > WAIT_MS ? finish(false) : NOTHING;
     }

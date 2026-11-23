@@ -88,6 +88,7 @@ private:
     };
 
     Step request();
+    Step begin();
     Step finish(bool found);
 
     SearchStep step_ = SEARCH_IDLE;
