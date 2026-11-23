@@ -313,7 +313,10 @@ const char IMAGE_ID[] = "OpenLiteRadio " APP_VERSION_STRING;
 void print_hello()
 {
     /* The protocol number changes with every change of a message; test.ps1 checks web/index.html against it. */
-    printk("hello %s proto=3\n", IMAGE_ID);
+    /* The MCU's 96-bit unique ID, by which the configurator finds this radio again among several. */
+    const volatile uint32_t *uid = (const volatile uint32_t *)0x1FFFF7E8;
+    printk("hello %s proto=4 id=%08x%08x%08x\n", IMAGE_ID, (unsigned int)uid[0], (unsigned int)uid[1],
+           (unsigned int)uid[2]);
     if (fault_marker == FAULT_MARKER) {
         printk("fault reason=%u pc=0x%08x lr=0x%08x\n", (unsigned int)fault_reason,
                (unsigned int)fault_pc, (unsigned int)fault_lr);

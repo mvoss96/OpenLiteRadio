@@ -882,9 +882,9 @@ setInterval(() => { if (elrs.open && elrs.moduleOn && elrs.queued === 0) elrsQue
 // an older page with newer code.
 
 // The project's version from the file VERSION; test.ps1 checks that both agree.
-const WEB_VERSION = "0.22.0";
+const WEB_VERSION = "0.23.0";
 // Protocol number of the hello line this page speaks; test.ps1 checks it against src/host.cpp.
-const PROTOCOL = 3;
+const PROTOCOL = 4;
 const USB_VENDOR_ID = 0x2fe3;
 const CHANNEL_COUNT = 16;
 const BATTERY_THRESHOLDS = [3232, 3298, 3391, 3552];   // stock firmware: 1, 2, 3, 4 LEDs
@@ -1227,6 +1227,8 @@ let opening = false;               // a port is being chosen or opened
 let openPort = null;               // the port of the open connection
 let portClosed = null;             // resolves when that connection has closed its port
 let firmwareVersion = "";          // version from the radio's hello line
+let radioId = "";                  // id from the hello line of the radio last connected, kept across page loads
+try { radioId = localStorage.getItem("radioId") || ""; } catch {}
 let upd = null;                    // the firmware update run, null when none is shown
 let linesThisSecond = 0;
 const settings = new Map();        // key -> { type, min, max, def, value }
@@ -1893,6 +1895,8 @@ function handleLine(line) {
     helloSeen = true;
     $("sysFirmware").textContent = rest[1];
     firmwareVersion = rest[1];
+    radioId = helloId(rest);
+    try { localStorage.setItem("radioId", radioId); } catch {}
     showDevice();
     showVersionBands();
     if (rest[2] !== `proto=${PROTOCOL}`) warnMismatch(rest[2]);
@@ -2061,8 +2065,7 @@ async function resume() {
     autoConnect();
     return;
   }
-  const ports = await navigator.serial.getPorts();
-  const port = ports.find((p) => p.getInfo().usbVendorId === USB_VENDOR_ID);
+  const port = await findRadioPort(true);
   if (port) {
     try {
       await connect(port);
@@ -2080,9 +2083,64 @@ async function resume() {
 // radio's USB form within a connection is handled by resume(), switch or not.
 async function autoConnect() {
   if (writer || !("serial" in navigator) || !$("autoConnect").checked) return;
-  const ports = await navigator.serial.getPorts();
-  const port = ports.find((p) => p.getInfo().usbVendorId === USB_VENDOR_ID);
+  const port = await findRadioPort(false);
   if (port) connect(port).catch((error) => showMessage(error.message));
+}
+
+// A port this page was allowed to use with the radio's vendor ID. Other devices can carry that ID too,
+// such as a serial bridge's virtual port, and several radios may be allowed; each port is asked for its
+// hello line then. The radio with radioId is preferred; with sameOnly it is the only one taken.
+const PROBE_MS = 1000;
+async function findRadioPort(sameOnly) {
+  const ports = (await navigator.serial.getPorts()).filter((p) => p.getInfo().usbVendorId === USB_VENDOR_ID);
+  if (ports.length === 1 && !sameOnly) return ports[0];
+  let first;
+  for (const port of ports) {
+    const id = await probeId(port);
+    if (id === null) continue;
+    if (id === radioId) return port;
+    if (!first) first = port;
+  }
+  return sameOnly ? undefined : first;
+}
+
+// Open port, send "hello" and return the id from the hello line that comes back within PROBE_MS,
+// "" for a hello line without one, or null without an answer.
+async function probeId(port) {
+  try {
+    await port.open({ baudRate: 115200, bufferSize: 65536 });
+  } catch {
+    return null;
+  }
+  const reader = port.readable.getReader();
+  const writer = port.writable.getWriter();
+  const timer = setTimeout(() => reader.cancel().catch(() => {}), PROBE_MS);
+  const decoder = new TextDecoder();
+  let text = "";
+  let hello = null;
+  // Not awaited: a port without a device behind it may never complete the write.
+  writer.write(new TextEncoder().encode("hello\n")).catch(() => {});
+  try {
+    while (!hello) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      text += decoder.decode(value, { stream: true });
+      hello = text.match(/(?:^|\n)hello ([^\r\n]*)\r?\n/);
+    }
+  } catch {
+    // A read error counts as no answer.
+  }
+  clearTimeout(timer);
+  reader.releaseLock();
+  writer.releaseLock();
+  await port.close().catch(() => {});
+  return hello ? helloId(hello[1].split(" ")) : null;
+}
+
+// The id in the words of a hello line after "hello", or "".
+function helloId(words) {
+  const word = words.find((w) => w.startsWith("id="));
+  return word ? word.slice(3) : "";
 }
 
 // ---- Firmware update

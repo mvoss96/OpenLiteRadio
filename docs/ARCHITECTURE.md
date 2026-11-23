@@ -636,8 +636,10 @@ run and answered with `error line too long`.
 
 From the radio:
 
-- `hello OpenLiteRadio <version> proto=3`, at start and on request. "OpenLiteRadio
-  <version>" is `IMAGE_ID`, by which the configurator also recognises a firmware file. After
+- `hello OpenLiteRadio <version> proto=4 id=<24 hex digits>`, at start and on request.
+  "OpenLiteRadio <version>" is `IMAGE_ID`, by which the configurator also recognises a
+  firmware file. `id` is the MCU's 96-bit unique ID at 0x1FFFF7E8; the configurator uses it to
+  connect again to the same radio when several are allowed. After
   a fatal error the radio restarts instead of halting; the next hello line is
   followed once by `fault reason=N pc=0x... lr=0x...` (Zephyr's reason code
   and the faulting addresses).
