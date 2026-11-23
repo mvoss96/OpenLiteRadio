@@ -19,6 +19,8 @@ constexpr size_t MAX_FRAME_SIZE = 64;
 
 constexpr uint8_t ADDRESS_RADIO = 0xEA;
 constexpr uint8_t ADDRESS_MODULE = 0xEE;
+/* First byte of every frame from ELRS 4 modules; ELRS 3 puts ADDRESS_RADIO there. */
+constexpr uint8_t SYNC_BYTE = 0xC8;
 
 constexpr uint8_t TYPE_LINK_STATISTICS = 0x14;
 constexpr uint8_t TYPE_CHANNELS = 0x16;

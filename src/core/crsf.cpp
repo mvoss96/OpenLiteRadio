@@ -63,8 +63,8 @@ bool Parser::feed(uint8_t byte)
     }
 
     if (length_ == 0) {
-        /* Frames from the module are addressed to the radio. */
-        if (byte != ADDRESS_RADIO) {
+        /* Frames from the module start with the radio's address or the sync byte. */
+        if (byte != ADDRESS_RADIO && byte != SYNC_BYTE) {
             return false;
         }
     } else if (length_ == 1) {

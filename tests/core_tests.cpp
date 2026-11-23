@@ -105,6 +105,17 @@ static void test_parser()
     CHECK(frames == 2);
     CHECK(parser.crc_errors() == 0);
 
+    /* The same frame with the sync byte first, as ELRS 4 sends it. */
+    uint8_t synced[sizeof(TIMING_FRAME)];
+    bool synced_accepted = false;
+
+    std::memcpy(synced, TIMING_FRAME, sizeof(synced));
+    synced[0] = crsf::SYNC_BYTE;
+    for (uint8_t byte : synced) {
+        synced_accepted = parser.feed(byte);
+    }
+    CHECK(synced_accepted);
+
     /* A damaged frame is counted and dropped; the next one is accepted. */
     uint8_t damaged[sizeof(TIMING_FRAME)];
 

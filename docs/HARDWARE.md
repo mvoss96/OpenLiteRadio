@@ -289,6 +289,10 @@ CRSF link to the ELRS module, observed with a test that sends a device ping
 - Shift register outputs 0x10, 0x20 and 0x80 did not affect the answers in
   either state.
 
+These observations are with ELRS 3.6.4. In the ELRS 4.1.0 source
+(`CRSFHandset::forwardMessage`) every frame to the radio starts with the sync
+byte 0xC8 instead of the address 0xEA; the radio accepts both.
+
 Listening on the CH9102 bridge at 115200 baud while the test changed the
 control lines showed:
 
