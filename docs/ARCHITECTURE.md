@@ -675,7 +675,10 @@ From the radio:
   again up to three times when the count differs, and then shows a band
   instead of empty fields. On connecting it sends `stream 0` first and
   `stream 1` once the list is complete, so that the state lines do not
-  compete with the list. KEY is one language-neutral word, e.g. `option tune 2
+  compete with the list. It asks for hello only on connecting; a further
+  hello line means that the radio restarted while the port stayed open, as
+  behind a serial bridge, and the configurator sets it up again as on
+  connecting. KEY is one language-neutral word, e.g. `option tune 2
   double_beep`; the configurator fills every choice of a setting from the
   list its TYPE names and translates the keys. Lists: `unlock`, `trimtone`,
   `tune`, `map`, `usb`.

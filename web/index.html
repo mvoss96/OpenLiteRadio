@@ -1848,6 +1848,17 @@ function listEnded(expected) {
 // The radio's hello line arrived on this connection; lines before it may be cut off and are not checked.
 let helloSeen = false;
 
+// The radio restarted while the port stayed open, as behind a serial bridge. It starts with the
+// stored settings and without module frames, so it is set up again as on connecting.
+function radioRestarted() {
+  send("stream 0");
+  listTries = 0;
+  requestList();
+  // The next state line with the module on reads the module again.
+  elrs.moduleOn = false;
+  if (elrs.open) send("frames 1");
+}
+
 // The radio sent something this page does not know, on this connection.
 let mismatch = false;
 function warnMismatch(what) {
@@ -1892,6 +1903,8 @@ function handleLine(line) {
   } else if (kind === "rx") {
     elrsReceived(rest);
   } else if (kind === "hello") {
+    // This page asks for hello only on connecting; another one means the radio restarted.
+    if (helloSeen && !upd) radioRestarted();
     helloSeen = true;
     $("sysFirmware").textContent = rest[1];
     firmwareVersion = rest[1];
