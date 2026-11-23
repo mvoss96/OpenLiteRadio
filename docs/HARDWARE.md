@@ -384,6 +384,24 @@ command search of binding, an accepted calibration run with its storing,
 the trim buttons, switching on with the power button. All of these run in
 the main thread.
 
+## Module flashing over the CH9102, 2026-11-22
+
+Observed with a test image (radio off, USB supply, module on):
+
+- Output 0x40 set low while the controller's USB device was running: the
+  host kept the controller and did not see the CH9102. The controller's
+  serial port then stopped answering until USB was unplugged.
+- USB device shut down, D+ (PA12) driven low for 100 ms, then 0x40 low and
+  PA12 released: the CH9102 (1A86:55D4) appeared after about 1 s.
+- `esptool flash-id` on the bridge's port, with its default reset over DTR
+  and RTS, connected without any button: ESP32-D0WDQ6 revision v1.1, 40 MHz
+  crystal, flash manufacturer 0xef, device 0x4017, 8 MB. It reset the
+  module over RTS afterwards. The module's flash was only read.
+- After the controller restarted, the module answered CRSF as before.
+
+Interpretation: the bridge's DTR and RTS drive the ESP32's EN and IO0 in the
+usual auto-reset circuit. Not shown: whether the controller can drive IO0.
+
 ## Common contract with the ELRS target repository
 
 - ESP32 module hardware JSON stays identical for stock and custom controllers.

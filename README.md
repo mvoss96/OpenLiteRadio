@@ -58,6 +58,7 @@ What is still missing: [docs/FEATURES.md](docs/FEATURES.md).
 | Calibrate sticks | hold SETUP 2 s; a short press ends it |
 | Show link quality on the battery LEDs | short press on SETUP |
 | Update mode | USB unplugged, hold SETUP and switch on |
+| Flash the ELRS module | radio off, hold BIND while plugging in USB; unplug to end |
 
 ## Status LED
 
@@ -73,6 +74,7 @@ What is still missing: [docs/FEATURES.md](docs/FEATURES.md).
 | Purple | Bluetooth joystick |
 | White | off, USB joystick |
 | Yellow | off, Xbox controller |
+| Pink | ELRS module on the USB connector for flashing |
 | Orange flashes | low battery |
 
 The four small LEDs show the battery level. The highest one blinks while USB

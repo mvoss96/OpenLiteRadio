@@ -229,6 +229,21 @@ static void link_tick(core::Mode mode)
     }
 }
 
+/*
+ * Module flashing: the ELRS module on and the USB connector on the CH9102
+ * bridge, so that a flasher on the PC reaches the ESP32 directly and puts it
+ * into its bootloader with DTR and RTS. Ends only when USB is unplugged.
+ */
+[[noreturn]] static void module_flashing()
+{
+    board::set_module_enabled(true);
+    board::route_usb_to_module();
+    board::set_status_led(0x30, 0x00, 0x18); /* pink */
+    while (true) {
+        k_sleep(K_FOREVER);
+    }
+}
+
 int main(void)
 {
     output::Snapshot snapshot = {};
@@ -240,6 +255,11 @@ int main(void)
     int setup_held_loops = 0;
 
     board::init();
+    /* With USB the firmware starts when the cable is plugged in; BIND held then starts module flashing. */
+    board::read_controls(snapshot.inputs);
+    if (board::usb_supply_present() && snapshot.inputs.bind) {
+        module_flashing();
+    }
     /*
      * Started from battery by the power button: keep the power on after the
      * button is released, so that a short press can show the battery level

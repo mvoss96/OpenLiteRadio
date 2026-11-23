@@ -97,6 +97,13 @@ void set_charger_enabled(bool enabled);
 void set_usb_to_controller(bool controller);
 
 /*
+ * Give the USB connector to the CH9102 bridge on the module's UART0 and
+ * release PA9. Only before the USB device is started; there is no way back
+ * except a restart.
+ */
+void route_usb_to_module();
+
+/*
  * Make the host see the USB device unplugged: D+ (PA12) low for 20 ms. The
  * board ties D+ to its pull-up, so stopping the USB peripheral alone leaves
  * the device on the bus. Only while the USB peripheral is shut down.

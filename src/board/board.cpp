@@ -489,6 +489,19 @@ void set_usb_to_controller(bool controller)
     shift_write();
 }
 
+void route_usb_to_module()
+{
+    /* PA9 as input, so that only the bridge drives the module's UART0 RX. */
+    GPIOA->CRH = (GPIOA->CRH & ~(0xFu << 4)) | (PIN_INPUT_FLOATING << 4);
+    /* D+ low first, so that the host sees a disconnect before the bridge appears. */
+    GPIOA->BRR = PA_USB_DP;
+    configure_pins(GPIOA, PA_USB_DP, PIN_OUTPUT);
+    k_msleep(100);
+    set_usb_to_controller(false);
+    k_msleep(10);
+    configure_pins(GPIOA, PA_USB_DP, PIN_INPUT_FLOATING);
+}
+
 void set_charger_enabled(bool enabled)
 {
     shift_state = enabled ? (shift_state | SHIFT_CHARGER) : (shift_state & ~SHIFT_CHARGER);
