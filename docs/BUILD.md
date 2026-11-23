@@ -84,7 +84,9 @@ of two starting states:
 - This firmware is running with the radio switched off. The tool opens the
   serial port at 1200 baud, the firmware restarts into the updater, the image
   is written, and the radio restarts into it. Nothing on the radio has to be
-  touched.
+  touched. The tool reads the radio's unique ID from the hello line first and
+  writes only to the updater port with the USB serial number derived from it,
+  so that a flight controller with the same USB IDs is never written.
 - The updater (0483:5740) is already there after the button combination: USB
   unplugged, hold SETUP and switch on until the double beep, plug USB in. This
   works with any or no application. Afterwards USB has to be unplugged once to

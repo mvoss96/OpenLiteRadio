@@ -5,6 +5,11 @@ console is opened at 1200 baud, which makes the firmware restart into the
 updater while the radio is switched off (ELRS module off). If the updater is already present (entered with SETUP + power), the
 image is sent directly.
 
+The image goes only to the updater port whose USB serial number belongs to the
+radio: the tool reads the MCU's unique ID from the firmware's hello line first.
+Other STM32 devices, such as a Betaflight flight controller, have the updater's
+VID and PID too.
+
 Updater protocol, as used by the BETAFPV Configurator:
 
     host -> "update\\r\\n"
@@ -24,6 +29,7 @@ application area from 0x08008000.
 
 import argparse
 import hashlib
+import re
 import sys
 import time
 from pathlib import Path
@@ -90,15 +96,42 @@ def ports_with(usb_ids):
     return {port.device for port in device_ports() if (port.vid, port.pid) in usb_ids}
 
 
-def wait_port(usb_ids, timeout, ignore=()):
-    """Wait for a port with one of these IDs that is not in ignore."""
+def wait_port(usb_ids, timeout, serial_number=None):
+    """Wait for a port with one of these IDs and, if given, this USB serial number."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        new = ports_with(usb_ids) - set(ignore)
-        if new:
-            return sorted(new)[0]
+        for port in device_ports():
+            if (port.vid, port.pid) in usb_ids and (
+                    serial_number is None or (port.serial_number or "").upper() == serial_number):
+                return port.device
         time.sleep(0.2)
     return None
+
+
+def radio_uid(console):
+    """Return the MCU's 96-bit unique ID as three words from the firmware's hello line, or None."""
+    with open_port(console, 115200) as port:
+        port.reset_input_buffer()
+        port.write(b"hello\n")
+        deadline = time.monotonic() + 2
+        text = b""
+        while time.monotonic() < deadline:
+            text += port.read(4096)
+            match = re.search(rb"hello OpenLiteRadio \S+ proto=\d+ id=([0-9a-fA-F]{24})", text)
+            if match:
+                digits = match.group(1).decode()
+                return [int(digits[i:i + 8], 16) for i in (0, 8, 16)]
+    return None
+
+
+def updater_serial(uid):
+    """Return the USB serial number the vendor updater reports for this unique ID.
+
+    ST's USB device library builds it from (UID0 + UID2) as 8 hex digits and
+    the upper half of UID1 as 4 hex digits; the ID 123456789ABC000111111111,
+    for example, gives 234567899ABC.
+    """
+    return f"{(uid[0] + uid[2]) & 0xFFFFFFFF:08X}{uid[1] >> 16:04X}"
 
 
 def open_port(device, baudrate, timeout=5.0):
@@ -171,17 +204,22 @@ def main():
     print(f"{args.image}: {len(image)} bytes, SHA-256 {hashlib.sha256(image).hexdigest()}")
 
     # Other STM32 devices, e.g. a Betaflight flight controller, use the updater's IDs
-    # too. Only a port that appears after the update request is taken for the updater.
+    # too. Only the port with the serial number derived from this radio's unique ID is
+    # taken for the updater.
     present = ports_with(UPDATER_IDS)
     console = find_port(CONSOLE_IDS)
     if console is not None:
+        uid = radio_uid(console)
+        if uid is None:
+            sys.exit(f"{console}: no hello line with the radio's ID; close other programs using the console port")
+        expected = updater_serial(uid)
         request_update_mode(console)
-        updater = wait_port(UPDATER_IDS, 15, ignore=present)
+        updater = wait_port(UPDATER_IDS, 15, serial_number=expected)
         if updater is None:
             if find_port(CONSOLE_IDS):
                 sys.exit("the updater did not appear; switch the radio off (the firmware ignores the "
                          "request while the ELRS module is on) and close other programs using the console port")
-            sys.exit("the updater did not appear")
+            sys.exit(f"the updater with serial number {expected} did not appear")
         time.sleep(1.0)
     elif args.port:
         updater = args.port
