@@ -355,11 +355,11 @@ void print_state(const output::Snapshot &snapshot, bool radio_on)
     module_link::Status link = module_link::status();
 
     printk("state sticks=%u,%u,%u,%u sa=%u sb=%u sc=%u sd=%u se=%u sf=%u bind=%u "
-           "setup=%u power=%u tl=%u tr=%u keys=%u battery=%u usb=%u on=%u module=%u",
+           "setup=%u power=%u tl=%u tr=%u keys=%u battery=%u vref=%u usb=%u on=%u module=%u",
            inputs.sticks[0], inputs.sticks[1], inputs.sticks[2], inputs.sticks[3],
            inputs.sa, inputs.sb, inputs.sc, inputs.sd, inputs.se, inputs.sf,
            inputs.bind, inputs.setup, inputs.power, inputs.trim_left,
-           inputs.trim_right, inputs.trims_valid, battery_monitor::raw(),
+           inputs.trim_right, inputs.trims_valid, battery_monitor::raw(), battery_monitor::vrefint(),
            board::usb_supply_present(), radio_on, output::module_is_on());
     const int16_t *trim = &settings::values[settings::TRIM_FIRST];
 

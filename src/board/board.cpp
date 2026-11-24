@@ -55,6 +55,8 @@ constexpr uint8_t SHIFT_CHARGER = 0x10;
 constexpr uint8_t SHIFT_USB_TO_CONTROLLER = 0x40;
 
 constexpr uint8_t ADC_CHANNEL_BATTERY = 8; /* PB0 */
+/* The MCU's internal reference of about 1.2 V. */
+constexpr uint8_t ADC_INPUT_REFERENCE = 17;
 constexpr uint8_t KEYS_ADDRESS = 0x1d;
 
 const struct device *const adc = DEVICE_DT_GET(DT_NODELABEL(adc1));
@@ -373,6 +375,16 @@ void init()
         adc_channel_setup(adc, &config);
     }
 
+    /* The internal reference needs at least 17.1 us of sampling: the longest, 239.5 cycles at 12 MHz. */
+    struct adc_channel_cfg vrefint_config = {
+        .gain = ADC_GAIN_1,
+        .reference = ADC_REF_INTERNAL,
+        .acquisition_time = ADC_ACQ_TIME_MAX,
+        .channel_id = ADC_INPUT_REFERENCE,
+    };
+    adc_channel_setup(adc, &vrefint_config);
+    ADC1->CR2 |= ADC_CR2_TSVREFE;
+
     status_led_init();
     buzzer_init();
 
@@ -457,6 +469,11 @@ size_t module_receive(uint8_t *data, size_t capacity)
 uint16_t battery_raw()
 {
     return adc_read_channel(ADC_CHANNEL_BATTERY);
+}
+
+uint16_t vrefint_raw()
+{
+    return adc_read_channel(ADC_INPUT_REFERENCE);
 }
 
 bool usb_supply_present()

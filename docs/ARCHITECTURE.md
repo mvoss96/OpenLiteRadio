@@ -532,24 +532,33 @@ the device: what the vendor bootloader shows on these LEDs.
 
 ### Battery
 
-Taken from the stock firmware 1.1.3 (code read, docs/HARDWARE.md), with two
-changes: the leftmost LED blinks on a weak battery, and the power button is
-held 1 s to switch on without the stock firmware's click before.
+Taken from the stock firmware 1.1.3 (code read, docs/HARDWARE.md), with three
+changes: the thresholds come from a measured discharge, the leftmost LED
+blinks on a weak battery, and the power button is held 1 s to switch on
+without the stock firmware's click before.
 
 - A reading every 15 s and one at start (`src/battery_monitor.cpp`). With
   USB supply, shift register output 0x10 is set low 100 ms before the
   reading and high again after it, as the stock firmware does.
-- Levels in raw counts, `src/core/battery.cpp`: 3232, 3298, 3391 and 3552
-  for one to four LEDs, lit from the left. The LEDs are lit whenever the
-  radio is on, from 500 ms after switching on.
+- The ADC measures against the 3.3 V supply, which falls with the battery
+  below about 3.4 V. With each battery reading the internal reference
+  (channel 17, about 1.2 V) is read too; the battery reading is scaled by
+  regulated reference reading / current one (`battery::compensate`). The
+  regulated reading is taken from every reading with the battery at 3600 or
+  more; until then 1505, measured on one radio.
+- Levels in raw counts, `src/core/battery.h`: 3350, 3415, 3517 and 3730
+  for one to four LEDs, lit from the left. They come from a full discharge
+  (docs/HARDWARE.md): four LEDs down to 75 % of the running time left,
+  three to 50 %, two to 25 %, one to 15 %; below that the battery is weak.
+  The LEDs are lit whenever the radio is on, from 500 ms after switching on.
 - Weak battery: below one LED and no USB supply. The leftmost LED blinks
   0.5 s on, 0.5 s off; with every reading while the radio is on, the
   tune in `sound.battery` sounds and the status LED flashes orange four
   times (150 ms on, 150 ms off). Nothing switches the radio off, as in the
   stock firmware.
 - USB supply: the level with its highest LED blinking (0.5 s), at least one
-  LED; from 3800 on all four steady. Shown with the radio on and off. The
-  status LED keeps its colour.
+  LED; from 4070 (about 4.2 V) on all four steady. Shown with the radio on
+  and off. The status LED keeps its colour.
 - Power button held with the radio off: one more LED from the left every
   250 ms, on at 1 s. Held with the radio on: from 250 ms four LEDs, then one
   less every 250 ms from the right, off at 1.25 s; the LEDs stay dark until
@@ -650,7 +659,8 @@ From the radio:
   right horizontal), `sa`, `sd` (0 or 1), `sb`, `sc` (0, 1, 2), `se`, `sf`,
   `bind`, `setup`, `power` (1 while pressed), `tl`, `tr` (trim buttons: bit 0
   up, 1 down, 2 left, 3 right, 4 centre), `keys` (1 if the trim key device
-  answers), `battery` (raw 12-bit, the reading taken every 15 s), `usb` (1 with USB supply), `on`, `module`,
+  answers), `battery` (the reading taken every 15 s, corrected with the internal reference), `vref`
+  (the internal reference's raw reading taken with it), `usb` (1 with USB supply), `on`, `module`,
   `trim` (trim steps of throttle, yaw, pitch, roll), `ch` (channels 1 to 16
   in microseconds, 988 to 2012, trimmed while the module is on), `lock` (1 while the
   throttle lock holds the output back), `period` (frame period in

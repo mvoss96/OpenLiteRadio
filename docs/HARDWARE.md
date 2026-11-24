@@ -271,10 +271,24 @@ Battery logic of the stock firmware 1.1.3, read from its code (2026-11-20):
 - Switched off with USB supply, the status LED shows the charge (code:
   colour FF 00 00 breathing while charging, 00 FF 00 when full; not seen).
 
-Hypotheses: PB0 is the battery voltage through a divider, and the battery
-was nearly full during the test, which is why the reading sits near full
-scale. Output 0x10 enables charging; the stock code pauses it to measure.
-The volts per count are not known.
+Output 0x10 enables charging (seen: the USB current drops while it is low).
+Hypothesis: PB0 is the battery voltage through a divider.
+
+Full discharge and charge, measured with this firmware (2026-11-23), ELRS
+module on without a receiver, readings every 15 s, USB current from a meter:
+
+- Running time from full to switching off: 9 h 48 min. Raw reading with
+  75, 50, 25 and 15 % of the time left: about 3730, 3517, 3415 and 3350.
+- From about 3290 on the reading no longer falls and even rises to 3302;
+  the radio switched off without reaching 3232. With USB supply right
+  afterwards it read 2967. Hypothesis: below about 3.4 V the 3.3 V
+  regulator drops out and the ADC reference falls with the battery.
+- Charging: about 450 mA into the battery up to a reading of about 3900,
+  then falling; the reading settles at 4073 to 4076 after about 6 h. About
+  1900 mAh went in. Taking 4075 as 4.2 V gives about 1.03 mV per count.
+- Internal reference (ADC channel 17) with USB supply and a full battery:
+  1504 to 1505, steady over five readings; about 3.27 V supply if the
+  reference is 1.20 V.
 
 CRSF link to the ELRS module, observed with a test that sends a device ping
 (`EE 04 28 00 EA` plus CRC) on USART1 at 400000 baud twice per second:

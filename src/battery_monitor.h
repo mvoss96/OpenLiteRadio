@@ -13,8 +13,14 @@ namespace battery_monitor {
  */
 bool tick(int64_t now_ms);
 
-/* The last reading, raw ADC counts; 0 before the first one. */
+/*
+ * The last reading in raw ADC counts, scaled to a 3.3 V supply with the
+ * internal reference (battery::compensate); 0 before the first one.
+ */
 uint16_t raw();
+
+/* The internal reference's raw reading taken with the last battery reading. */
+uint16_t vrefint();
 
 /* Light the battery LEDs (bit 0 leftmost); ignored while the host sets them. */
 void show(uint8_t mask);

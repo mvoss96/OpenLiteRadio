@@ -882,12 +882,12 @@ setInterval(() => { if (elrs.open && elrs.moduleOn && elrs.queued === 0) elrsQue
 // an older page with newer code.
 
 // The project's version from the file VERSION; test.ps1 checks that both agree.
-const WEB_VERSION = "0.23.2";
+const WEB_VERSION = "0.23.4";
 // Protocol number of the hello line this page speaks; test.ps1 checks it against src/host.cpp.
 const PROTOCOL = 4;
 const USB_VENDOR_ID = 0x2fe3;
 const CHANNEL_COUNT = 16;
-const BATTERY_THRESHOLDS = [3232, 3298, 3391, 3552];   // stock firmware: 1, 2, 3, 4 LEDs
+const BATTERY_THRESHOLDS = [3350, 3415, 3517, 3730];   // src/core/battery.h: 1, 2, 3, 4 LEDs
 const ACCENT = "#5aa2ff", LEVER = "#4f535a", CAP = "#6b6f76", SURFACE = "#17181b", HAIR = "#2b2e34",
       STROKE = "#3a3e45", FG1 = "#f2f3f5", FG3 = "#8b9099", WARN = "#f2a655", RAISED = "#202227";
 

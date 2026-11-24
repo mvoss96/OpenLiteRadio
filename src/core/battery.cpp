@@ -2,6 +2,14 @@
 
 namespace battery {
 
+uint16_t compensate(uint16_t raw, uint16_t vrefint, uint16_t vrefint_regulated)
+{
+    if (vrefint == 0) {
+        return raw;
+    }
+    return (uint16_t)(((uint32_t)raw * vrefint_regulated + vrefint / 2) / vrefint);
+}
+
 namespace {
 
 /* The leftmost count LEDs. */

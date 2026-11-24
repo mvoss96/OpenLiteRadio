@@ -78,6 +78,9 @@ size_t module_receive(uint8_t *data, size_t capacity);
 /* Raw 12-bit reading of the battery input. */
 uint16_t battery_raw();
 
+/* Raw 12-bit reading of the MCU's internal reference; it rises when the supply falls below 3.3 V. */
+uint16_t vrefint_raw();
+
 bool usb_supply_present();
 
 /* High keeps the radio on after the power button is released. */

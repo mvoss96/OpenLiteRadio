@@ -3,8 +3,9 @@
  * and the animations while the power button is held. No hardware access.
  *
  * Masks have bit 0 for the leftmost LED, as board::set_battery_leds() takes
- * them. The thresholds are the stock firmware's raw ADC counts; the volts per
- * count are not known (docs/HARDWARE.md).
+ * them. The thresholds are raw ADC counts from a full discharge with the ELRS
+ * module on (docs/HARDWARE.md): four, three and two LEDs down to 75, 50 and
+ * 25 % of the running time left, one LED down to 15 %.
  */
 
 #pragma once
@@ -14,9 +15,22 @@
 namespace battery {
 
 /* Lowest raw reading for one, two, three and four LEDs. */
-constexpr uint16_t LEVEL_THRESHOLDS[4] = { 3232, 3298, 3391, 3552 };
+constexpr uint16_t LEVEL_THRESHOLDS[4] = { 3350, 3415, 3517, 3730 };
 /* From this reading on, with USB supply, the battery counts as charged. */
-constexpr uint16_t FULL = 3800;
+constexpr uint16_t FULL = 4070;
+
+/*
+ * The ADC measures against the 3.3 V supply, which falls with the battery
+ * below about 3.4 V; the battery reading then stops falling. The internal
+ * reference reading rises by the same factor, which corrects the battery.
+ * From REGULATED_FROM on the supply is regulated and the reference reading
+ * is taken as the regulated one; VREFINT_DEFAULT stands in until then.
+ */
+constexpr uint16_t REGULATED_FROM = 3600;
+constexpr uint16_t VREFINT_DEFAULT = 1505;
+
+/* The battery reading as with a regulated supply; unchanged without a reference reading. */
+uint16_t compensate(uint16_t raw, uint16_t vrefint, uint16_t vrefint_regulated);
 
 /* Power button held while off: one more LED every step, switched on after ON_HOLD_MS. */
 constexpr uint32_t HOLD_STEP_MS = 250;

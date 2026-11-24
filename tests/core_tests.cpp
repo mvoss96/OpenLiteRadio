@@ -962,27 +962,32 @@ static void test_sound()
 
 static void test_battery()
 {
-    /* Levels at the stock thresholds. */
-    CHECK(battery::level(3231) == 0);
-    CHECK(battery::level(3232) == 1);
-    CHECK(battery::level(3391) == 3);
+    /* A supply below 3.3 V raises the reference reading; the battery is scaled down by the same factor. */
+    CHECK(battery::compensate(3300, 1490, 1490) == 3300);
+    CHECK(battery::compensate(3300, 1600, 1490) == 3073);
+    CHECK(battery::compensate(3300, 0, 1490) == 3300);
+
+    /* Levels at the thresholds. */
+    CHECK(battery::level(3349) == 0);
+    CHECK(battery::level(3350) == 1);
+    CHECK(battery::level(3517) == 3);
     CHECK(battery::level(4067) == 4);
     CHECK(battery::weak(3000, false));
     CHECK(!battery::weak(3000, true));
-    CHECK(!battery::weak(3300, false));
+    CHECK(!battery::weak(3400, false));
 
     /* On battery: the level from the left; a weak battery blinks the leftmost LED. */
-    CHECK(battery::bar(3400, false, 0) == 0x07);
-    CHECK(battery::bar(3400, false, 700) == 0x07);
+    CHECK(battery::bar(3600, false, 0) == 0x07);
+    CHECK(battery::bar(3600, false, 700) == 0x07);
     CHECK(battery::bar(3000, false, 100) == 0x01);
     CHECK(battery::bar(3000, false, 600) == 0x00);
 
     /* With USB: the highest LED blinks while charging, all four once charged. */
-    CHECK(battery::bar(3400, true, 100) == 0x07);
-    CHECK(battery::bar(3400, true, 600) == 0x03);
+    CHECK(battery::bar(3600, true, 100) == 0x07);
+    CHECK(battery::bar(3600, true, 600) == 0x03);
     CHECK(battery::bar(3000, true, 100) == 0x01);
     CHECK(battery::bar(3000, true, 600) == 0x00);
-    CHECK(battery::bar(3800, true, 600) == 0x0f);
+    CHECK(battery::bar(4070, true, 600) == 0x0f);
 
     /* Holding the power button: filling from the left while off, emptying from the right while on. */
     CHECK(battery::switching_on(0) == 0x00);
@@ -996,10 +1001,10 @@ static void test_battery()
     CHECK(battery::switching_off(1250, 0x03) == 0x00);
 
     /* Short press while off: the level three times. */
-    CHECK(battery::peek(3400, 50) == 0x07);
-    CHECK(battery::peek(3400, 150) == 0x00);
-    CHECK(battery::peek(3400, 450) == 0x07);
-    CHECK(battery::peek(3400, 600) == 0x00);
+    CHECK(battery::peek(3600, 50) == 0x07);
+    CHECK(battery::peek(3600, 150) == 0x00);
+    CHECK(battery::peek(3600, 450) == 0x07);
+    CHECK(battery::peek(3600, 600) == 0x00);
 }
 
 static void test_link_alarm()
